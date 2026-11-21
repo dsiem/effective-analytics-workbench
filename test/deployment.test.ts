@@ -15,6 +15,8 @@ const run = promisify(execFile);
 for (const scenario of [
   null,
   "federated token",
+  "delayed startup",
+  "startup crash",
   "warehouse",
   "trips",
   "details",
@@ -27,15 +29,25 @@ for (const scenario of [
   "agent unavailable",
 ] as const) {
   const federated = scenario === "federated token";
-  const failure = federated ? null : scenario;
+  const delayedStartup = scenario === "delayed startup";
+  const crashed = scenario === "startup crash";
+  const failure = federated || delayedStartup ? null : scenario;
   const token = federated ? "test-federated-token" : "test-cli-token";
-  test(`hosted verification ${failure ? `fails on ${failure} errors despite RUNNING` : `checks SQL, paginated persistence, and both Genie modes with ${federated ? "a supplied token" : "the CLI login"}`}`, async (t) => {
+  const description = delayedStartup
+    ? "waits for the deployed app to run before checking its APIs"
+    : crashed
+      ? "fails before calling app APIs when the deployed app crashes"
+      : failure
+        ? `fails on ${failure} errors despite RUNNING`
+        : `checks SQL, paginated persistence, and both Genie modes with ${federated ? "a supplied token" : "the CLI login"}`;
+  test(`hosted verification ${description}`, async (t) => {
     const directory = await mkdtemp(join(tmpdir(), "deployed-check-"));
     t.after(() => rm(directory, { recursive: true, force: true }));
     let saved: SavedView | undefined;
     let created = 0;
     let deleted = 0;
     let followedCursor = false;
+    let apiRequests = 0;
     const genieRequests: string[] = [];
     const cursor = {
       id: "472a6613-2337-4af1-a416-e9b6b61064dd",
@@ -43,6 +55,7 @@ for (const scenario of [
       updatedAt: "2026-11-13T10:00:00.000001Z",
     };
     const server = createServer(async (request, response) => {
+      apiRequests++;
       const url = new URL(request.url ?? "/", "http://localhost");
       assert.equal(request.headers.authorization, `Bearer ${token}`);
       const reply = (value: unknown, status = 200) => {
@@ -213,15 +226,20 @@ for (const scenario of [
         },
       },
       "apps get": {
-        app_status: { state: "RUNNING" },
+        app_status: crashed
+          ? { state: "CRASHED", message: "Fixture failed to start" }
+          : { state: "RUNNING" },
         url: `http://127.0.0.1:${address.port}`,
       },
-      ...(federated ? {} : { "auth token": { access_token: token } }),
+      ...(federated || crashed
+        ? {}
+        : { "auth token": { access_token: token } }),
     };
     await writeFile(
       join(directory, "databricks"),
       `#!/usr/bin/env node
 import assert from "node:assert/strict";
+import { existsSync, writeFileSync } from "node:fs";
 const responses = ${JSON.stringify(responses)};
 const args = process.argv.slice(2);
 if (args[0] === "bundle") {
@@ -229,6 +247,12 @@ if (args[0] === "bundle") {
 }
 if (args[0] === "apps") {
   assert.deepEqual(args, ["apps", "get", "deployed-app", "-o", "json"]);
+  const pollMarker = ${JSON.stringify(join(directory, "app-polled"))};
+  if (${delayedStartup} && !existsSync(pollMarker)) {
+    writeFileSync(pollMarker, "");
+    console.log(JSON.stringify({ app_status: { state: "DEPLOYING" } }));
+    process.exit(0);
+  }
 }
 const response = responses[args.slice(0, 2).join(" ")];
 assert.ok(response, "Unexpected CLI call");
@@ -247,10 +271,15 @@ console.log(JSON.stringify(response));
           DATABRICKS_HOST: "https://workspace.invalid",
           DATABRICKS_APP_OAUTH_TOKEN: federated ? token : "",
         },
-        timeout: 15_000,
+        timeout: delayedStartup ? 25_000 : 15_000,
       },
     );
-    if (failure === "agent unavailable")
+    if (crashed)
+      await assert.rejects(
+        verification,
+        /App deployed-app crashed during startup\. Fixture failed to start/,
+      );
+    else if (failure === "agent unavailable")
       await assert.rejects(verification, /genie_agent_mode_unavailable/);
     else if (failure === "agent")
       await assert.rejects(
@@ -263,10 +292,17 @@ console.log(JSON.stringify(response));
         (await verification).stdout,
         /grounded answers in Genie Chat and Agent mode/,
       );
+    if (crashed) assert.equal(apiRequests, 0);
+    if (delayedStartup)
+      assert.match(
+        (await verification).stdout,
+        /Waiting for app deployed-app \(state: DEPLOYING\)/,
+      );
     assert.equal(
       created,
       [
         "warehouse",
+        "startup crash",
         "trips",
         "details",
         "trip cursor",

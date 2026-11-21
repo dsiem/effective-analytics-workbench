@@ -83,10 +83,11 @@ named profile, export `DATABRICKS_CONFIG_PROFILE` in your shell first.
 databricks bundle run dev -t dev
 ```
 
-Open the frontend URL printed in the terminal. The local API uses your
-Databricks CLI login and the resources recorded in the deployed bundle. Export
-local settings such as `GENIE_MAX_CONCURRENCY` in your shell. The bundle command
-skips `.env`.
+Open the frontend URL printed after the API starts. Set `DATABRICKS_APP_PORT`
+to choose a different API port, or use `0` to let the OS choose one. The local
+API uses your Databricks CLI login and the resources recorded in the deployed
+bundle. Export local settings such as `GENIE_MAX_CONCURRENCY` in your shell. The
+bundle command skips `.env`.
 
 To supply your own connections, export the settings from `.env.example` or put
 them in `.env`, then run `npm run dev`.
@@ -120,12 +121,12 @@ npm run test:browser
 
 ### Check hosted APIs
 
-After a release, verify that SQL queries, trip maps, Lakebase, and both Genie
-modes work through the hosted app. Locally, the command uses the target's CLI
+After a release, run the check to verify SQL queries, trip maps, Lakebase, and
+both Genie modes. The check polls the deployed app for up to 10 minutes and
+calls its APIs once it reaches `RUNNING`. A local check uses the target's CLI
 login. The GitHub workflow supplies a short-lived OAuth token from its federated
-identity. The app runs Genie with its service principal. The check
-creates and deletes a temporary saved view and submits one read-only question
-per mode.
+identity. The app runs Genie with its service principal. The check creates and
+deletes a temporary saved view and submits one read-only question per mode.
 
 ```sh
 databricks bundle run check_hosted_apis -t dev

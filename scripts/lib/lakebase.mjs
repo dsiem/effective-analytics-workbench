@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import {
-  bundleApp,
   databricksJson,
+  deployedAppName,
   deployedResourceId,
 } from "./databricks.mjs";
 
@@ -27,7 +27,11 @@ export function lakebaseEnv(resources) {
 
 export function prepareLakebaseSetup(resources) {
   const env = lakebaseEnv(resources);
-  const principal = bundleApp(resources)?.service_principal_client_id;
+  const principal = databricksJson(
+    "apps",
+    "get",
+    deployedAppName(resources),
+  )?.service_principal_client_id;
   if (typeof principal !== "string" || !principal.trim()) {
     throw new Error("Missing the deployed app service principal.");
   }

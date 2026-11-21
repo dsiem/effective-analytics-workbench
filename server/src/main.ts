@@ -1,8 +1,10 @@
+import { once } from "node:events";
 import { createServer } from "node:http";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
-import { Effect, Layer } from "effect";
-import { HttpRouter } from "effect/http";
+import { Cause, Effect, Exit, Layer, Runtime } from "effect";
+import { HttpRouter, HttpServer } from "effect/http";
+import { NetAddress } from "effect/net";
 import { Analytics } from "./analytics.js";
 import { ServerConfig } from "./config.js";
 import { Genie } from "./genie.js";
@@ -13,14 +15,26 @@ import { Settings } from "./settings.js";
 import { TripComments } from "./trip-comments.js";
 import { Workspace } from "./workspace.js";
 
+const sendToDev =
+  process.argv[2] === "--dev" ? process.send?.bind(process) : undefined;
 const ServerLive = Layer.unwrap(
-  Effect.map(ServerConfig, ({ port }) =>
-    NodeHttpServer.layer(createServer, {
+  Effect.gen(function* () {
+    const { port } = yield* ServerConfig;
+    const selectedPort =
+      sendToDev && port === 0
+        ? yield* Effect.promise(async () => {
+            const reply = once(process, "message");
+            sendToDev({ type: "dev:api-port" });
+            const [selected]: unknown[] = await reply;
+            return typeof selected === "number" ? selected : 0;
+          })
+        : port;
+    return NodeHttpServer.layer(createServer, {
       host: "0.0.0.0",
-      port,
+      port: selectedPort,
       gracefulShutdownTimeout: "5 seconds",
-    }),
-  ),
+    });
+  }),
 );
 
 const Services = Layer.mergeAll(
@@ -34,7 +48,34 @@ const Services = Layer.mergeAll(
   Layer.provideMerge(Settings.layer),
 );
 const AppLive = HttpRouter.serve(Routes.pipe(Layer.provide(Services))).pipe(
-  Layer.provide(ServerLive),
+  Layer.provideMerge(ServerLive),
+);
+const ReportDevPort = Layer.effectDiscard(
+  HttpServer.HttpServer.use(({ address }) =>
+    Effect.sync(() => {
+      if (NetAddress.isInetAddress(address)) {
+        sendToDev?.({ type: "dev:api-ready", port: address.port });
+      }
+    }),
+  ),
 );
 
-NodeRuntime.runMain(Layer.launch(AppLive));
+NodeRuntime.runMain(
+  Layer.launch(
+    sendToDev ? ReportDevPort.pipe(Layer.provide(AppLive)) : AppLive,
+  ),
+  {
+    teardown: (exit, finish) =>
+      Runtime.defaultTeardown(exit, (code) => {
+        if (
+          sendToDev &&
+          Exit.isFailure(exit) &&
+          !Cause.hasInterruptsOnly(exit.cause)
+        ) {
+          sendToDev({ type: "dev:api-failed", code }, () => finish(code));
+        } else {
+          finish(code);
+        }
+      }),
+  },
+);

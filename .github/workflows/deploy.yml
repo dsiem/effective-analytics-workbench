@@ -52,21 +52,8 @@ jobs:
         run: |
           databricks bundle deploy -t "$BUNDLE_TARGET"
           databricks bundle run app -t "$BUNDLE_TARGET"
-      - name: Wait for the app to run
-        run: |
-          for attempt in $(seq 1 40); do
-            state=$(databricks apps get "$BUNDLE_VAR_app_name" -o json | jq -r '.app_status.state')
-            echo "Attempt $attempt/40: $state"
-            case "$state" in
-              RUNNING) exit 0 ;;
-              CRASHED) echo "App crashed during startup" >&2; exit 1 ;;
-            esac
-            sleep 15
-          done
-          echo "App did not reach RUNNING within 10 minutes" >&2
-          exit 1
       - name: Check hosted APIs
-        timeout-minutes: 8
+        timeout-minutes: 18
         run: |
           python3 -m venv "$RUNNER_TEMP/databricks-hosted-check"
           "$RUNNER_TEMP/databricks-hosted-check/bin/python" -m pip install databricks-sdk==0.169.0

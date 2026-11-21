@@ -41,10 +41,6 @@ export function deployedResourceId(resources, group, key) {
   throw new Error(`Missing deployed resource ${group}.${key} in bundle state.`);
 }
 
-export function bundleApp(resources) {
-  return databricksJson(
-    "apps",
-    "get",
-    deployedResourceId(resources, "apps", "app"),
-  );
+export function deployedAppName(resources) {
+  return deployedResourceId(resources, "apps", "app");
 }

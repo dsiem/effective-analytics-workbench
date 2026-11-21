@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { once } from "node:events";
 import {
   mkdir,
   mkdtemp,
@@ -8,9 +9,11 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
@@ -25,8 +28,11 @@ const setupBundleLakebase = new URL(
   import.meta.url,
 );
 const dev = new URL("../scripts/dev.mjs", import.meta.url);
-const packageJson = new URL("../package.json", import.meta.url);
+const api = new URL("../server/src/main.ts", import.meta.url);
 const tsxPackage = new URL("../node_modules/tsx/", import.meta.url);
+const buildWorkspaces = "run build --workspaces --if-present";
+const watchServer = "--import tsx --watch server/src/main.ts --dev";
+const startClient = "node_modules/vite/bin/vite.js --host 127.0.0.1";
 
 async function writeDevFixture(directory: string) {
   const server = join(directory, "server", "src");
@@ -36,11 +42,6 @@ async function writeDevFixture(directory: string) {
     [server, workspace, modules].map((path) =>
       mkdir(path, { recursive: true }),
     ),
-  );
-  // Run the npm launchers once so the fixture can exit after reporting its settings.
-  const manifest = (await readFile(packageJson, "utf8")).replaceAll(
-    " --watch ",
-    " ",
   );
   await Promise.all([
     writeFile(
@@ -58,7 +59,10 @@ async function writeDevFixture(directory: string) {
         "",
       ].join("\n"),
     ),
-    writeFile(join(directory, "package.json"), manifest),
+    writeFile(
+      join(directory, "package.json"),
+      '{"private":true,"type":"module","workspaces":["packages/*"]}',
+    ),
     writeFile(
       join(workspace, "package.json"),
       '{"name":"fixture","private":true}',
@@ -109,13 +113,15 @@ childProcess.execFileSync = (file, args, options) => {
   return "";
 };
 childProcess.spawn = (file, args, options) => {
+  const child = new EventEmitter();
   console.log("CALL " + args.join(" "));
-  if (args[1] !== "dev:client") {
-    process.stdout.write(execFileSync(file, args, {
+  if (args.includes("server/src/main.ts")) {
+    process.stdout.write(execFileSync(file, args.filter((arg) => arg !== "--watch"), {
       encoding: "utf8", env: options.env, timeout: 10_000,
     }));
+    setImmediate(() => child.emit("message", { type: "dev:api-ready", port: 43171 }));
   }
-  return new EventEmitter();
+  return child;
 };
 syncBuiltinESMExports();
 await import(process.env.SETUP_ENTRY_POINT);
@@ -206,7 +212,7 @@ const lakebaseSettings = {
   profile: "selected-profile",
 };
 const setupCalls = [
-  "run build --workspaces --if-present",
+  buildWorkspaces,
   "bundle deploy -t prod --select jobs.seed_trip_snapshot",
   "bundle run -t prod seed_trip_snapshot",
   "bundle deploy -t prod",
@@ -251,8 +257,9 @@ test("bundle dev starts the API with the deployed target and its authentication 
   assert.deepEqual(result.calls, [
     summaryCommand,
     "current-user me -o json",
-    "run dev:server:bundle",
-    "run dev:client",
+    buildWorkspaces,
+    watchServer,
+    startClient,
   ]);
   assert.ok(result.server);
   assert.deepEqual(JSON.parse(result.server.slice("SERVER ".length)), {
@@ -286,7 +293,11 @@ test("bundle dev stops before starting either process when a target setting is m
 
 test("npm dev launches the API with its local connection settings", async (t) => {
   const result = await setup(t, dev, { warehouse: "" });
-  assert.deepEqual(result.calls, ["run dev:server", "run dev:client"]);
+  assert.deepEqual(result.calls, [
+    buildWorkspaces,
+    `--env-file-if-exists=.env ${watchServer}`,
+    startClient,
+  ]);
   assert.ok(result.server);
   assert.match(result.server, /"DATABRICKS_HOST":"https:\/\/local\.invalid"/);
   assert.match(
@@ -294,4 +305,94 @@ test("npm dev launches the API with its local connection settings", async (t) =>
     /"DATABRICKS_CONFIG_FILE":"\/stale\/databricks\.cfg"/,
   );
   assert.match(result.server, /"DATABRICKS_WAREHOUSE_ID":"other-warehouse"/);
+});
+
+test("dev preserves the first process failure and shuts down the other process", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "dev-processes-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeDevFixture(directory);
+  const vite = join(directory, "node_modules", "vite", "bin");
+  await mkdir(vite, { recursive: true });
+  await Promise.all([
+    writeFile(
+      join(directory, "server", "src", "main.ts"),
+      `import { writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+const server = createServer((_, response) => response.writeHead(204).end());
+server.listen(0, "127.0.0.1", () => {
+  writeFileSync("server.pid", String(process.pid));
+  process.send({ type: "dev:api-ready", port: server.address().port });
+});
+`,
+    ),
+    writeFile(
+      join(vite, "vite.js"),
+      `const response = await fetch("http://127.0.0.1:" + process.env.DATABRICKS_APP_PORT);
+process.exit(response.status === 204 ? 7 : 2);
+`,
+    ),
+  ]);
+
+  await assert.rejects(
+    run(process.execPath, [fileURLToPath(dev)], {
+      cwd: directory,
+      timeout: 10_000,
+    }),
+    { code: 7 },
+  );
+  const serverPid = Number(
+    await readFile(join(directory, "server.pid"), "utf8"),
+  );
+  assert.throws(() => process.kill(serverPid, 0), { code: "ESRCH" });
+});
+
+test("dev reports an occupied API port before starting the frontend", async (t) => {
+  const occupied = createServer();
+  occupied.listen(0, "0.0.0.0");
+  await once(occupied, "listening");
+  t.after(() => occupied.close());
+  const address = occupied.address();
+  assert.ok(address && typeof address === "object");
+
+  const directory = await mkdtemp(join(tmpdir(), "dev-occupied-port-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeDevFixture(directory);
+  const vite = join(directory, "node_modules", "vite", "bin");
+  await mkdir(vite, { recursive: true });
+  await Promise.all([
+    writeFile(
+      join(directory, "server", "src", "main.ts"),
+      `await import(${JSON.stringify(api.href)});`,
+    ),
+    writeFile(
+      join(vite, "vite.js"),
+      'console.log("Frontend started"); process.exit(7);',
+    ),
+  ]);
+
+  await assert.rejects(
+    run(process.execPath, [fileURLToPath(dev)], {
+      cwd: directory,
+      env: {
+        ...process.env,
+        DATABRICKS_HOST: "https://workspace.invalid",
+        DATABRICKS_APP_PORT: String(address.port),
+        GENIE_SPACE_ID: "fixture-space",
+      },
+      timeout: 10_000,
+    }),
+    (error: unknown) => {
+      assert.ok(
+        error instanceof Error &&
+          "code" in error &&
+          "stdout" in error &&
+          "stderr" in error,
+      );
+      assert.equal(error.code, 1);
+      const output = String(error.stdout) + String(error.stderr);
+      assert.match(output, /EADDRINUSE/);
+      assert.doesNotMatch(output, /Frontend started/);
+      return true;
+    },
+  );
 });

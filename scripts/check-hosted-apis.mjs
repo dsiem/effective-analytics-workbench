@@ -2,15 +2,43 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
-  bundleApp,
   bundleResources,
   bundleTarget,
   databricksJson,
+  deployedAppName,
 } from "./lib/databricks.mjs";
 
-const app = bundleApp(bundleResources(bundleTarget("check_hosted_apis")));
-assert.equal(app?.app_status?.state, "RUNNING");
-assert.ok(typeof app.url === "string" && app.url, "Missing deployed app URL.");
+async function waitForAppUrl(appName) {
+  const deadline = performance.now() + 600_000;
+  while (true) {
+    const app = databricksJson("apps", "get", appName);
+    const status = app?.app_status;
+    if (status?.state === "RUNNING") {
+      assert.ok(
+        typeof app.url === "string" && app.url,
+        `Missing URL for deployed app ${appName}.`,
+      );
+      return app.url;
+    }
+    if (status?.state === "CRASHED") {
+      throw new Error(
+        `App ${appName} crashed during startup. ${status.message ?? ""}`.trim(),
+      );
+    }
+    const remaining = deadline - performance.now();
+    const state = status?.state ?? "unknown";
+    if (remaining <= 0) {
+      throw new Error(
+        `App ${appName} did not reach RUNNING within 10 minutes. Last state: ${state}.`,
+      );
+    }
+    console.log(`Waiting for app ${appName} (state: ${state}).`);
+    await sleep(Math.min(15_000, remaining));
+  }
+}
+
+const resources = bundleResources(bundleTarget("check_hosted_apis"));
+const appUrl = await waitForAppUrl(deployedAppName(resources));
 const token =
   process.env.DATABRICKS_APP_OAUTH_TOKEN ||
   databricksJson("auth", "token")?.access_token;
@@ -25,7 +53,7 @@ const request = async (
   signal = AbortSignal.timeout(190000),
   grant,
 ) => {
-  const response = await fetch(`${app.url}${path}`, {
+  const response = await fetch(`${appUrl}${path}`, {
     method,
     redirect: "error",
     signal,
@@ -179,5 +207,5 @@ const chatConversation = await verifyGenie("chat", 1_000);
 const agentConversation = await verifyGenie("agent", 5_000);
 assert.notEqual(agentConversation, chatConversation);
 console.log(
-  `Deployed app verified: SQL, pickup/drop-off GPS maps, Lakebase persistence, and grounded answers in Genie Chat and Agent mode using the app identity. ${app.url}`,
+  `Deployed app verified: SQL, pickup/drop-off GPS maps, Lakebase persistence, and grounded answers in Genie Chat and Agent mode using the app identity. ${appUrl}`,
 );
