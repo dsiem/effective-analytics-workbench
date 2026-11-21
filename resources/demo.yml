@@ -1,0 +1,26 @@
+variables:
+  snapshot_start_date:
+    description: First NYC pickup date to include in the taxi snapshot (YYYY-MM-DD).
+    default: "2016-01-01"
+  snapshot_end_date:
+    description: Last NYC pickup date to include in the taxi snapshot (YYYY-MM-DD).
+    default: "2016-02-29"
+
+scripts:
+  setup_taxi_demo:
+    # Forward resolved values, including --var overrides, to nested bundle commands.
+    env:
+      BUNDLE_VAR_app_name: ${var.app_name}
+      BUNDLE_VAR_data_name: ${var.data_name}
+      BUNDLE_VAR_data_catalog: ${var.data_catalog}
+      BUNDLE_VAR_data_schema: ${var.data_schema}
+      BUNDLE_VAR_snapshot_start_date: ${var.snapshot_start_date}
+      BUNDLE_VAR_snapshot_end_date: ${var.snapshot_end_date}
+      BUNDLE_VAR_warehouse_name: ${var.warehouse_name}
+    content: node scripts/setup-taxi-demo.mjs
+  dev:
+    content: node scripts/dev.mjs --bundle
+  setup_lakebase:
+    content: node scripts/setup-bundle-lakebase.mjs
+  check_hosted_apis:
+    content: node scripts/check-hosted-apis.mjs

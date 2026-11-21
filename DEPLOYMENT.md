@@ -31,12 +31,12 @@ and grant access. [Lakebase permissions](https://docs.databricks.com/aws/en/dev-
    databricks bundle plan -t dev
    ```
 
-3. Run the setup command once per target. The command creates the data resources
+3. Set up the taxi demo once per target. The command creates the data resources
    and seeds the taxi snapshot. It deploys Genie and sets up Unity Catalog and
    Lakebase access before it starts the app.
 
    ```sh
-   databricks bundle run bootstrap -t dev
+   databricks bundle run setup_taxi_demo -t dev
    ```
 
    In Databricks Apps, open the app when its status is **Running**.
@@ -64,9 +64,8 @@ Databricks SQL. Reruns reuse trip IDs, including when you change the range.
 ## Release an app update
 
 If your deployment predates the `trips` and `trip_quality` tables, rerun
-`databricks bundle run bootstrap -t dev`. Bootstrap preserves trip IDs and
-grants the app access to both tables. For local development, rerun
-`databricks bundle run local_env -t dev` to update `.env`.
+`databricks bundle run setup_taxi_demo -t dev`. The command preserves trip IDs
+and grants the app access to both tables.
 
 For routine updates, deploy the bundle and start the app.
 
@@ -77,16 +76,35 @@ databricks bundle run app -t dev
 
 ## Develop locally
 
-Write the connection settings to `.env` and start the client and API. If you
-use a named profile, export `DATABRICKS_CONFIG_PROFILE` in your shell first.
+Start the client and API using the deployed target's connections. If you use a
+named profile, export `DATABRICKS_CONFIG_PROFILE` in your shell first.
 
 ```sh
-databricks bundle run local_env -t dev
-npm run dev
+databricks bundle run dev -t dev
 ```
 
 Open the frontend URL printed in the terminal. The local API uses your
-Databricks CLI login.
+Databricks CLI login and the resources recorded in the deployed bundle. Export
+local settings such as `GENIE_MAX_CONCURRENCY` in your shell. The bundle command
+skips `.env`.
+
+To supply your own connections, export the settings from `.env.example` or put
+them in `.env`, then run `npm run dev`.
+
+## Initialize or repair Lakebase
+
+To create the application tables and grant access to the deployed app, run the
+setup command as a workspace user with the required PostgreSQL permissions.
+
+```sh
+databricks bundle run setup_lakebase -t dev
+```
+
+Use the same target as your deployment. The command updates the selected
+Lakebase database and can be rerun independently of taxi demo setup.
+
+For a standalone database, supply its connection settings in your shell or in
+`.env` and run `npm run db:setup`.
 
 ## Verify the app
 
@@ -103,13 +121,14 @@ npm run test:browser
 ### Check hosted APIs
 
 After a release, verify that SQL queries, trip maps, Lakebase, and both Genie
-modes work through the hosted app. The script signs in with your Databricks CLI
-identity and calls the app, which runs Genie with its service principal. It
+modes work through the hosted app. Locally, the command uses the target's CLI
+login. The GitHub workflow supplies a short-lived OAuth token from its federated
+identity. The app runs Genie with its service principal. The check
 creates and deletes a temporary saved view and submits one read-only question
 per mode.
 
 ```sh
-node scripts/check-deployed.mjs dev
+databricks bundle run check_hosted_apis -t dev
 ```
 
 Each Genie check has a three-minute deadline. The check fails if either mode
@@ -156,7 +175,8 @@ npm run test:browser:deployed
 Set workspace-specific values in `.databricks/bundle/dev/variable-overrides.json`.
 Create the parent directory if needed. `data_catalog` names an existing Unity
 Catalog catalog. The schema defaults to `data_name`. Set `data_schema` to use a
-different schema name.
+different schema name. Apply name changes by deploying the bundle. Local dev and
+the hosted API check use the names recorded in the target's deployment state.
 
 ```json
 {

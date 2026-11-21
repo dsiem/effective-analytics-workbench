@@ -28,7 +28,7 @@ export type LakebaseSql = SqlClient.SqlClient & Pick<PgClient.PgClient, "json">;
 export const lakebaseFailure =
   (
     deniedMessage: string,
-    unavailableMessage = "Lakebase is unavailable. Check its connection settings and run npm run db:setup to initialize it.",
+    unavailableMessage = "Lakebase is unavailable. Check its connection settings. For database initialization, see DEPLOYMENT.md.",
   ) =>
   (cause: unknown) => {
     if (cause instanceof PermissionDenied) return cause;
@@ -109,7 +109,7 @@ export class Lakebase extends Context.Service<
       if (!settings.pgHost && !settings.lakebaseEndpoint) {
         const failure = unavailable(
           "lakebase",
-          "Configure Lakebase with PGHOST, PGUSER, and LAKEBASE_ENDPOINT, then run npm run db:setup.",
+          "Configure the Lakebase connection. See DEPLOYMENT.md for setup commands.",
         );
         return { use: () => Effect.fail(failure) };
       }

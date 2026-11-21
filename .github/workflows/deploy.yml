@@ -65,6 +65,15 @@ jobs:
           done
           echo "App did not reach RUNNING within 10 minutes" >&2
           exit 1
-      - name: Verify hosted APIs using the app identity
+      - name: Check hosted APIs
         timeout-minutes: 8
-        run: node scripts/check-deployed.mjs "$BUNDLE_TARGET"
+        run: |
+          python3 -m venv "$RUNNER_TEMP/databricks-hosted-check"
+          "$RUNNER_TEMP/databricks-hosted-check/bin/python" -m pip install databricks-sdk==0.169.0
+          "$RUNNER_TEMP/databricks-hosted-check/bin/python" - <<'PY'
+          import os
+          from databricks.sdk.core import Config
+
+          os.environ["DATABRICKS_APP_OAUTH_TOKEN"] = Config().oauth_token().access_token
+          os.execvp("databricks", ["databricks", "bundle", "run", "check_hosted_apis", "-t", os.environ["BUNDLE_TARGET"]])
+          PY

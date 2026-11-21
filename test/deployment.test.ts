@@ -12,8 +12,9 @@ import type { SavedView } from "../shared/domain.js";
 
 const run = promisify(execFile);
 
-for (const failure of [
+for (const scenario of [
   null,
+  "federated token",
   "warehouse",
   "trips",
   "details",
@@ -25,7 +26,10 @@ for (const failure of [
   "agent",
   "agent unavailable",
 ] as const) {
-  test(`hosted verification ${failure ? `fails on ${failure} errors despite RUNNING` : "checks SQL, paginated persistence, and both Genie modes"}`, async (t) => {
+  const federated = scenario === "federated token";
+  const failure = federated ? null : scenario;
+  const token = federated ? "test-federated-token" : "test-cli-token";
+  test(`hosted verification ${failure ? `fails on ${failure} errors despite RUNNING` : `checks SQL, paginated persistence, and both Genie modes with ${federated ? "a supplied token" : "the CLI login"}`}`, async (t) => {
     const directory = await mkdtemp(join(tmpdir(), "deployed-check-"));
     t.after(() => rm(directory, { recursive: true, force: true }));
     let saved: SavedView | undefined;
@@ -40,7 +44,7 @@ for (const failure of [
     };
     const server = createServer(async (request, response) => {
       const url = new URL(request.url ?? "/", "http://localhost");
-      assert.equal(request.headers.authorization, "Bearer test-token");
+      assert.equal(request.headers.authorization, `Bearer ${token}`);
       const reply = (value: unknown, status = 200) => {
         response.writeHead(status, { "Content-Type": "application/json" });
         response.end(JSON.stringify(value));
@@ -203,26 +207,46 @@ for (const failure of [
     const address = server.address();
     assert.ok(address && typeof address === "object");
     const responses = {
-      "bundle summary": { resources: { apps: { app: { name: "test-app" } } } },
+      "bundle summary": {
+        resources: {
+          apps: { app: { name: "configured-app", id: "deployed-app" } },
+        },
+      },
       "apps get": {
         app_status: { state: "RUNNING" },
         url: `http://127.0.0.1:${address.port}`,
       },
-      "auth token": { access_token: "test-token" },
+      ...(federated ? {} : { "auth token": { access_token: token } }),
     };
     await writeFile(
       join(directory, "databricks"),
       `#!/usr/bin/env node
+import assert from "node:assert/strict";
 const responses = ${JSON.stringify(responses)};
-console.log(JSON.stringify(responses[process.argv.slice(2, 4).join(" ")]));
+const args = process.argv.slice(2);
+if (args[0] === "bundle") {
+  assert.deepEqual(args, ["bundle", "summary", "-t", "prod", "--force-pull", "-o", "json"]);
+}
+if (args[0] === "apps") {
+  assert.deepEqual(args, ["apps", "get", "deployed-app", "-o", "json"]);
+}
+const response = responses[args.slice(0, 2).join(" ")];
+assert.ok(response, "Unexpected CLI call");
+console.log(JSON.stringify(response));
 `,
       { mode: 0o700 },
     );
     const verification = run(
       process.execPath,
-      [resolve("scripts/check-deployed.mjs"), "dev"],
+      [resolve("scripts/check-hosted-apis.mjs")],
       {
-        env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
+        env: {
+          ...process.env,
+          PATH: `${directory}:${process.env.PATH}`,
+          DATABRICKS_BUNDLE_TARGET: "prod",
+          DATABRICKS_HOST: "https://workspace.invalid",
+          DATABRICKS_APP_OAUTH_TOKEN: federated ? token : "",
+        },
         timeout: 15_000,
       },
     );

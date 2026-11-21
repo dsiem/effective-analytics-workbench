@@ -15,34 +15,12 @@ variables:
   data_schema:
     description: Unity Catalog schema for the processed NYC taxi dataset.
     default: ${var.data_name}
-  snapshot_start_date:
-    description: First NYC pickup date to include in the taxi snapshot (YYYY-MM-DD).
-    default: "2016-01-01"
-  snapshot_end_date:
-    description: Last NYC pickup date to include in the taxi snapshot (YYYY-MM-DD).
-    default: "2016-02-29"
-
   warehouse_name:
     description: Display name of the SQL warehouse.
     default: ${var.data_name}-analytics
 
 include:
   - resources/*.yml
-
-scripts:
-  bootstrap:
-    # Forward resolved values, including --var overrides, to nested bundle commands.
-    env:
-      BUNDLE_VAR_app_name: ${var.app_name}
-      BUNDLE_VAR_data_name: ${var.data_name}
-      BUNDLE_VAR_data_catalog: ${var.data_catalog}
-      BUNDLE_VAR_data_schema: ${var.data_schema}
-      BUNDLE_VAR_snapshot_start_date: ${var.snapshot_start_date}
-      BUNDLE_VAR_snapshot_end_date: ${var.snapshot_end_date}
-      BUNDLE_VAR_warehouse_name: ${var.warehouse_name}
-    content: node scripts/setup-workspace.mjs bootstrap
-  local_env:
-    content: node scripts/setup-workspace.mjs local-env
 
 sync:
   exclude:

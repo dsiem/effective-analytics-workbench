@@ -1,20 +1,23 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
+import {
+  bundleApp,
+  bundleResources,
+  bundleTarget,
+  databricksJson,
+} from "./lib/databricks.mjs";
 
-const target = process.argv[2] ?? "dev";
-const cli = (args) =>
-  JSON.parse(
-    execFileSync("databricks", [...args, "-o", "json"], {
-      encoding: "utf8",
-      maxBuffer: 16 * 1024 * 1024,
-    }),
-  );
-const summary = cli(["bundle", "summary", "-t", target]);
-const app = cli(["apps", "get", summary.resources.apps.app.name]);
-assert.equal(app.app_status.state, "RUNNING");
-const token = cli(["auth", "token"]).access_token;
+const app = bundleApp(bundleResources(bundleTarget("check_hosted_apis")));
+assert.equal(app?.app_status?.state, "RUNNING");
+assert.ok(typeof app.url === "string" && app.url, "Missing deployed app URL.");
+const token =
+  process.env.DATABRICKS_APP_OAUTH_TOKEN ||
+  databricksJson("auth", "token")?.access_token;
+assert.ok(
+  typeof token === "string" && token,
+  "Missing Databricks access token.",
+);
 const request = async (
   path,
   method = "GET",
