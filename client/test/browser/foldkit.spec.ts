@@ -140,8 +140,10 @@ test("Records browses all 10,000 returned rows without growing the table DOM", a
   });
   await page.goto("/trips?zip=10001");
   const table = page.getByRole("table", { name: "Matching trips" });
-  await expect(page.getByText("10,000 shown", { exact: true })).toBeVisible();
-  await expect(page.getByText(/More trips match/)).toBeVisible();
+  await expect(
+    page.getByText("10,000 shown · more match", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/More trips match/)).toHaveCount(0);
   await expect(table.getByRole("row")).toHaveCount(26);
   const scroller = page.getByRole("region", {
     name: "Scrollable trip records",

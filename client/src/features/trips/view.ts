@@ -271,7 +271,7 @@ function trips(
   const label =
     preview._tag === "Ready"
       ? preview.hasMore
-        ? `${count} shown`
+        ? `${count} shown · more match`
         : rows.length === 1
           ? "1 trip"
           : `${count} trips`
@@ -346,26 +346,15 @@ function trips(
                 ),
               ]
             : [loading(h)]
-          : preview._tag === "Ready"
-            ? preview.hasMore
-              ? [
-                  h.p(
-                    [h.Class("trip-refine")],
-                    [
-                      "More trips match. Narrow the pickup dates or ZIP to see a different selection.",
-                    ],
-                  ),
-                ]
-              : rows.length === 0
-                ? [
-                    h.p(
-                      [h.Class("p-14 muted text-center")],
-                      [
-                        "No pickups here. Try another ZIP code or a wider date range.",
-                      ],
-                    ),
-                  ]
-                : []
+          : preview._tag === "Ready" && rows.length === 0
+            ? [
+                h.p(
+                  [h.Class("p-14 muted text-center")],
+                  [
+                    "No pickups here. Try another ZIP code or a wider date range.",
+                  ],
+                ),
+              ]
             : []),
       ],
       "trip-records",
