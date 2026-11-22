@@ -59,32 +59,40 @@ export const makeWarehouse = Effect.gen(function* () {
     ),
   );
   const snapshot = sql`${sql(catalog)}.${sql(schema)}.${sql(table)}`;
-  const read = <A>(
-    schema: Schema.Decoder<A>,
-    statement: Effect.Effect<ReadonlyArray<unknown>, unknown>,
-    deniedMessage = "These trips are under lock. You need permission to read trip data.",
+  const denied =
+    "These trips are under lock. You need permission to read trip data.";
+  const warehouseError = (cause: unknown, deniedMessage: string) => {
+    if (cause instanceof OperationTimeout) return cause;
+    if (
+      isSqlError(cause) &&
+      cause.reason._tag === "AuthorizationError" &&
+      cause.reason.operation !== "download"
+    )
+      return permissionDenied(deniedMessage);
+    return unavailable(error.service, error.message, cause);
+  };
+  const run = <A>(
+    operation: Effect.Effect<A, unknown>,
+    deniedMessage = denied,
   ) =>
-    (configured
-      ? SqlSchema.findAll({
-          Request: Schema.Void,
-          Result: schema,
-          execute: () => statement,
-        })(undefined).pipe(admit)
-      : Effect.fail(error)
-    ).pipe(
+    (configured ? operation.pipe(admit.effect) : Effect.fail(error)).pipe(
       Effect.tapError((cause) =>
         Effect.logError("Warehouse operation failed", cause),
       ),
-      Effect.mapError((cause) => {
-        if (cause instanceof OperationTimeout) return cause;
-        if (
-          isSqlError(cause) &&
-          cause.reason._tag === "AuthorizationError" &&
-          cause.reason.operation !== "download"
-        )
-          return permissionDenied(deniedMessage);
-        return unavailable(error.service, error.message, cause);
-      }),
+      Effect.mapError((cause) => warehouseError(cause, deniedMessage)),
     );
-  return { sql, snapshot, read, error };
+  const read = <A>(
+    schema: Schema.Decoder<A>,
+    statement: Effect.Effect<ReadonlyArray<unknown>, unknown>,
+    deniedMessage = denied,
+  ) =>
+    run(
+      SqlSchema.findAll({
+        Request: Schema.Void,
+        Result: schema,
+        execute: () => statement,
+      })(undefined),
+      deniedMessage,
+    );
+  return { sql, snapshot, read, run, error };
 });

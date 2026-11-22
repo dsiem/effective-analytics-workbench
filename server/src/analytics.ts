@@ -20,25 +20,30 @@ import {
 } from "../../shared/overview.js";
 import { type Filters } from "../../shared/filters.js";
 import { DatasetMetadata } from "../../shared/dataset.js";
-import type { TripSearch, Trips } from "../../shared/trips.js";
+import { type Trip, type TripSearch } from "../../shared/trips.js";
 import {
+  type InvalidRequest,
   type ServiceUnavailable,
   type OperationTimeout,
   type PermissionDenied,
+  TripNotFound,
   unavailable,
 } from "./errors.js";
 import { Settings } from "./settings.js";
 import {
-  formatTripPage,
-  tripPageWindow,
-  tripZip,
+  tripDetailsProjection,
+  tripPreviewWindow,
+  tripSummaryProjection,
   WarehouseTrip,
-} from "./trip-pagination.js";
-import { tripDetailsProjection } from "./trip-sql.js";
+  WarehouseTripSummary,
+} from "./trip-sql.js";
+import { makeTripPages } from "./trip-pages.js";
 import { makeWarehouse } from "./warehouse.js";
 
 type WarehouseError = ServiceUnavailable | OperationTimeout | PermissionDenied;
-
+const decodeTripRows = Schema.decodeUnknownEffect(
+  Schema.Array(WarehouseTripSummary),
+);
 export class Analytics extends Context.Service<
   Analytics,
   {
@@ -51,7 +56,13 @@ export class Analytics extends Context.Service<
     ) => Effect.Effect<Overview, WarehouseError>;
     readonly trips: (
       search: TripSearch,
-    ) => Effect.Effect<typeof Trips.Type, WarehouseError>;
+    ) => Effect.Effect<Uint8Array, WarehouseError>;
+    readonly tripPage: (
+      cursor: string,
+    ) => Effect.Effect<Uint8Array, WarehouseError | InvalidRequest>;
+    readonly tripDetails: (
+      tripId: Trip["trip_id"],
+    ) => Effect.Effect<Trip, WarehouseError | TripNotFound>;
     readonly tripMap: (
       search: typeof GpsSearch.Type,
     ) => Effect.Effect<TripMap, WarehouseError>;
@@ -63,7 +74,7 @@ export class Analytics extends Context.Service<
   static readonly layer = Layer.effect(
     Analytics,
     Effect.gen(function* () {
-      const { sql, snapshot, read, error } = yield* makeWarehouse;
+      const { sql, snapshot, read, run, error } = yield* makeWarehouse;
       const { analysisResultsTable } = yield* Settings;
       const analysisReport = (id: AnalysisRunId) => {
         const [catalog, schema, table] = analysisResultsTable.split(".");
@@ -184,44 +195,50 @@ export class Analytics extends Context.Service<
         },
       );
 
-      const trips = (search: TripSearch) => {
-        const { sort = "newest", cursor, ...filters } = search;
-        const predicate = where(filters);
-        return Effect.all(
-          {
-            rows: read(
-              WarehouseTrip,
-              sql
-                .arrowStream(sql`SELECT CAST(trip_id AS STRING) AS trip_id,
-          CAST(tpep_pickup_datetime AS STRING) AS pickup_at,
-          CAST(tpep_dropoff_datetime AS STRING) AS dropoff_at,
-          ${tripZip(sql, "pickup_zip")} AS pickup_zip,
-          ${tripZip(sql, "dropoff_zip")} AS dropoff_zip,
-          CAST(trip_distance AS DOUBLE) AS distance,
-          CAST(fare_amount AS DOUBLE) AS fare,
-          CAST(COALESCE(timestampdiff(SECOND,tpep_pickup_datetime,tpep_dropoff_datetime)/60.0,0) AS DOUBLE) AS duration,
-          ${tripDetailsProjection(sql)}
-          FROM ${snapshot} ${predicate}
-          ${tripPageWindow(sql, sort, cursor?.after)}`)
-                .pipe(
-                  Stream.flatMap((batch) => Stream.fromIterable(batch)),
-                  Stream.map((row) => row.toJSON()),
-                  Stream.runCollect,
+      const { trips, tripPage } = yield* makeTripPages(
+        ({ limit, sort, ...filters }) =>
+          run(
+            sql
+              .jsonPage(
+                sql`SELECT ${tripSummaryProjection(sql)}
+              FROM ${snapshot} ${where(filters)}
+              ${tripPreviewWindow(sql, sort, limit)}`,
+                { rowLimit: limit },
+              )
+              .pipe(
+                Effect.flatMap(({ rows, pageCount, truncated, readChunk }) =>
+                  Effect.map(decodeTripRows(rows), (rows) => ({
+                    rows,
+                    pageCount,
+                    truncated,
+                    readChunk: (index: number, offset: number) =>
+                      run(
+                        readChunk(index, offset).pipe(
+                          Effect.flatMap(decodeTripRows),
+                        ),
+                      ),
+                  })),
                 ),
-            ),
-            total: read(
-              Schema.Struct({ total: Schema.NumberFromString }),
-              sql`SELECT CAST(COUNT(*) AS DOUBLE) AS total FROM ${snapshot} ${predicate}`,
-            ).pipe(Effect.map((rows) => rows[0]?.total ?? 0)),
-          },
-          { concurrency: 2 },
-        ).pipe(
-          Effect.map(({ rows, total }) =>
-            formatTripPage(rows, total, { sort, filters }),
+              ),
           ),
-          Effect.withSpan("analytics.trips"),
+      );
+      const tripDetails = (tripId: Trip["trip_id"]) =>
+        read(
+          WarehouseTrip,
+          sql`SELECT ${tripSummaryProjection(sql)}, ${tripDetailsProjection(sql)}
+            FROM ${snapshot} WHERE trip_id = ${tripId} LIMIT 1`,
+        ).pipe(
+          Effect.flatMap(([row]) =>
+            row
+              ? Effect.succeed(row)
+              : Effect.fail(
+                  new TripNotFound({
+                    message: "This trip is no longer in the current snapshot.",
+                  }),
+                ),
+          ),
+          Effect.withSpan("analytics.tripDetails"),
         );
-      };
       const gpsCache = yield* Cache.makeWith(
         (search: Filters & { readonly endpoint: GpsEndpoint }) => {
           const { endpoint } = search;
@@ -300,6 +317,8 @@ export class Analytics extends Context.Service<
         analysisReport,
         overview: (filters: Filters) => Cache.get(overviewCache, filters),
         trips,
+        tripPage,
+        tripDetails,
         tripMap: (search: typeof GpsSearch.Type) =>
           Cache.get(gpsCache, {
             ...search,

@@ -17,10 +17,10 @@ The walkthrough uses synthetic taxi data.
 
 ## What the example does
 
-- **Databricks SQL** filters and pages trip records and computes charts and map
-  aggregates. The trip map shows the busiest H3 cells and reports its coverage.
-- **Genie** answers questions using the active filters and the selected chart,
-  record, or map area. The app displays answers, result tables, and generated SQL.
+- **Databricks SQL** shows up to 10,000 sorted, filtered trips in **Trip explorer**.
+  It also computes the overview charts and the busiest H3 cells on the map.
+- **Genie** answers questions using the active filters and explains selected
+  charts or map areas. The app displays answers, result tables, and generated SQL.
 - **Lakebase** stores saved filters, findings, and comments on trip records.
 - **Databricks Jobs** runs a SQL task to compare 90th-percentile trip times by
   pickup ZIP, drop-off ZIP, and time of day.

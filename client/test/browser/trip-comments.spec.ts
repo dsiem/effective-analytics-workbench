@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { tripDetails } from "../trip-fixture";
+import {
+  tripDetails,
+  tripPreviewResponse,
+  tripSummaryFor,
+} from "../trip-fixture";
 import type {
   TripComment,
   TripCommentInput,
@@ -53,15 +57,16 @@ test.beforeEach(async ({ page }) => {
   );
   await page.route("**/api/me", (route) => route.fulfill({ json: author }));
   await page.route("**/api/trips**", (route) =>
-    route.fulfill({
-      json: {
-        rows: [trip, otherTrip],
-        total: 2,
-        pageSize: 25,
-        nextCursor: null,
-      },
-    }),
+    route.fulfill(
+      tripPreviewResponse([tripSummaryFor(trip), tripSummaryFor(otherTrip)]),
+    ),
   );
+  await page.route("**/api/trip-details?**", (route) => {
+    const tripId = new URL(route.request().url()).searchParams.get("tripId");
+    return route.fulfill({
+      json: tripId === otherTrip.trip_id ? otherTrip : trip,
+    });
+  });
   await page.route("**/api/trip-comment-counts**", (route) =>
     route.fulfill({ json: { [trip.trip_id]: 0, [otherTrip.trip_id]: 0 } }),
   );
@@ -73,14 +78,10 @@ for (const width of [1440, 360]) {
   }) => {
     await page.setViewportSize({ width, height: 740 });
     await page.route("**/api/trips**", (route) =>
-      route.fulfill({
-        json: {
-          rows: [enrichedTrip],
-          total: 1,
-          pageSize: 25,
-          nextCursor: null,
-        },
-      }),
+      route.fulfill(tripPreviewResponse([tripSummaryFor(enrichedTrip)])),
+    );
+    await page.route("**/api/trip-details?**", (route) =>
+      route.fulfill({ json: enrichedTrip }),
     );
     await page.route("**/api/trip-comments**", (route) =>
       route.fulfill({
@@ -235,7 +236,7 @@ for (const width of [1440, 360]) {
     const box = await actions.boundingBox();
     expect(box).not.toBeNull();
     expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(width);
-    expect(box?.height ?? 0).toBeLessThanOrEqual(44);
+    expect(box?.height ?? 0).toBeLessThanOrEqual(width === 360 ? 56 : 44);
     await page.screenshot({
       path: `test-results/compact-trip-rows-${width}.png`,
       fullPage: true,
@@ -243,11 +244,17 @@ for (const width of [1440, 360]) {
   });
 }
 
-test("unavailable counts remain unknown while details and comments still open", async ({
+test("comment counts can be retried after opening a trip while they are unavailable", async ({
   page,
 }) => {
-  await page.route("**/api/trip-comment-counts**", (route) =>
-    route.fulfill({
+  let attempts = 0;
+  await page.route("**/api/trip-comment-counts**", (route) => {
+    attempts += 1;
+    if (attempts > 1)
+      return route.fulfill({
+        json: { [trip.trip_id]: 0, [otherTrip.trip_id]: 0 },
+      });
+    return route.fulfill({
       status: 503,
       json: {
         error: {
@@ -255,8 +262,8 @@ test("unavailable counts remain unknown while details and comments still open", 
           message: "Comments are temporarily unavailable.",
         },
       },
-    }),
-  );
+    });
+  });
   await page.route("**/api/trip-comments**", (route) =>
     route.fulfill({ json: { rows: [], nextCursor: null } }),
   );
@@ -269,6 +276,90 @@ test("unavailable counts remain unknown while details and comments still open", 
   await expect(
     page.getByRole("dialog", { name: "Record details" }),
   ).toContainText("Know the story behind this ride?");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: /^0 comments for trip/ }),
+  ).toHaveCount(2);
+});
+
+test("a comment can be posted without trip details and retried with the same snapshot", async ({
+  page,
+}) => {
+  let attempts = 0;
+  await page.route("**/api/trip-details?**", (route) => {
+    attempts += 1;
+    return attempts === 1
+      ? route.fulfill({
+          status: 503,
+          json: {
+            error: {
+              code: "warehouse_unavailable",
+              message: "The warehouse is unavailable.",
+            },
+          },
+        })
+      : route.fulfill({ json: enrichedTrip });
+  });
+  const posts: TripCommentInput[] = [];
+  await page.route("**/api/trip-comments**", (route) => {
+    if (route.request().method() === "POST") {
+      const input: TripCommentInput = route.request().postDataJSON();
+      posts.push(input);
+      return posts.length === 1
+        ? route.fulfill({
+            status: 503,
+            json: {
+              error: {
+                code: "lakebase_unavailable",
+                message: "Lakebase is unavailable.",
+              },
+            },
+          })
+        : route.fulfill({
+            json: { ...input, author, created_at: "2026-11-14T10:00:00Z" },
+          });
+    }
+    return route.fulfill({
+      json: { rows: [makeComment("Check the fare")], nextCursor: null },
+    });
+  });
+  await page.goto("/trips");
+  await page
+    .getByRole("button", { name: /^Details and comments for trip/ })
+    .first()
+    .click();
+  const panel = page.getByRole("dialog", { name: "Record details" });
+  await expect(
+    panel.getByText("Check the fare", { exact: true }),
+  ).toBeVisible();
+  await expect(panel.getByRole("alert")).toHaveText(
+    "The warehouse is unavailable.",
+  );
+  const draft = panel.getByRole("textbox", { name: "Add a comment" });
+  await draft.fill("Confirm the source");
+  const post = panel.getByRole("button", { name: "Post comment" });
+  await expect(post).toBeEnabled();
+  await post.click();
+  await expect(
+    panel.getByText("Lakebase is unavailable.", { exact: false }),
+  ).toBeVisible();
+  expect(posts[0]).toMatchObject({
+    trip: historicalTrip,
+    body: "Confirm the source",
+  });
+  expect(posts[0]?.trip.details).toBeUndefined();
+  await panel
+    .getByRole("button", { name: "Retry loading trip details" })
+    .click();
+  await expect(panel.getByText("$22.30", { exact: true })).toBeVisible();
+  await expect(draft).toHaveValue("Confirm the source");
+  await post.click();
+  await expect(
+    panel.getByText("Comment posted", { exact: true }),
+  ).toBeVisible();
+  expect(posts).toEqual([posts[0], posts[0]]);
+  expect(attempts).toBe(2);
 });
 
 test("denied comment access leaves trip records, details and navigation usable", async ({
@@ -436,14 +527,10 @@ test("drafts follow the trip ID when refreshed record details change", async ({
   await field.fill("Keep investigating this trip");
   await page.keyboard.press("Escape");
   await page.route("**/api/trips**", (route) =>
-    route.fulfill({
-      json: {
-        rows: [{ ...trip, fare: 25 }],
-        total: 1,
-        pageSize: 25,
-        nextCursor: null,
-      },
-    }),
+    route.fulfill(tripPreviewResponse([{ ...tripSummaryFor(trip), fare: 25 }])),
+  );
+  await page.route("**/api/trip-details?**", (route) =>
+    route.fulfill({ json: { ...trip, fare: 25 } }),
   );
   await page.getByRole("combobox", { name: "Sort trips" }).selectOption("fare");
   await expect(
@@ -604,4 +691,112 @@ test("typing while a comment posts keeps the new draft with a distinct retry ide
   await expect(field).toHaveValue("");
   expect(submitted).toHaveLength(2);
   expect(submitted[1]?.id).not.toBe(submitted[0]?.id);
+});
+
+test("scrolling after a count denial leaves the table steady until manual retry", async ({
+  page,
+}) => {
+  const rows = Array.from({ length: 80 }, (_, index) => ({
+    ...tripSummaryFor(trip),
+    trip_id: `row-${index}`,
+  }));
+  await page.route("**/api/trips**", (route) =>
+    route.fulfill(tripPreviewResponse(rows)),
+  );
+  const requests: string[][] = [];
+  await page.route("**/api/trip-comment-counts**", (route) => {
+    const ids: string[] = JSON.parse(
+      new URL(route.request().url()).searchParams.get("tripIds") ?? "[]",
+    );
+    requests.push(ids);
+    return requests.length === 1
+      ? route.fulfill({
+          status: 403,
+          json: {
+            error: {
+              code: "permission_denied",
+              message: "Comments are under lock.",
+            },
+          },
+        })
+      : route.fulfill({ json: Object.fromEntries(ids.map((id) => [id, 0])) });
+  });
+
+  await page.goto("/trips");
+  const retry = page.getByRole("button", { name: "Try again", exact: true });
+  await expect(retry).toBeVisible();
+  const scroller = page.getByRole("region", {
+    name: "Scrollable trip records",
+  });
+  const top = await scroller.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+  for (const offset of [132, 396, 704]) {
+    await scroller.evaluate((element, scrollTop) => {
+      element.scrollTop = scrollTop;
+    }, offset);
+    await expect
+      .poll(() => scroller.evaluate((element) => element.scrollTop))
+      .toBe(offset);
+    await expect(retry).toBeVisible();
+    expect(
+      await scroller.evaluate((element) => element.getBoundingClientRect().top),
+    ).toBe(top);
+  }
+  expect(requests).toHaveLength(1);
+  await retry.click();
+  await expect(retry).toBeHidden();
+  expect(requests).toHaveLength(2);
+  expect(requests[1]?.[0]).toBe("row-16");
+});
+
+test("closing the inspector cancels its pending detail and comment reads", async ({
+  page,
+}) => {
+  const started: string[] = [];
+  for (const path of ["/api/trip-details", "/api/trip-comments"]) {
+    await page.route(
+      (url) => url.pathname === path,
+      (route) => {
+        const tripId = new URL(route.request().url()).searchParams.get(
+          "tripId",
+        );
+        if (tripId === trip.trip_id) {
+          started.push(path);
+          return;
+        }
+        return route.fulfill({
+          json:
+            path === "/api/trip-details"
+              ? otherTrip
+              : { rows: [], nextCursor: null },
+        });
+      },
+    );
+  }
+  await page.goto("/trips");
+  const details = page.getByRole("button", {
+    name: /^Details and comments for trip/,
+  });
+  await details.first().click();
+  const panel = page.getByRole("dialog", { name: "Record details" });
+  await expect(
+    panel.getByRole("heading", { name: "Record details" }),
+  ).toBeFocused();
+  await expect
+    .poll(() => started.toSorted())
+    .toEqual(["/api/trip-comments", "/api/trip-details"]);
+  const failures = started.map((path) =>
+    page.waitForEvent(
+      "requestfailed",
+      (request) => new URL(request.url()).pathname === path,
+    ),
+  );
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  await Promise.all(failures);
+  await details.nth(1).click();
+  await expect(
+    panel.getByText(otherTrip.pickup_at, { exact: true }),
+  ).toBeVisible();
 });

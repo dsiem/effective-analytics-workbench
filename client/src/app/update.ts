@@ -313,18 +313,12 @@ function updateApplication(
       return Update.foldChild({
         ...Features.trips,
         update: updateTrips,
-        foldOutMessage: (out) => (parent) => {
-          switch (out._tag) {
-            case "Reload":
-              return loadPage(parent);
-            case "SortChanged":
-              return route._tag === "Trips"
-                ? sortTrips(parent, out.sort)
-                : { model };
-            case "SelectionInvalidated":
-              return { model: invalidateGenieSelection(parent) };
-          }
-        },
+        foldOutMessage:
+          ({ sort }) =>
+          (parent) =>
+            route._tag === "Trips" && route.sort !== sort
+              ? sortTrips(parent, sort)
+              : { model: parent },
       })(model, message.message);
     case "SavedViews":
       return Update.foldChild({
@@ -388,6 +382,21 @@ export function update(
   const result = updateApplication(model, message);
   let next = result.model;
   const commands = [...(result.commands ?? [])];
+  if (
+    next.tripsState.sortMenu.isOpen &&
+    (!next.mobile || next.location.route._tag !== "Trips")
+  ) {
+    const closed = updateTrips(
+      next.tripsState,
+      TripMessage.SortMenu({ message: Menu.Message.Closed() }),
+    );
+    next = { ...next, tripsState: closed.model };
+    commands.push(
+      ...(closed.commands ?? []).map((command) =>
+        Command.mapMessage(command, Features.trips.toParentMessage),
+      ),
+    );
+  }
   // Release the child menu's resources when the mobile drawer is removed.
   if (next.mobile && !next.mobileNavigation && next.themeMenu.isOpen) {
     const closed = ThemeMenu.close(next.themeMenu);

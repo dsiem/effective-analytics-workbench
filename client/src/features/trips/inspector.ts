@@ -27,9 +27,11 @@ const close = (h: H, label = "Close") =>
     variant: "ghost",
   });
 function inspector(h: H, model: Model) {
-  const trip = model.selectedTrip;
-  if (!trip) return null;
-  const details = trip.details;
+  const { inspector } = model;
+  if (!inspector) return null;
+  const { details: tripDetails, comments: thread } = inspector;
+  const trip = tripDetails.data ?? inspector.trip;
+  const details = tripDetails.data?.details;
   const location = (point: typeof Coordinates.Type | null) =>
     point
       ? `${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`
@@ -46,7 +48,7 @@ function inspector(h: H, model: Model) {
     "Voided trip",
   ];
   const draft = model.commentDrafts[trip.trip_id];
-  const rows = model.comments.data?.rows ?? [];
+  const rows = thread.data?.rows ?? [];
   const info = (label: string, value: string) =>
     h.div([], [h.dt([], [label]), h.dd([], [value])]);
   const disclosure = (label: string, children: Child[]) =>
@@ -58,10 +60,10 @@ function inspector(h: H, model: Model) {
       ],
     );
   const comments: Child[] =
-    model.comments.loading && !model.comments.data
+    thread.read !== null && !thread.data
       ? [loading(h, "Loading comments…")]
-      : model.comments.error && !model.comments.data
-        ? [error(h, model.comments.error, M.LoadComments({ more: false }))]
+      : thread.error && !thread.data
+        ? [error(h, thread.error, M.LoadComments({ more: false }))]
         : [
             ...(!rows.length
               ? [
@@ -115,19 +117,20 @@ function inspector(h: H, model: Model) {
                 ),
               ),
             ),
-            ...(model.comments.error ? [alert(h, model.comments.error)] : []),
-            ...(model.comments.data?.nextCursor || model.comments.error
+            ...(thread.error ? [alert(h, thread.error)] : []),
+            ...(thread.data?.nextCursor || thread.error
               ? [
                   button(h, {
-                    label: model.comments.loading
-                      ? "Loading…"
-                      : model.comments.error
-                        ? "Retry loading comments"
-                        : "Load older comments",
+                    label:
+                      thread.read !== null
+                        ? "Loading…"
+                        : thread.error
+                          ? "Retry loading comments"
+                          : "Load older comments",
                     onClick: M.LoadComments({
-                      more: !!model.comments.data?.nextCursor,
+                      more: !!thread.data?.nextCursor,
                     }),
-                    disabled: model.comments.loading,
+                    disabled: thread.read !== null,
                     className: " w-full mt-4",
                   }),
                 ]
@@ -164,10 +167,14 @@ function inspector(h: H, model: Model) {
                   info("Pickup", trip.pickup_at),
                   info("Drop-off", trip.dropoff_at),
                   info("Fare", money(trip.fare, 2)),
-                  info(
-                    "Total · excl. cash tips",
-                    amount(details?.total_amount ?? null),
-                  ),
+                  ...(details
+                    ? [
+                        info(
+                          "Total · excl. cash tips",
+                          amount(details.total_amount),
+                        ),
+                      ]
+                    : []),
                   info("Distance", `${trip.distance.toFixed(2)} mi`),
                   info("Duration", `${trip.duration.toFixed(1)} min`),
                   ...(details
@@ -186,6 +193,23 @@ function inspector(h: H, model: Model) {
                     : []),
                 ],
               ),
+              ...(tripDetails.loading
+                ? [
+                    h.p(
+                      [h.Role("status"), h.Class("muted text-sm")],
+                      ["Loading trip details…"],
+                    ),
+                  ]
+                : []),
+              ...(tripDetails.error
+                ? [
+                    alert(h, tripDetails.error),
+                    button(h, {
+                      label: "Retry loading trip details",
+                      onClick: M.RetryTripDetails(),
+                    }),
+                  ]
+                : []),
               ...(details
                 ? [
                     disclosure("Fare breakdown", [
@@ -212,6 +236,7 @@ function inspector(h: H, model: Model) {
                       h.dl(
                         [h.Class("trip-source-details")],
                         [
+                          info("Trip ID", trip.trip_id),
                           info(
                             "Pickup GPS · latitude, longitude",
                             location(details.pickup_location),

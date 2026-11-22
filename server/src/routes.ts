@@ -2,6 +2,7 @@ import { resolve, sep } from "node:path";
 import { Effect, Layer } from "effect";
 import {
   HttpEffect,
+  HttpMiddleware,
   HttpRouter,
   HttpServerRequest,
   HttpServerResponse,
@@ -34,6 +35,7 @@ const errorResponses = {
   PermissionDenied: ({ message }) => body("permission_denied", message),
   SavedViewConflict: ({ message }) => body("saved_view_conflict", message),
   SavedViewNotFound: ({ message }) => body("saved_view_not_found", message),
+  TripNotFound: ({ message }) => body("trip_not_found", message),
   AnalysisRunNotFound: ({ message }) => body("analysis_run_not_found", message),
   AnalysisReportPending: ({ message }) =>
     body("analysis_report_pending", message),
@@ -57,12 +59,16 @@ const toResponse: {
   ) => ReturnType<(typeof errorResponses)[K]>;
 } = errorResponses;
 
+const encodeError = <K extends ErrorTag>(
+  error: ErrorByTag[K] & { readonly _tag: K },
+) => toResponse[error._tag](error);
+
 const respond = <A, K extends ErrorTag, R>(
   effect: Effect.Effect<A, ErrorByTag[K] & { readonly _tag: K }, R>,
 ) =>
   effect.pipe(
     Effect.tapCause((cause) => Effect.logError("API operation failed", cause)),
-    Effect.mapError((error) => toResponse[error._tag](error)),
+    Effect.mapError(encodeError<K>),
   );
 
 const BoundaryLive = Layer.succeed(ApiBoundary, (effect) =>
@@ -89,6 +95,12 @@ const BoundaryLive = Layer.succeed(ApiBoundary, (effect) =>
   }),
 );
 
+const tripResponse = (body: Uint8Array) =>
+  HttpServerResponse.uint8Array(body, {
+    contentType: "application/json",
+  });
+const compressPage = HttpMiddleware.compression({ algorithms: ["gzip"] });
+
 const ApiLive = HttpApiBuilder.group(AppApi, "app", (handlers) =>
   Effect.gen(function* () {
     const analytics = yield* Analytics;
@@ -114,7 +126,21 @@ const ApiLive = HttpApiBuilder.group(AppApi, "app", (handlers) =>
       )
       .handle("metadata", () => respond(analytics.metadata))
       .handle("overview", ({ query }) => respond(analytics.overview(query)))
-      .handle("trips", ({ query }) => respond(analytics.trips(query)))
+      .handle("trips", ({ query }) =>
+        respond(analytics.trips(query)).pipe(
+          Effect.map(tripResponse),
+          compressPage,
+        ),
+      )
+      .handle("tripPage", ({ params }) =>
+        respond(analytics.tripPage(params.cursor)).pipe(
+          Effect.map(tripResponse),
+          compressPage,
+        ),
+      )
+      .handle("tripDetails", ({ query }) =>
+        respond(analytics.tripDetails(query.tripId)),
+      )
       .handle("tripMap", ({ query }) => respond(analytics.tripMap(query)))
       .handle("submitAnalysisRun", ({ payload }) =>
         respond(

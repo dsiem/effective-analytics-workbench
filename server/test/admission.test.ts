@@ -53,7 +53,7 @@ for (const outcome of ["failure", "defect", "interruption"] as const) {
     async () => {
       await Effect.runPromise(
         Effect.gen(function* () {
-          const admit = makeAdmission({
+          const { effect: admit } = makeAdmission({
             service: "warehouse",
             concurrency: 1,
             timeout: "90 seconds",
@@ -105,7 +105,7 @@ test(
   async () => {
     await Effect.runPromise(
       Effect.gen(function* () {
-        const admit = makeAdmission({
+        const { effect: admit } = makeAdmission({
           service: "warehouse",
           concurrency: 1,
           timeout: "30 seconds",
@@ -213,7 +213,7 @@ test(
 );
 
 test(
-  "cancelled warehouse cache lookups never submit their queued statements",
+  "cancelled warehouse requests never submit their queued statements",
   {
     timeout: 5000,
   },
@@ -252,8 +252,8 @@ test(
         yield* analytics.trips({ sort: "distance" });
         assert.equal(
           statements,
-          3,
-          "only metadata and the replacement trip page may execute",
+          2,
+          "only metadata and the replacement trip batch may execute",
         );
       }).pipe(
         Effect.provide(

@@ -1,6 +1,4 @@
-import { Schema } from "effect";
-import { TripSearch } from "../../../shared/trips";
-import { tripCursorFor, tripDetails } from "../trip-fixture";
+import { tripPreviewResponse } from "../trip-fixture";
 import { expect, type Page, test } from "@playwright/test";
 import { gpsFixture } from "../gps-fixture";
 
@@ -62,10 +60,6 @@ test.beforeEach(async ({ page }) => {
     route.fulfill({ json: overview }),
   );
   await page.route("**/api/trips**", (route) => {
-    const query = new URL(route.request().url()).searchParams;
-    const { cursor, sort, ...filters } = Schema.decodeUnknownSync(TripSearch)(
-      Object.fromEntries(query),
-    );
     const trip = {
       trip_id: "1a2f4670-fcd5-4ac1-9232-2d6b5b91664a",
       pickup_at: "2016-01-11 18:00:00",
@@ -74,17 +68,9 @@ test.beforeEach(async ({ page }) => {
       dropoff_zip: "10003",
       distance: 2.8,
       duration: 14,
-      details: { ...tripDetails, store_and_fwd_flag: "x".repeat(25_000) },
       fare: 13.42,
     };
-    return route.fulfill({
-      json: {
-        rows: [trip],
-        total: 2184,
-        pageSize: 25,
-        nextCursor: cursor ? null : tripCursorFor(trip, filters, sort),
-      },
-    });
+    return route.fulfill(tripPreviewResponse([trip], true));
   });
   await page.route("**/api/genie", (route) =>
     route.fulfill({ json: operation }),
@@ -230,7 +216,7 @@ test("explains a selected chart in place with its actual data, filters, SQL, and
   });
 });
 
-test("closed helper finishes its answer and navigation updates visible records, sorting, and pagination", async ({
+test("a Records follow-up sends the applied filters after viewing a chart", async ({
   page,
 }) => {
   let complete = false;
@@ -267,33 +253,32 @@ test("closed helper finishes its answer and navigation updates visible records, 
   expect(submissions).toHaveLength(1);
   await page.getByRole("link", { name: "Trip explorer", exact: true }).click();
   await page.getByRole("combobox", { name: "Sort trips" }).selectOption("fare");
-  await page.getByRole("button", { name: "Next page" }).click();
+  await expect(page).toHaveURL(/sort=fare$/);
+  await expect(page.getByText("1 shown", { exact: true })).toBeVisible();
   await openHelper(page);
-  await expect(helper.getByRole("region")).toContainText(
-    "Trip records · page 2",
-  );
+  const context = helper.getByRole("region", {
+    name: "Explore view for your next question",
+  });
+  await expect(context).toContainText("Trip records");
+  await expect(context).toContainText("Applied filters included.");
   await expect(
     helper.getByRole("cell", { name: "2184", exact: true }),
   ).toBeVisible();
-  await helper.getByRole("textbox").fill("Summarize these records");
+  await helper.getByRole("textbox").fill("How many trips match these filters?");
   await helper
     .getByRole("button", { name: "Send question", exact: true })
     .click();
   await expect.poll(() => submissions.length).toBe(2);
-  const context = submissions[1]?.context as { data: string };
-  expect(JSON.parse(context.data)).toMatchObject({
-    page: 2,
-    sort: "fare",
-    totalMatchingTrips: 2184,
-    scope: "page-subset",
-    visibleCount: 1,
-    visibleSample: [{ fare: 13.42 }],
+  expect(submissions[1]).toEqual({
+    content: "How many trips match these filters?",
+    filters,
+    conversationId: "conversation",
   });
   await helper.getByRole("button", { name: "Close Genie" }).click();
   await page.reload();
   await openHelper(page);
   await helper
-    .getByText("Trip records · page 2 · View context", { exact: true })
+    .getByText("Trip records · View context", { exact: true })
     .click();
   await expect(
     helper.getByText("Pickup ZIP 10001", { exact: true }).last(),

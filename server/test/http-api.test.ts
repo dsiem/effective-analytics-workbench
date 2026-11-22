@@ -10,8 +10,9 @@ import {
 import { HttpApiClient } from "effect/http-api";
 import { ApiError, AppApi } from "../../shared/api.js";
 import type { SavedView, SavedViewInput } from "../../shared/saved-views.js";
-import { tripPageSize, type TripCursor } from "../../shared/trips.js";
+import { type Trip } from "../../shared/trips.js";
 import { Analytics } from "../src/analytics.js";
+import { TripNotFound } from "../src/errors.js";
 import { Genie } from "../src/genie.js";
 import { Routes } from "../src/routes.js";
 import { SavedViews } from "../src/saved-views.js";
@@ -28,19 +29,37 @@ const savedView: SavedViewInput = {
   version: null,
 };
 const metadata = { from: "2016-01-01", to: "2016-12-31", trips: 10 };
-const tripCursor = {
-  sort: "fare",
-  filters: { from: "2016-01-01", to: "2016-02-01", zip: "10001" },
-  after: {
-    trip_id: "last-trip",
-    pickup_at: "2016-01-20 10:00:00.123456",
-    dropoff_at: "2016-01-20 10:10:00.987654",
-    pickup_zip: "10001",
-    dropoff_zip: "Unknown",
-    fare: 10,
-    distance: 2,
+const filters = { from: "2016-01-01", to: "2016-02-01", zip: "10001" };
+const sort = "fare";
+const tripSummary = {
+  trip_id: "trip-1",
+  pickup_at: "2016-01-20 10:00:00.123456",
+  dropoff_at: "2016-01-20 10:10:00.987654",
+  pickup_zip: "10001",
+  dropoff_zip: "Unknown",
+  fare: 10,
+  distance: 2,
+  duration: 10,
+};
+const trip: Trip = {
+  ...tripSummary,
+  details: {
+    source_file: "test.csv",
+    vendor_id: null,
+    passenger_count: null,
+    rate_code_id: null,
+    store_and_fwd_flag: null,
+    payment_type: null,
+    pickup_location: null,
+    dropoff_location: null,
+    tip_amount: 0,
+    tolls_amount: null,
+    extra: null,
+    mta_tax: null,
+    improvement_surcharge: null,
+    total_amount: null,
   },
-} satisfies TripCursor;
+};
 const overview = {
   summary: {
     trips: 10,
@@ -54,6 +73,20 @@ const overview = {
   zones: [],
   queriedAt: "2026-11-13T00:00:00Z",
 };
+
+const pageCursor = "00000000-0000-4000-8000-000000000000.1";
+const firstTripPage = {
+  rows: [tripSummary],
+  nextCursor: pageCursor,
+  hasMoreMatches: true,
+};
+const nextTripPage = {
+  rows: [{ ...tripSummary, trip_id: "trip-2" }],
+  nextCursor: null,
+  hasMoreMatches: true,
+};
+const bytes = (value: unknown) =>
+  new TextEncoder().encode(JSON.stringify(value));
 
 const fixture = () => {
   const calls: Array<readonly [string, unknown]> = [];
@@ -89,13 +122,13 @@ const fixture = () => {
                 cells: [],
                 queriedAt: "2016-02-01T00:00:00Z",
               }),
-            trips: (input) =>
-              record("trips", input, {
-                rows: [],
-                total: 10,
-                pageSize: tripPageSize,
-                nextCursor: input.cursor ? null : tripCursor,
-              }),
+            trips: (input) => record("trips", input, bytes(firstTripPage)),
+            tripPage: (cursor) =>
+              record("tripPage", cursor, bytes(nextTripPage)),
+            tripDetails: (tripId) =>
+              tripId === trip.trip_id
+                ? record("tripDetails", tripId, trip)
+                : Effect.fail(new TripNotFound({ message: "Trip not found" })),
           }),
           Layer.succeed(Genie, {
             downloadCsv: () => Effect.die("Unexpected Genie CSV download"),
@@ -206,7 +239,6 @@ const fixture = () => {
 test("generated client round-trips every endpoint through the real HTTP contract", async (t) => {
   const { app, client, calls } = fixture();
   t.after(app.dispose);
-  const { filters, sort } = tripCursor;
   await Effect.runPromise(
     Effect.gen(function* () {
       assert.equal(yield* client.currentUser(), null);
@@ -218,25 +250,24 @@ test("generated client round-trips every endpoint through the real HTTP contract
         })).matchingTrips,
         10,
       );
-      const first = yield* client.trips({ query: { ...filters, sort } });
-      assert.deepEqual(first.nextCursor, tripCursor);
-      assert.ok(first.nextCursor);
-      assert.deepEqual(
-        yield* client.trips({
-          query: { ...filters, sort, cursor: first.nextCursor },
-        }),
-        {
-          rows: [],
-          total: 10,
-          pageSize: tripPageSize,
-          nextCursor: null,
-        },
-      );
       assert.deepEqual(
         yield* client.tripCommentCounts({
           query: { tripIds: ["trip-1", "trip-2"] },
         }),
         {},
+      );
+      assert.deepEqual(
+        yield* client.tripDetails({ query: { tripId: trip.trip_id } }),
+        trip,
+      );
+      const page = yield* client.trips({
+        query: { ...filters, sort, limit: 2 },
+      });
+      assert.deepEqual(page, firstTripPage);
+      assert.ok(page.nextCursor);
+      assert.deepEqual(
+        yield* client.tripPage({ params: { cursor: page.nextCursor } }),
+        nextTripPage,
       );
       assert.deepEqual(
         yield* client.submitGenie({
@@ -314,9 +345,10 @@ test("generated client round-trips every endpoint through the real HTTP contract
   assert.deepEqual(calls, [
     ["overview", filters],
     ["gps", { ...filters, endpoint: "dropoff" }],
-    ["trips", { ...filters, sort }],
-    ["trips", { ...filters, cursor: tripCursor, sort }],
     ["tripCommentCounts", { tripIds: ["trip-1", "trip-2"] }],
+    ["tripDetails", trip.trip_id],
+    ["trips", { ...filters, sort, limit: 2 }],
+    ["tripPage", pageCursor],
     ["submit", { content: "Count trips", conversationId: "previous-1" }],
     ["poll", operation],
     [
@@ -331,6 +363,30 @@ test("generated client round-trips every endpoint through the real HTTP contract
     ["pin", { id: savedView.id, version: 1, pinned: true }],
     ["remove", savedView.id],
   ]);
+});
+
+test("missing trip details return a typed 404", async (t) => {
+  const { app, client } = fixture();
+  t.after(app.dispose);
+  const response = await app.handler(
+    new Request("http://local.test/api/trip-details?tripId=missing"),
+  );
+  assert.equal(response.status, 404);
+  assert.deepEqual(
+    await Effect.runPromise(
+      Effect.flip(client.tripDetails({ query: { tripId: "missing" } })),
+    ),
+    { error: { code: "trip_not_found", message: "Trip not found" } },
+  );
+});
+
+test("the previous trip stream URL is no longer registered", async (t) => {
+  const { app } = fixture();
+  t.after(app.dispose);
+  const response = await app.handler(
+    new Request("http://local.test/api/trip-preview"),
+  );
+  assert.equal(response.status, 404);
 });
 
 test("invalid query, path and JSON inputs never reach services", async (t) => {
@@ -372,14 +428,15 @@ test("invalid query, path and JSON inputs never reach services", async (t) => {
     ["/api/trips?page=0", undefined],
     ["/api/trips?page=2", undefined],
     ["/api/trips?cursor=not-json", undefined],
-    ...[{ sort: "newest" }, { sort: tripCursor.sort, zip: "10002" }].map(
-      (overrides) =>
-        [
-          `/api/trips?${new URLSearchParams({ ...tripCursor.filters, ...overrides, cursor: JSON.stringify(tripCursor) }).toString()}`,
-          undefined,
-        ] as const,
-    ),
+    ["/api/trips?stream=1", undefined],
     ["/api/trips?sort=unsafe", undefined],
+    ["/api/trips?limit=0", undefined],
+    ["/api/trips?limit=-1", undefined],
+    ["/api/trips?limit=1.5", undefined],
+    ["/api/trips?limit=lots", undefined],
+    ["/api/trips?limit=2147483647", undefined],
+    ["/api/trip-details?tripId=", undefined],
+    ["/api/trip-details", undefined],
     ["/api/trip-comment-counts?tripIds=not-json", undefined],
     ...[[], [""], Array(26).fill("trip-1")].map(
       (tripIds) =>

@@ -24,7 +24,7 @@ async function openApp(page: Page, path: string) {
   ).toBeVisible();
 }
 
-test("filters and pages live trip records and opens their source details", async ({
+test("filters and scrolls live trip records and opens their source details", async ({
   page,
 }) => {
   await openApp(page, `/trips?${date}`);
@@ -38,12 +38,20 @@ test("filters and pages live trip records and opens their source details", async
   });
   const routes = table.getByRole("cell", { name: /^10001 → / });
   await expect(routes.first()).toBeVisible({ timeout: warehouseTimeout });
-  await page.getByRole("button", { name: "Next page", exact: true }).click();
-  await expect(page.getByText("Page 2", { exact: true })).toBeVisible({
-    timeout: warehouseTimeout,
+  const scroller = page.getByRole("region", {
+    name: "Scrollable trip records",
   });
+  await scroller.focus();
+  await page.keyboard.press("PageDown");
+  await expect
+    .poll(() => scroller.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
   await expect(routes.first()).toBeVisible();
-  expect(await routes.count()).toBe((await table.getByRole("row").count()) - 1);
+  expect(await routes.count()).toBe(
+    await table
+      .getByRole("button", { name: /^Details and comments for trip/ })
+      .count(),
+  );
 
   await table
     .getByRole("button", { name: /^Details and comments for trip/ })
@@ -53,7 +61,9 @@ test("filters and pages live trip records and opens their source details", async
     name: "Record details",
     exact: true,
   });
-  await details.getByText("Source details", { exact: true }).click();
+  const source = details.getByText("Source details", { exact: true });
+  await expect(source).toBeVisible({ timeout: warehouseTimeout });
+  await source.click();
   await expect(
     details.getByText(/^yellow_tripdata_\d{4}-(0[1-9]|1[0-2])\.csv\.gz$/),
   ).toBeVisible();

@@ -1,3 +1,4 @@
+import { tripPreviewResponse } from "../trip-fixture";
 import { expect, test } from "@playwright/test";
 
 for (const width of [360, 768, 1024, 1440]) {
@@ -73,9 +74,7 @@ const airportView = {
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/trips**", (route) =>
-    route.fulfill({
-      json: { rows: [], total: 0, pageSize: 25, nextCursor: null },
-    }),
+    route.fulfill(tripPreviewResponse([])),
   );
   await page.route("**/api/metadata", (route) =>
     route.fulfill({

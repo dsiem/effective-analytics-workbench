@@ -15,17 +15,17 @@ export const makeAdmission = (options: {
   readonly service: keyof typeof operation;
 }) => {
   const semaphore = Semaphore.makeUnsafe(options.concurrency);
-  return <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  const timeout = () =>
+    new OperationTimeout({
+      service: options.service,
+      message: `${operation[options.service]} timed out while waiting or running. Try again.`,
+    });
+  const admit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     semaphore.withPermit(effect).pipe(
       Effect.timeoutOrElse({
         duration: options.timeout,
-        orElse: () =>
-          Effect.fail(
-            new OperationTimeout({
-              service: options.service,
-              message: `${operation[options.service]} timed out while waiting or running. Try again.`,
-            }),
-          ),
+        orElse: () => Effect.fail(timeout()),
       }),
     );
+  return { effect: admit };
 };

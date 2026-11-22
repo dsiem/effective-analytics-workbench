@@ -57,7 +57,9 @@ export const SubmitQuestion = Command.define("SubmitQuestion", {
           content: turn.question,
           ...(turn.mode ? { mode: turn.mode } : {}),
           ...(turn.filters ? { filters: turn.filters } : {}),
-          ...(turn.context ? { context: turn.context } : {}),
+          ...(turn.context && turn.context.page !== "trips"
+            ? { context: turn.context }
+            : {}),
           ...(conversation
             ? { conversationId: conversation.conversationId }
             : {}),

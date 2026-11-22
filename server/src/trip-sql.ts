@@ -1,6 +1,74 @@
+import { Schema, SchemaTransformation } from "effect";
 import type { DatabricksClient } from "@dsiem/sql-warehouse";
+import { TripDetails, type TripSort, TripSummary } from "../../shared/trips.js";
 
-export const tripDetailsProjection = (sql: DatabricksClient.DatabricksClient) =>
+import { Day } from "../../shared/schema.js";
+
+type Sql = DatabricksClient.DatabricksClient;
+
+export const tripZip = (sql: Sql, key: "pickup_zip" | "dropoff_zip") =>
+  sql`COALESCE(CAST(${sql(key)} AS STRING), 'Unknown')`;
+
+export const tripSummaryProjection = (sql: Sql) => sql`
+          CAST(trip_id AS STRING) AS trip_id,
+          CAST(tpep_pickup_datetime AS STRING) AS pickup_at,
+          CAST(tpep_dropoff_datetime AS STRING) AS dropoff_at,
+          ${tripZip(sql, "pickup_zip")} AS pickup_zip,
+          ${tripZip(sql, "dropoff_zip")} AS dropoff_zip,
+          CAST(trip_distance AS DOUBLE) AS distance,
+          CAST(fare_amount AS DOUBLE) AS fare,
+          CAST(COALESCE(timestampdiff(SECOND,tpep_pickup_datetime,tpep_dropoff_datetime)/60.0,0) AS DOUBLE) AS duration`;
+
+export function tripPreviewWindow(
+  sql: Sql,
+  sort: typeof TripSort.Type,
+  limit: number,
+) {
+  const metrics = { fare: sql`fare_amount`, distance: sql`trip_distance` };
+  const order = [
+    ...(sort === "newest" ? [] : [sql`${metrics[sort]} DESC NULLS LAST`]),
+    sql`tpep_pickup_datetime DESC NULLS LAST`,
+    sql`tpep_dropoff_datetime DESC NULLS LAST`,
+    sql`${tripZip(sql, "pickup_zip")} ASC NULLS FIRST`,
+    sql`${tripZip(sql, "dropoff_zip")} ASC NULLS FIRST`,
+    ...(sort === "fare" ? [] : [sql`${metrics.fare} ASC NULLS FIRST`]),
+    ...(sort === "distance" ? [] : [sql`${metrics.distance} ASC NULLS FIRST`]),
+    sql`trip_id ASC`,
+  ];
+  return sql`ORDER BY ${sql.csv(order)} LIMIT ${sql.param("INT", String(limit + 1))}`;
+}
+
+const isDay = Schema.is(Day);
+const TripTimestamp = TripSummary.fields.pickup_at.check(
+  Schema.isPattern(
+    /^\d{4}-\d{2}-\d{2} (?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?$/,
+  ),
+  Schema.makeFilter((value) => isDay(value.slice(0, 10))),
+);
+const NullableMeasure = Schema.NullOr(Schema.FiniteFromString).pipe(
+  Schema.decodeTo(
+    Schema.Finite,
+    SchemaTransformation.transform({
+      decode: (value) => value ?? 0,
+      encode: (value) => value,
+    }),
+  ),
+);
+export const WarehouseTripSummary = Schema.Struct({
+  ...TripSummary.fields,
+  pickup_at: TripTimestamp,
+  dropoff_at: TripTimestamp,
+  distance: NullableMeasure,
+  fare: NullableMeasure,
+  duration: Schema.FiniteFromString,
+});
+
+export const WarehouseTrip = Schema.Struct({
+  ...WarehouseTripSummary.fields,
+  details: Schema.fromJsonString(TripDetails),
+});
+
+export const tripDetailsProjection = (sql: Sql) =>
   sql`to_json(named_struct(
             'source_file', source_file, 'vendor_id', VendorID,
             'passenger_count', passenger_count, 'rate_code_id', RatecodeID,

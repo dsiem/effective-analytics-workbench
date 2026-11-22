@@ -12,14 +12,13 @@ with Effect services at startup. [HTTP contract](../shared/api.ts) ·
 [Server layers](../server/src/main.ts)
 
 - **Filters** select the records included in an exploration. **Trip explorer**
-  and **Trip map** share pickup dates and ZIP. Saved views and pagination
-  cursors use the same filter comparison.
+  and **Trip map** share pickup dates and ZIP, and saved views use the same
+  filter comparison.
   [Filter schema](../shared/filters.ts)
-- **A cursor page** contains rows and an optional continuation cursor. The
-  server fetches one extra row to tell whether another page exists. It builds
-  the cursor from the last visible database row, preserving sort values such
-  as a nullable fare or a timestamp with microsecond precision.
-  [Page schema and construction](../shared/cursor-page.ts) · [Trip ordering](../server/src/trip-pagination.ts)
+- **A cursor page** contains rows and an optional continuation cursor. Saved
+  views and trip comments fetch one extra row to tell whether another page
+  exists, and build the cursor from the last returned row.
+  [Page schema and construction](../shared/cursor-page.ts)
 - **A browser feature** owns its model, messages, and update function. Its
   binding connects that model and those messages to the app shell. The shell
   handles actions that involve another feature, such as opening Genie from a
@@ -27,6 +26,35 @@ with Effect services at startup. [HTTP contract](../shared/api.ts) ·
 - **A Genie answer** contains ordered attachments and an optional warning.
   Chat and Agent both return this shape. The server turns it into the text and
   query tables the workbench displays. [Answer type](../packages/genie-client/src/answer.ts) · [Genie service](../server/src/genie.ts)
+
+`GET /api/trips` returns a JSON page with `rows`, `nextCursor`, and
+`hasMoreMatches`. Each row carries a trip summary with numeric distance, fare,
+and duration. The server validates Databricks chunks and converts the rows
+before sending them to the browser.
+
+When `nextCursor` is present, pass it to `GET /api/trips/pages/:cursor` to read
+the next page. Continue until `nextCursor` is `null`. The browser can render
+each page as it arrives. Responses use gzip when the client accepts it and the
+body is at least 1 KiB. [Trip page schema](../shared/trips.ts)
+
+The optional positive integer `limit` defaults to 10,000. For example,
+`/api/trips?limit=500` requests at most 500 rows in the selected sort order.
+`hasMoreMatches` reports whether more trips matched beyond that limit.
+`nextCursor` points to rows within the requested limit.
+
+The server can reuse encoded pages for the two most recent previews with
+limits up to 10,000 for 60 seconds. Continuation cursors are temporary and
+specific to the app process that issued them. If a cursor expires, restart
+the preview at `/api/trips`.
+
+Larger limits are allowed up to 2,147,483,646. Databricks aborts the statement
+if the entire inline result exceeds 25 MiB, even when it spans multiple pages.
+Request fewer rows or narrow the filters to retry. [Databricks Statement Execution API](https://docs.databricks.com/api/statement-execution/v1/execute-statement)
+
+Open a row to load the full record through `/api/trip-details`. Comments
+from a listed row can use its summary while details load.
+[Trip ordering and limit](../server/src/trip-sql.ts) ·
+[Trip records view](../client/src/features/trips/view.ts)
 
 ## Carry a query through one HTTP contract
 

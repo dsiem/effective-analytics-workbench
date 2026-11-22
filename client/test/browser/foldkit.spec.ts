@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { Schema } from "effect";
-import { TripSearch, type TripCursor } from "../../../shared/trips";
-import { tripCursorFor } from "../trip-fixture";
+import {
+  fixtureContinuation,
+  fixtureCursor,
+  tripPreviewResponse,
+  tripSummaryFor,
+} from "../trip-fixture";
 
 const overview = {
   summary: {
@@ -49,43 +52,15 @@ const trip = {
   },
 };
 
-test("overview charts, navigation, paging, and browser history work through the runtime", async ({
+test("overview charts and browser history work through the runtime", async ({
   page,
 }) => {
   await page.route("**/api/overview**", (route) =>
     route.fulfill({ json: overview }),
   );
-  const filters = { zip: "10001" };
-  const middle = { ...trip, trip_id: "middle", fare: 18 };
-  const last = { ...trip, trip_id: "last", fare: 24 };
-  const firstCursor = tripCursorFor(trip, filters);
-  const secondCursor = tripCursorFor(middle, filters);
-  const byPreviousTrip = new Map([
-    ["", { rows: [trip], nextCursor: firstCursor }],
-    [trip.trip_id, { rows: [middle], nextCursor: secondCursor }],
-    [middle.trip_id, { rows: [last], nextCursor: null }],
-  ]);
-  let pendingPage = Promise.resolve();
-  function holdPage() {
-    let release = () => {};
-    pendingPage = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    return release;
-  }
-  const requested: Array<TripCursor | null> = [];
-  await page.route("**/api/trips**", async (route) => {
-    const params = new URL(route.request().url()).searchParams;
-    expect(params.has("page")).toBe(false);
-    const { cursor } = Schema.decodeUnknownSync(TripSearch)(
-      Object.fromEntries(params),
-    );
-    requested.push(cursor ?? null);
-    const result = byPreviousTrip.get(cursor?.after.trip_id ?? "");
-    if (!result) throw new Error("Unexpected trip cursor");
-    await pendingPage;
-    return route.fulfill({ json: { ...result, total: 3, pageSize: 1 } });
-  });
+  await page.route("**/api/trips**", (route) =>
+    route.fulfill(tripPreviewResponse([trip])),
+  );
   await page.goto("/?zip=10001");
   await expect(page.getByText("$600", { exact: true }).first()).toBeVisible();
   await expect(
@@ -114,74 +89,14 @@ test("overview charts, navigation, paging, and browser history work through the 
   await expect(
     page.getByRole("table", { name: "Matching trips", exact: true }),
   ).toBeVisible();
+  await expect(page.getByText("1 trip", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Find by trip ID")).toHaveCount(0);
   await page.screenshot({
     path: "test-results/trips-table.png",
     fullPage: true,
     animations: "disabled",
   });
   await expect(page.getByRole("button", { name: /Export/ })).toHaveCount(0);
-  const previous = page.getByRole("button", { name: "Previous page" });
-  const next = page.getByRole("button", { name: "Next page" });
-  await expect(previous).toBeDisabled();
-  const releaseNextPage = holdPage();
-  try {
-    await next.click();
-    await expect(next).toHaveAttribute("aria-busy", "true");
-    await expect(next.locator(".spinner")).toHaveCSS("animation-name", "spin");
-    await expect(previous.locator(".spinner")).toHaveCount(0);
-    await expect(
-      page.getByRole("cell", { name: "$12.00", exact: true }),
-    ).toBeVisible();
-    await expect(page.getByText("Page 1", { exact: true })).toBeVisible();
-    await expect(page.getByText("1–1 of 3", { exact: true })).toBeVisible();
-    await expect(next).toBeDisabled();
-  } finally {
-    releaseNextPage();
-  }
-  await expect(page.getByText("Page 2", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("cell", { name: "$18.00", exact: true }),
-  ).toBeVisible();
-  await expect(next.locator(".spinner")).toHaveCount(0);
-  await next.click();
-  await expect(page.getByText("Page 3", { exact: true })).toBeVisible();
-  await expect(page.getByText("3–3 of 3", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("cell", { name: "$24.00", exact: true }),
-  ).toBeVisible();
-  await expect(next).toBeDisabled();
-  await previous.click();
-  await expect(
-    page.getByRole("cell", { name: "$18.00", exact: true }),
-  ).toBeVisible();
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  const releasePreviousPage = holdPage();
-  try {
-    await previous.press("Enter");
-    await expect(previous).toBeFocused();
-    await expect(previous).toHaveAttribute("aria-busy", "true");
-    await expect(previous.locator(".spinner")).toBeVisible();
-    await expect(previous.locator(".spinner")).toHaveCSS(
-      "animation-name",
-      "none",
-    );
-    await expect(next.locator(".spinner")).toHaveCount(0);
-    await expect(next).toBeDisabled();
-    await expect(page.getByText("Page 2", { exact: true })).toBeVisible();
-  } finally {
-    releasePreviousPage();
-  }
-  await expect(
-    page.getByRole("cell", { name: "$12.00", exact: true }),
-  ).toBeVisible();
-  await expect(previous).toBeDisabled();
-  expect(requested).toEqual([
-    null,
-    firstCursor,
-    secondCursor,
-    firstCursor,
-    null,
-  ]);
   await page.getByRole("link", { name: "Trip overview", exact: true }).click();
   await page.goBack();
   await expect(page).toHaveURL("/trips?zip=10001");
@@ -190,47 +105,361 @@ test("overview charts, navigation, paging, and browser history work through the 
   ).toBeVisible();
 });
 
-test("late trip responses cannot overwrite a newer filter selection", async ({
+test("Records browses all 10,000 returned rows without growing the table DOM", async ({
   page,
 }) => {
-  let release: () => void = () => {};
+  const rows = Array.from({ length: 10_000 }, (_, index) => ({
+    ...trip,
+    trip_id: `trip-${index}`,
+    fare: index,
+  }));
+  const last = rows.at(-1);
+  if (!last) throw new Error("Expected a populated shortlist");
+  const requests: Array<string | null> = [];
+  await page.route("**/api/metadata", (route) =>
+    route.fulfill({
+      json: { from: "2016-01-01", to: "2016-02-29", trips: 20_000 },
+    }),
+  );
+  await page.route("**/api/trip-comment-counts**", (route) => {
+    const ids: string[] = JSON.parse(
+      new URL(route.request().url()).searchParams.get("tripIds") ?? "[]",
+    );
+    return route.fulfill({
+      json: Object.fromEntries(ids.map((id) => [id, 0])),
+    });
+  });
+  await page.route("**/api/trips**", (route) => {
+    const url = new URL(route.request().url());
+    const from = url.searchParams.get("from");
+    requests.push(from);
+    expect(url.searchParams.has("cursor")).toBe(false);
+    return route.fulfill(
+      from ? tripPreviewResponse([last]) : tripPreviewResponse(rows, true),
+    );
+  });
+  await page.goto("/trips?zip=10001");
+  const table = page.getByRole("table", { name: "Matching trips" });
+  await expect(page.getByText("10,000 shown", { exact: true })).toBeVisible();
+  await expect(page.getByText(/More trips match/)).toBeVisible();
+  await expect(table.getByRole("row")).toHaveCount(26);
+  const scroller = page.getByRole("region", {
+    name: "Scrollable trip records",
+  });
+  await scroller.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  const lastFare = table.getByRole("cell", { name: "$9,999.00", exact: true });
+  await lastFare.scrollIntoViewIfNeeded();
+  await expect(lastFare).toBeInViewport();
+  await expect(table.getByRole("row")).toHaveCount(26);
+  expect(requests).toEqual([null]);
+  await page.getByLabel("Pickup start date").fill("2016-01-01");
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await expect(page.getByText("1 trip", { exact: true })).toBeVisible();
+  await expect(table.getByRole("row")).toHaveCount(2);
+  expect(requests).toEqual([null, "2016-01-01"]);
+});
+
+test("Records renders the first JSON page while the next page is still pending", async ({
+  page,
+}) => {
+  let release = () => {};
   const pending = new Promise<void>((resolve) => {
     release = resolve;
   });
+  const paths: string[] = [];
+  await page.route("**/api/trips**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    paths.push(path);
+    if (path === "/api/trips")
+      return route.fulfill(tripPreviewResponse([trip], false, fixtureCursor));
+    expect(path).toBe(fixtureContinuation);
+    await pending;
+    return route.fulfill(
+      tripPreviewResponse([{ ...trip, trip_id: "second", fare: 37 }]),
+    );
+  });
+  await page.goto("/trips");
+  const table = page.getByRole("table", { name: "Matching trips" });
+  await expect(
+    table.getByRole("cell", { name: "$12.00", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("1 loaded", { exact: true })).toBeVisible();
+  await expect(
+    table.getByRole("cell", { name: "$37.00", exact: true }),
+  ).toHaveCount(0);
+  release();
+  await expect(
+    table.getByRole("cell", { name: "$37.00", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("2 trips", { exact: true })).toBeVisible();
+  expect(paths).toEqual(["/api/trips", fixtureContinuation]);
+});
+
+test("Records rejects malformed and repeated continuation cursors without requesting them", async ({
+  page,
+}) => {
+  const paths: string[] = [];
+  let cursor = "https://other.example/api/trips/pages/invalid";
+  await page.route("https://other.example/**", (route) => {
+    paths.push(route.request().url());
+    return route.abort();
+  });
+  await page.route("**/api/trips**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    paths.push(path);
+    if (path === "/api/trips")
+      return route.fulfill(tripPreviewResponse([trip], false, cursor));
+    return route.fulfill(
+      tripPreviewResponse([{ ...trip, trip_id: "second" }], false, cursor),
+    );
+  });
+  await page.goto("/trips");
+  await expect(page.getByText(/Unable to complete the request/)).toBeVisible();
+  expect(paths).toEqual(["/api/trips"]);
+  cursor = fixtureCursor;
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.getByText(/repeated a trip page/i)).toBeVisible();
+  expect(paths).toEqual(["/api/trips", "/api/trips", fixtureContinuation]);
+});
+
+test("one retry reloads incomplete Records and unavailable comment counts", async ({
+  page,
+}) => {
+  const first = tripSummaryFor(trip);
+  const other = { ...first, trip_id: "retry-trip", fare: 42 };
+  let requests = 0;
+  let failCounts = () => {};
+  const countFailure = new Promise<void>((resolve) => {
+    failCounts = resolve;
+  });
+  await page.route("**/api/trip-comment-counts**", async (route) => {
+    if (requests > 1) return route.fulfill({ json: { [other.trip_id]: 1 } });
+    await countFailure;
+    return route.fulfill({
+      status: 503,
+      json: {
+        error: {
+          code: "lakebase_unavailable",
+          message: "Comment counts are temporarily unavailable.",
+        },
+      },
+    });
+  });
+  await page.route("**/api/trips**", (route) => {
+    if (new URL(route.request().url()).pathname === fixtureContinuation) {
+      return route.fulfill({
+        status: 503,
+        json: {
+          error: {
+            code: "warehouse_unavailable",
+            message: "The second trip page is temporarily unavailable.",
+          },
+        },
+      });
+    }
+    requests++;
+    return route.fulfill(
+      requests === 1
+        ? tripPreviewResponse([first], false, fixtureCursor)
+        : tripPreviewResponse([other]),
+    );
+  });
+
+  await page.goto("/trips");
+  const table = page.getByRole("table", { name: "Matching trips" });
+  const firstFare = table.getByRole("cell", { name: "$12.00", exact: true });
+  await expect(
+    page.getByText(/second trip page is temporarily unavailable/i),
+  ).toBeVisible();
+  await expect(firstFare).toBeVisible();
+  await expect(page.getByText("1 loaded", { exact: true })).toBeVisible();
+  const retry = page.getByRole("button", { name: "Try again", exact: true });
+  const originalTop = await retry.evaluate(
+    (button) => button.getBoundingClientRect().top,
+  );
+  failCounts();
+  await expect(
+    page.getByText("Comment counts are temporarily unavailable."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^(Try again|Retry comment counts)$/ }),
+  ).toHaveCount(1);
+  expect(
+    await retry.evaluate((button) => button.getBoundingClientRect().top),
+  ).toBe(originalTop);
+  await retry.click();
+  await expect(
+    table.getByRole("cell", { name: "$42.00", exact: true }),
+  ).toBeVisible();
+  await expect(firstFare).toHaveCount(0);
+  await expect(page.getByText("1 trip", { exact: true })).toBeVisible();
+  await expect(
+    table.getByRole("button", { name: /^1 comment for trip/ }),
+  ).toBeVisible();
+  expect(requests).toBe(2);
+});
+
+test("changing filters cancels a pending Records request", async ({ page }) => {
   let started = false;
   await page.route("**/api/trips**", async (route) => {
     const zip = new URL(route.request().url()).searchParams.get("zip");
     if (zip === "10001") {
       started = true;
-      await pending;
+      return;
     }
-    await route.fulfill({
-      json: {
-        rows: [{ ...trip, pickup_zip: zip }],
-        total: 1,
-        pageSize: 25,
-        nextCursor: null,
-      },
-    });
+    await route.fulfill(
+      tripPreviewResponse([{ ...trip, pickup_zip: zip ?? "10001" }]),
+    );
   });
   await page.goto("/trips?zip=10001");
   await expect.poll(() => started).toBe(true);
+  const cancelled = page.waitForEvent("requestfailed", (request) => {
+    const url = new URL(request.url());
+    return (
+      url.pathname === "/api/trips" && url.searchParams.get("zip") === "10001"
+    );
+  });
   await page.getByRole("textbox", { name: "Pickup ZIP code" }).fill("10002");
   await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(
     page.getByRole("cell", { name: "10002 → 10019", exact: true }),
   ).toBeVisible();
-  const oldResponse = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === "/api/trips" &&
-      new URL(response.url()).searchParams.get("zip") === "10001",
-  );
-  release();
-  await (await oldResponse).finished();
+  await cancelled;
   await expect(
     page.getByRole("cell", { name: "10001 → 10019", exact: true }),
   ).toHaveCount(0);
 });
+
+test("virtual rows keep their place at large text sizes and preserve keyboard access", async ({
+  page,
+}) => {
+  const rows = Array.from({ length: 100 }, (_, index) => ({
+    ...trip,
+    trip_id: `trip-${index}`,
+  }));
+  await page.route(
+    (url) => url.pathname === "/api/trips",
+    (route) => route.fulfill(tripPreviewResponse(rows)),
+  );
+  await page.route(
+    (url) => url.pathname === "/api/trip-comment-counts",
+    (route) => {
+      const ids: string[] = JSON.parse(
+        new URL(route.request().url()).searchParams.get("tripIds") ?? "[]",
+      );
+      return route.fulfill({
+        json: Object.fromEntries(ids.map((id) => [id, 0])),
+      });
+    },
+  );
+  await page.goto("/trips?zip=10001");
+  const scroller = page.getByRole("region", {
+    name: "Scrollable trip records",
+  });
+  await expect(scroller.getByRole("table")).toBeVisible();
+
+  const firstVisibleRowAt = (scrollTop: number) =>
+    scroller.evaluate(async (element, top) => {
+      element.scrollTop = top;
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+      const header = element.querySelector("th")?.getBoundingClientRect();
+      const bottom = element.getBoundingClientRect().bottom;
+      const rows = Array.from(element.querySelectorAll("tr[aria-rowindex]"));
+      const first = rows.find((row) => {
+        const bounds = row.getBoundingClientRect();
+        return header && bounds.bottom > header.bottom && bounds.top < bottom;
+      });
+      if (!first) throw new Error("No trip row is visible");
+      return Number(first.getAttribute("aria-rowindex"));
+    }, scrollTop);
+
+  const scrollTop = () => scroller.evaluate((element) => element.scrollTop);
+  await scroller.focus();
+  await page.keyboard.press("PageDown");
+  await expect.poll(scrollTop).toBeGreaterThan(200);
+  await expect
+    .poll(async () => {
+      const before = await scrollTop();
+      await page.waitForTimeout(50);
+      return (await scrollTop()) - before;
+    })
+    .toBe(0);
+  const afterPageDown = await scrollTop();
+  await page.keyboard.press("Tab");
+  await expect(scroller.locator("tr button:focus")).toHaveCount(1);
+  expect(await scrollTop()).toBe(afterPageDown);
+  await page.keyboard.press("Shift+Tab");
+  await expect(scroller).toBeFocused();
+  expect(await scrollTop()).toBe(afterPageDown);
+
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "32px";
+  });
+  const before = await firstVisibleRowAt(483);
+  const after = await firstVisibleRowAt(484);
+  expect.soft(Math.abs(after - before)).toBeLessThanOrEqual(1);
+
+  await firstVisibleRowAt(0);
+  const action = scroller
+    .getByRole("button", { name: /^Details and comments/ })
+    .first();
+  await action.focus();
+  await expect(action).toBeFocused();
+  await firstVisibleRowAt(4_400);
+  await expect(scroller).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(scroller.locator("tr button:focus")).toHaveCount(1);
+});
+
+for (const { name, width, height, count, fontSize } of [
+  {
+    name: "one trip at a larger text size",
+    width: 390,
+    height: 700,
+    count: 1,
+    fontSize: 18,
+  },
+  {
+    name: "a viewport shorter than a full row",
+    width: 320,
+    height: 150,
+    count: 30,
+    fontSize: 16,
+  },
+]) {
+  test(`Records row actions are keyboard-reachable with ${name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await page.route("**/api/trips**", (route) =>
+      route.fulfill(
+        tripPreviewResponse(
+          Array.from({ length: count }, (_, index) => ({
+            ...trip,
+            trip_id: `trip-${index}`,
+          })),
+        ),
+      ),
+    );
+    await page.goto("/trips");
+    await page.evaluate((size) => {
+      document.documentElement.style.fontSize = `${size}px`;
+    }, fontSize);
+
+    const scroller = page.getByRole("region", {
+      name: "Scrollable trip records",
+    });
+    const firstAction = scroller.locator('tr button[tabindex="0"]').first();
+    await expect(firstAction).toBeAttached();
+    await scroller.focus();
+    await page.keyboard.press("Tab");
+    await expect(firstAction).toBeFocused();
+  });
+}
 
 test("saved view chooser creates, edits, reloads, and deletes views with their filters", async ({
   page,
@@ -351,8 +580,10 @@ test("modal backdrop dismissal restores the opener and page scrolling", async ({
 test("recovered Genie answers render Markdown safely and copy the generated SQL", async ({
   page,
   context,
+  browserName,
 }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  if (browserName === "chromium")
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const reply = {
     conversationId: "conversation",
     messageId: "message",
@@ -399,29 +630,20 @@ test("recovered Genie answers render Markdown safely and copy the generated SQL"
   await expect(
     page.getByRole("button", { name: "Copied", exact: true }),
   ).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-    reply.queries[0]?.sql,
-  );
+  if (browserName === "chromium")
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      reply.queries[0]?.sql,
+    );
 });
 
-test("trip sorting exposes a native dropdown and applies every choice from page one", async ({
+test("changing the trip sort starts a fresh query and keeps the filters", async ({
   page,
 }) => {
   const searches: URLSearchParams[] = [];
   await page.route("**/api/trips**", (route) => {
     const query = new URL(route.request().url()).searchParams;
     searches.push(query);
-    const { cursor, sort } = Schema.decodeUnknownSync(TripSearch)(
-      Object.fromEntries(query),
-    );
-    return route.fulfill({
-      json: {
-        rows: [trip],
-        total: 2,
-        pageSize: 1,
-        nextCursor: cursor ? null : tripCursorFor(trip, { zip: "10001" }, sort),
-      },
-    });
+    return route.fulfill(tripPreviewResponse([trip], true));
   });
   await page.goto("/trips?zip=10001");
   const sort = page.getByRole("combobox", { name: "Sort trips" });
@@ -434,12 +656,13 @@ test("trip sorting exposes a native dropdown and applies every choice from page 
     "Highest fare",
     "Longest distance",
   ]);
-  await page.getByRole("button", { name: "Next page" }).click();
-  await expect(page.getByText("Page 2", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 shown", { exact: true })).toBeVisible();
+  await sort.focus();
   for (const value of ["fare", "distance", "newest"]) {
     await sort.selectOption(value);
     await expect(sort).toHaveValue(value);
-    await expect(page.getByText("Page 1", { exact: true })).toBeVisible();
+    await expect(page.getByText("1 shown", { exact: true })).toBeVisible();
+    await expect(sort).toBeFocused();
     await expect.poll(() => searches.at(-1)?.get("sort")).toBe(value);
     expect(searches.at(-1)?.has("cursor")).toBe(false);
     expect(searches.at(-1)?.get("zip")).toBe("10001");
@@ -458,23 +681,36 @@ test("trip sorting exposes a native dropdown and applies every choice from page 
 test("trip inspector shows recorded endpoints, payment and the full charge", async ({
   page,
 }) => {
+  const summary = tripSummaryFor(trip);
+  const requestedDetails: Array<string | null> = [];
   await page.route("**/api/trips**", (route) =>
-    route.fulfill({
-      json: { rows: [trip], total: 1, pageSize: 25, nextCursor: null },
-    }),
+    route.fulfill(tripPreviewResponse([summary])),
+  );
+  await page.route(
+    (url) => url.pathname === "/api/trip-details",
+    (route) => {
+      requestedDetails.push(
+        new URL(route.request().url()).searchParams.get("tripId"),
+      );
+      return route.fulfill({ json: trip });
+    },
   );
   await page.route("**/api/trip-comments**", (route) =>
     route.fulfill({ json: { rows: [], nextCursor: null } }),
   );
   await page.goto("/trips");
-  await page
-    .getByRole("button", { name: /^Details and comments for trip/ })
-    .click();
+  const open = page.getByRole("button", {
+    name: /^Details and comments for trip/,
+  });
+  await expect(open).toBeVisible();
+  expect(requestedDetails).toEqual([]);
+  await open.click();
   const panel = page.getByRole("dialog", {
     name: "Record details",
     exact: true,
   });
   await expect(panel.getByText("Cash", { exact: true })).toBeVisible();
+  expect(requestedDetails).toEqual([summary.trip_id]);
   await expect(panel.getByText("$15.80", { exact: true })).toBeVisible();
   await panel.locator("summary").filter({ hasText: "Source details" }).click();
   await expect(

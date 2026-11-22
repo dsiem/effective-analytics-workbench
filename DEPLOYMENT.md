@@ -160,12 +160,12 @@ Sign in to Databricks and close Chromium once the app loads. Keep the session
 file local and repeat the sign-in when it expires. If you use a different
 session file, set `DATABRICKS_APP_STORAGE_STATE` to its path.
 
-The tests cover trip filtering, pagination, source details, and map hotspots.
+The tests cover trip filtering, scrolling, source details, and map hotspots.
 They also create, reopen, and delete a temporary saved view in Lakebase.
 
 If the snapshot excludes January 15, 2016, set `DATABRICKS_APP_TEST_DATE` to
 an included date in `YYYY-MM-DD`. Choose a day with enough pickups in ZIP
-`10001` for a second page of results.
+`10001` to scroll through the record list.
 
 ```sh
 npm run test:browser:deployed

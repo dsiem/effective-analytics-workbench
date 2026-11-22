@@ -45,7 +45,13 @@ import {
 } from "./trip-comments.js";
 import { Filters } from "./filters.js";
 import { DatasetMetadata } from "./dataset.js";
-import { TripSearch, Trips } from "./trips.js";
+import {
+  Trip,
+  TripPage,
+  TripPageCursor,
+  TripSearch,
+  TripSummary,
+} from "./trips.js";
 
 const errorBody = <S extends Schema.Top>(code: S, status: number) =>
   Schema.Struct({
@@ -57,6 +63,7 @@ export const InvalidRequestBody = errorBody(
   400,
 );
 const NotFoundBody = errorBody(Schema.Literal("saved_view_not_found"), 404);
+const TripNotFoundBody = errorBody(Schema.Literal("trip_not_found"), 404);
 export const PermissionDeniedBody = errorBody(
   Schema.Literal("permission_denied"),
   403,
@@ -98,6 +105,7 @@ const errors = [
   InvalidRequestBody,
   PermissionDeniedBody,
   NotFoundBody,
+  TripNotFoundBody,
   AnalysisRunNotFoundBody,
   AnalysisReportPendingBody,
   SavedViewConflictBody,
@@ -172,8 +180,18 @@ export const AppApi = HttpApi.make("taxi").add(
       }),
       HttpApiEndpoint.get("trips", "/api/trips", {
         query: TripSearch,
-        success: Trips,
+        success: TripPage,
         error: [InvalidRequestBody, ...warehouseErrors],
+      }).annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
+      HttpApiEndpoint.get("tripPage", "/api/trips/pages/:cursor", {
+        params: Schema.Struct({ cursor: TripPageCursor }),
+        success: TripPage,
+        error: [InvalidRequestBody, ...warehouseErrors],
+      }).annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
+      HttpApiEndpoint.get("tripDetails", "/api/trip-details", {
+        query: Schema.Struct({ tripId: TripSummary.fields.trip_id }),
+        success: Trip,
+        error: [InvalidRequestBody, TripNotFoundBody, ...warehouseErrors],
       }).annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
       HttpApiEndpoint.get("tripMap", "/api/trip-map", {
         query: GpsSearch,

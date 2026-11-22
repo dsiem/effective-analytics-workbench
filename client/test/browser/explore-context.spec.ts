@@ -117,7 +117,7 @@ test("editing a saved view retains its original view and the visible action rest
   await expect(page).toHaveURL("/trips?to=2016-02-20&zip=11430");
 });
 
-test("Genie shows the actual view beside the composer and sends it with the question", async ({
+test("Genie shows the Records filters and sends them with the question", async ({
   page,
 }) => {
   const operation = { conversationId: "conversation", messageId: "message" };
@@ -162,10 +162,9 @@ test("Genie shows the actual view beside the composer and sends it with the ques
   await expect(
     page.getByText("Filtered trip count", { exact: true }),
   ).toBeVisible();
-  expect(submitted).toMatchObject({
+  expect(submitted).toEqual({
     content: "Count trips",
     filters,
-    context: { page: "trips" },
   });
   await page.getByRole("button", { name: "Close Genie" }).click();
   await expect(page).toHaveURL(`/trips?${query}`);

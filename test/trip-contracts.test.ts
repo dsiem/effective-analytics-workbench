@@ -57,24 +57,22 @@ test("historical comment snapshots remain valid without current enrichment", () 
   assert.throws(() => Schema.decodeUnknownSync(Trip)(historical));
 });
 
-for (const enriched of [false, true]) {
-  test(`fresh trip HTTP responses ${enriched ? "accept" : "reject missing"} enrichment`, async () => {
-    const trip = enriched ? current : historical;
-    const client = Effect.runSync(
-      HttpApiClient.make(AppApi, { baseUrl: "http://fixture.test" }).pipe(
-        Effect.provide(FetchHttpClient.layer),
-        Effect.provideService(FetchHttpClient.Fetch, async () =>
-          Response.json({
-            rows: [trip],
-            total: 1,
-            pageSize: 25,
-            nextCursor: null,
-          }),
-        ),
+const fixtureClient = (body: unknown) =>
+  Effect.runSync(
+    HttpApiClient.make(AppApi, { baseUrl: "http://fixture.test" }).pipe(
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(FetchHttpClient.Fetch, async () =>
+        Response.json(body),
       ),
-    ).app;
+    ),
+  ).app;
+
+for (const enriched of [false, true]) {
+  test(`trip detail HTTP responses ${enriched ? "accept" : "reject missing"} enrichment`, async () => {
+    const trip = enriched ? current : historical;
+    const client = fixtureClient(trip);
     const result = await Effect.runPromise(
-      Effect.result(client.trips({ query: {} })),
+      Effect.result(client.tripDetails({ query: { tripId: trip.trip_id } })),
     );
     assert.equal(result._tag, enriched ? "Success" : "Failure");
     if (result._tag === "Failure")

@@ -1,5 +1,4 @@
-import { Notice } from "../../lib/request-state";
-import { Dialog } from "@foldkit/ui";
+import { Dialog, Menu } from "@foldkit/ui";
 import { Schema } from "effect";
 import { defineMessageUnion } from "foldkit/message";
 import {
@@ -7,25 +6,40 @@ import {
   TripCommentInput,
   TripComments,
 } from "../../../../shared/trip-comments";
-import { TripSnapshot, Trips } from "../../../../shared/trips";
-import { Sort } from "./model";
+import { Trip, TripSummary } from "../../../../shared/trips";
+import { Notice } from "../../lib/request-state";
+import { Sort, TripViewport } from "./model";
 
 export const messages = {
   CloseTrip: {},
   ResetTrips: {},
   InspectorDialog: { message: Dialog.Message },
-  LoadedTrips: {
+  TripBatchReceived: {
     generation: Schema.Int,
-    data: Schema.NullOr(Trips),
+    rows: Schema.Array(TripSummary),
+  },
+  TripPreviewFinished: {
+    generation: Schema.Int,
+    result: Schema.Union([
+      Schema.TaggedStruct("Complete", { hasMore: Schema.Boolean }),
+      Schema.TaggedStruct("Failed", { error: Notice }),
+    ]),
+  },
+  TripsScrolled: { viewport: TripViewport, generation: Schema.Int },
+  SortTrips: { sort: Sort },
+  SortMenu: { message: Menu.Message },
+  InspectTrip: { trip: TripSummary },
+  InspectComments: { trip: TripSummary },
+  RetryTripDetails: {},
+  LoadedTripDetails: {
+    tripId: TripSummary.fields.trip_id,
+    generation: Schema.Int,
+    data: Schema.NullOr(Trip),
     error: Notice,
   },
-  NextPage: {},
-  PreviousPage: {},
-  SortTrips: { sort: Sort },
-  InspectTrip: { trip: TripSnapshot },
-  InspectComments: { trip: TripSnapshot },
+  RetryCommentCounts: {},
   LoadedCommentCounts: {
-    version: Schema.Number,
+    version: Schema.Int,
     data: Schema.NullOr(TripCommentCounts),
     error: Notice,
   },
@@ -35,7 +49,6 @@ export const messages = {
     generation: Schema.Int,
     data: Schema.NullOr(TripComments),
     error: Notice,
-    more: Schema.Boolean,
   },
   CommentChanged: { body: Schema.String },
   PostComment: {},

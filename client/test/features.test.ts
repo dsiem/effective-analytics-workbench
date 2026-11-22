@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Dialog } from "@foldkit/ui";
-import { Effect, Option, Schema } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/http";
+import { Effect, Option, Schema, Stream } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { Url } from "foldkit";
 import { given, message, model, story } from "foldkit/story";
@@ -30,9 +30,10 @@ import * as SavedViews from "../src/features/saved-views/model";
 import { updateSavedViews } from "../src/features/saved-views/update";
 import { Message as TripMessage } from "../src/features/trips/messages";
 import * as Trips from "../src/features/trips/model";
-import { updateTrips } from "../src/features/trips/update";
+import { subscriptions } from "../src/features/trips/subscription";
+import { reloadTrips, updateTrips } from "../src/features/trips/update";
 import { ApiClient } from "../src/lib/api-client";
-import { tripCursorFor } from "./trip-fixture";
+import { tripSummaryFor } from "./trip-fixture";
 
 const open = (path: string) =>
   init(Option.getOrThrow(Url.fromString(`http://localhost${path}`)));
@@ -134,23 +135,92 @@ test("view intents are translated by the shell with their analysis scope intact"
   assert.equal(navigated.model.filtersState.filterDraft.zip, "10019");
 });
 
-test("returning to a filter keeps fresh trip results when the original load fails", async () => {
+test("Records completes an empty trip page", async () => {
+  const httpClient = HttpClient.make((request, url) => {
+    assert.equal(url.pathname, "/api/trips");
+    return Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        Response.json({
+          rows: [],
+          nextCursor: null,
+          hasMoreMatches: false,
+        }),
+      ),
+    );
+  });
+  const { trips } = subscriptions;
+  const start = reloadTrips(Trips.init(), {
+    filters: {},
+    sort: "newest",
+  }).model;
+  const deps = trips.modelToDependencies(start);
+  const messages = await Effect.runPromise(
+    trips.dependenciesToStream(deps).pipe(
+      Stream.runCollect,
+      Effect.provideServiceEffect(
+        ApiClient,
+        HttpApiClient.makeWith(AppApi, {
+          httpClient,
+          baseUrl: "http://fixture.test",
+        }).pipe(Effect.map((client) => client.app)),
+      ),
+    ),
+  );
+  const loaded = messages.reduce(
+    (model, message) => updateTrips(model, message).model,
+    start,
+  );
+  assert.deepEqual(loaded.preview, { _tag: "Ready", rows: [], hasMore: false });
+});
+
+test("returning to a filter ignores batches and errors from its original stream", () => {
   const opened = open("/trips?zip=10001");
   const visit = (zip: string) =>
     AppMessage.Navigated({ path: "/trips", query: `zip=${zip}` });
   const changed = update(opened.model, visit("10002"));
   const returned = update(changed.model, visit("10001"));
-  const data = { rows: [], total: 0, pageSize: 25, nextCursor: null };
-  const fresh = await respond(returned, "LoadTrips", Response.json(data));
-  const stale = await respond(opened, "LoadTrips", originalTimeout());
+  const data = { rows: [tripSummaryFor(trip)], hasMore: false };
+  const trips = Features.trips.toParentMessage;
+  const generation = returned.model.tripsState.loadGeneration;
+  const oldGeneration = opened.model.tripsState.loadGeneration;
   story(
     update,
     given(returned.model),
-    message(fresh),
-    message(stale),
+    message(
+      trips(
+        TripMessage.TripBatchReceived({
+          generation,
+          rows: [tripSummaryFor(trip)],
+        }),
+      ),
+    ),
+    message(
+      trips(
+        TripMessage.TripBatchReceived({
+          generation: oldGeneration,
+          rows: [tripSummaryFor({ ...trip, trip_id: "old" })],
+        }),
+      ),
+    ),
+    message(
+      trips(
+        TripMessage.TripPreviewFinished({
+          generation: oldGeneration,
+          result: { _tag: "Failed", error: "Timed out" },
+        }),
+      ),
+    ),
+    message(
+      trips(
+        TripMessage.TripPreviewFinished({
+          generation,
+          result: { _tag: "Complete", hasMore: false },
+        }),
+      ),
+    ),
     model(({ tripsState }) => {
-      assert.equal(tripsState.trips.error, "");
-      assert.deepEqual(tripsState.trips.data, data);
+      assert.deepEqual(tripsState.preview, { _tag: "Ready", ...data });
     }),
   );
 });
@@ -205,16 +275,17 @@ test("reopening the same trip keeps fresh comments when the original list arrive
     author: null,
     created_at: "2026-11-17T09:00:00Z",
   };
-  const fresh = await respond(
-    reopened,
-    "LoadComments",
-    Response.json({ rows: [note], nextCursor: null }),
-  );
-  const stale = await respond(
-    opened,
-    "LoadComments",
-    Response.json({ rows: [], nextCursor: null }),
-  );
+  const reply = (model: ReturnType<typeof app>, rows: [typeof note] | []) =>
+    Features.trips.toParentMessage(
+      TripMessage.LoadedComments({
+        tripId: trip.trip_id,
+        generation: model.tripsState.commentLoadGeneration,
+        data: { rows, nextCursor: null },
+        error: "",
+      }),
+    );
+  const fresh = reply(reopened.model, [note]);
+  const stale = reply(opened.model, []);
   story(
     update,
     given(reopened.model),
@@ -222,7 +293,7 @@ test("reopening the same trip keeps fresh comments when the original list arrive
     message(stale),
     model(({ tripsState }) => {
       assert.deepEqual(
-        tripsState.comments.data?.rows.map(({ body }) => body),
+        tripsState.inspector?.comments.data?.rows.map(({ body }) => body),
         ["Current note"],
       );
     }),
@@ -249,23 +320,61 @@ test("lost comment responses replay the attempted payload until the draft is edi
     );
     next = update(next.model, reply);
   }
+  const detailReply = (record: typeof trip) =>
+    TripMessage.LoadedTripDetails({
+      tripId: record.trip_id,
+      generation: next.model.tripsState.detailLoadGeneration,
+      data: record,
+      error: "",
+    });
   const submissions: TripCommentInput[] = [];
   send(TripMessage.InspectTrip({ trip }));
+  send(detailReply(trip));
   send(TripMessage.CommentChanged({ body: "First finding" }));
   await post();
   send(TripMessage.CloseTrip());
   send(TripMessage.InspectTrip({ trip: { ...trip, fare: 14 } }));
+  const refreshedDetails = detailReply({ ...trip, fare: 14 });
   await post();
   const [first, retry] = submissions;
   assert.ok(first);
   assert.deepEqual(retry, first);
   send(TripMessage.CommentChanged({ body: "Edited finding" }));
+  send(refreshedDetails);
   await post();
   const edited = submissions[2];
   assert.ok(edited);
   assert.notEqual(edited.id, first.id);
   assert.equal(edited.body, "Edited finding");
   assert.equal(edited.trip.fare, 14);
+  assert.deepEqual(edited.trip.details, trip.details);
+});
+
+test("trip details ignore an earlier selection and retry independently", () => {
+  const send = (model: ReturnType<typeof app>, action: TripMessage) =>
+    update(model, Features.trips.toParentMessage(action)).model;
+  const first = send(app("/trips"), TripMessage.InspectTrip({ trip }));
+  const other = { ...trip, trip_id: "trip-2" };
+  const opened = send(first, TripMessage.InspectTrip({ trip: other }));
+  const reply = (model: typeof first, record: typeof trip, error = "") =>
+    TripMessage.LoadedTripDetails({
+      tripId: record.trip_id,
+      generation: model.tripsState.detailLoadGeneration,
+      data: error ? null : record,
+      error,
+    });
+  const failed = send(opened, reply(opened, other, "Details timed out"));
+  assert.equal(send(failed, reply(first, trip)), failed);
+  const retry = send(failed, TripMessage.RetryTripDetails());
+  assert.equal(
+    retry.tripsState.commentLoadGeneration,
+    opened.tripsState.commentLoadGeneration,
+  );
+  assert.equal(retry.tripsState.inspector?.details.loading, true);
+  assert.deepEqual(
+    send(retry, reply(retry, other)).tripsState.inspector?.details.data,
+    other,
+  );
 });
 
 test("an idle message keeps the current model reference", () => {
@@ -282,7 +391,7 @@ test("a standalone trip feature closes its inspector and ignores late comments",
     opened.model,
     TripMessage.InspectorDialog({ message: Dialog.Message.RequestedClose() }),
   );
-  assert.equal(closed.model.selectedTrip, null);
+  assert.equal(closed.model.inspector, null);
   assert.equal(closed.model.inspectorDialog.isOpen, false);
   assert.ok(closed.commands?.some((command) => command.name === "CloseDialog"));
   const late = updateTrips(
@@ -292,10 +401,9 @@ test("a standalone trip feature closes its inspector and ignores late comments",
       generation: opened.model.commentLoadGeneration,
       data: { rows: [], nextCursor: null },
       error: "",
-      more: false,
     }),
   );
-  assert.equal(late.model.selectedTrip, null);
+  assert.equal(late.model.inspector, null);
   assert.equal(late.model.inspectorDialog.isOpen, false);
 });
 
@@ -308,7 +416,7 @@ test("navigation retains the trip feature's dialog cleanup commands", () => {
     opened.model,
     AppMessage.Navigated({ path: "/", query: "" }),
   );
-  assert.equal(navigated.model.tripsState.selectedTrip, null);
+  assert.equal(navigated.model.tripsState.inspector, null);
   assert.equal(navigated.model.tripsState.inspectorDialog.isOpen, false);
   assert.ok(
     navigated.commands?.some((command) => command.name === "CloseDialog"),
@@ -318,8 +426,10 @@ test("navigation retains the trip feature's dialog cleanup commands", () => {
 test("sort URLs survive reload and history; saved views restore global scope with default sort", () => {
   const open = (path: string) =>
     init(Option.getOrThrow(Url.fromString(`http://localhost${path}`)));
-  const tripLoad = (result: ReturnType<typeof init>) =>
-    result.commands?.find(({ name }) => name === "LoadTrips")?.args;
+  const tripLoad = (result: ReturnType<typeof init>) => {
+    const { preview } = result.model.tripsState;
+    return preview._tag === "Loading" ? preview.query : undefined;
+  };
   const opened = open("/trips?zip=10001&sort=fare");
   assert.equal(tripLoad(opened)?.sort, "fare");
   const sorted = update(
@@ -336,7 +446,10 @@ test("sort URLs survive reload and history; saved views restore global scope wit
     sorted.model,
     AppMessage.Navigated({ path: "/trips", query: "zip=10001&sort=distance" }),
   );
-  assert.equal(tripLoad(arrived), undefined);
+  assert.equal(
+    arrived.model.tripsState.loadGeneration,
+    sorted.model.tripsState.loadGeneration,
+  );
   const back = update(
     sorted.model,
     AppMessage.Navigated({ path: "/trips", query: "zip=10001&sort=fare" }),
@@ -387,22 +500,38 @@ test("sort URLs survive reload and history; saved views restore global scope wit
   assert.deepEqual(repeated?.filters, { zip: "10001" });
 });
 
-test("comment counts from an older trip page cannot replace the current rows' counts", () => {
-  const loaded = (model: Trips.Model) =>
-    updateTrips(
+test("comment counts from an older trip window cannot replace the current rows' counts", () => {
+  const loaded = (model: Trips.Model) => {
+    const response = updateTrips(
       model,
-      TripMessage.LoadedTrips({
+      TripMessage.TripBatchReceived({
         generation: model.loadGeneration,
-        error: "",
-        data: { rows: [trip], total: 1, pageSize: 25, nextCursor: null },
+        rows: [tripSummaryFor(trip)],
+      }),
+    );
+    return updateTrips(
+      response.model,
+      TripMessage.TripsScrolled({
+        viewport: {
+          firstRow: 0,
+          visibleEnd: 1,
+          tabStart: 0,
+          tabEnd: 1,
+          rowHeight: 44,
+        },
+        generation: model.loadGeneration,
       }),
     ).model;
-  const firstPage = loaded(Trips.init());
-  const nextPage = loaded(firstPage);
+  };
+  const start = (model: Trips.Model) =>
+    reloadTrips(model, { filters: {}, sort: "newest" }).model;
+  const initial = loaded(start(Trips.init()));
+  const reset = updateTrips(initial, TripMessage.ResetTrips()).model;
+  const refreshed = loaded(start(reset));
   const current = updateTrips(
-    nextPage,
+    refreshed,
     TripMessage.LoadedCommentCounts({
-      version: nextPage.commentCountsVersion,
+      version: refreshed.commentCounts.version,
       data: { [trip.trip_id]: 3 },
       error: "",
     }),
@@ -410,12 +539,98 @@ test("comment counts from an older trip page cannot replace the current rows' co
   const late = updateTrips(
     current,
     TripMessage.LoadedCommentCounts({
-      version: firstPage.commentCountsVersion,
+      version: initial.commentCounts.version,
       data: { [trip.trip_id]: 0 },
       error: "",
     }),
   ).model;
   assert.equal(late.commentCounts.data?.[trip.trip_id], 3);
+});
+
+test("comment-count denial needs an explicit retry and uses the current window", () => {
+  const start = reloadTrips(Trips.init(), { filters: {}, sort: "newest" });
+  const rows = Array.from({ length: 100 }, (_, index) => ({
+    ...trip,
+    trip_id: `trip-${index}`,
+  }));
+  const top = {
+    firstRow: 0,
+    visibleEnd: 10,
+    tabStart: 0,
+    tabEnd: 10,
+    rowHeight: 44,
+  };
+  const loaded = updateTrips(
+    start.model,
+    TripMessage.TripBatchReceived({
+      generation: start.model.loadGeneration,
+      rows: rows.map(tripSummaryFor),
+    }),
+  );
+  const atTop = updateTrips(
+    loaded.model,
+    TripMessage.TripsScrolled({
+      viewport: top,
+      generation: loaded.model.loadGeneration,
+    }),
+  );
+  assert.ok(atTop.commands?.some(({ name }) => name === "LoadCommentCounts"));
+  const scrolled = updateTrips(
+    atTop.model,
+    TripMessage.TripsScrolled({
+      viewport: {
+        firstRow: 60,
+        visibleEnd: 70,
+        tabStart: 60,
+        tabEnd: 70,
+        rowHeight: 44,
+      },
+      generation: loaded.model.loadGeneration,
+    }),
+  );
+  const failed = updateTrips(
+    scrolled.model,
+    TripMessage.LoadedCommentCounts({
+      version: atTop.model.commentCounts.version,
+      data: null,
+      error: { _tag: "AccessDenied", message: "Permission is required" },
+    }),
+  );
+  assert.ok(!failed.commands?.some(({ name }) => name === "LoadCommentCounts"));
+  const retry = updateTrips(failed.model, TripMessage.RetryCommentCounts());
+  const current = retry.commands?.find(
+    ({ name }) => name === "LoadCommentCounts",
+  );
+  assert.ok(current, "The current window received no count request");
+  const ids = current.args?.tripIds;
+  assert.ok(Array.isArray(ids));
+  assert.ok(ids.includes("trip-60"));
+  assert.ok(!ids.includes("trip-0"));
+
+  const nextSearch = reloadTrips(failed.model, {
+    filters: { zip: trip.pickup_zip },
+    sort: "newest",
+  }).model;
+  const newRows = updateTrips(
+    nextSearch,
+    TripMessage.TripBatchReceived({
+      generation: nextSearch.loadGeneration,
+      rows: [tripSummaryFor(trip)],
+    }),
+  );
+  const visible = updateTrips(
+    newRows.model,
+    TripMessage.TripsScrolled({
+      generation: nextSearch.loadGeneration,
+      viewport: top,
+    }),
+  );
+  assert.deepEqual(
+    visible.commands?.find(({ name }) => name === "LoadCommentCounts")?.args
+      ?.tripIds,
+    [trip.trip_id],
+    "A new Records search should request counts without manual retry",
+  );
 });
 
 test("analysis links distinguish valid, malformed, and absent run IDs", () => {
@@ -643,90 +858,6 @@ test("overview accepts only the active response and requests selection invalidat
   );
   assert.equal(current.model.overview.error, "Warehouse unavailable");
   assert.deepEqual(current.outMessage, { _tag: "SelectionInvalidated" });
-});
-
-test("trip paging clears the previous selection and retries from the same cursor", async () => {
-  const opening = open("/trips?zip=10001");
-  const cursor = tripCursorFor(trip, { zip: "10001" });
-  const response = await respond(
-    opening,
-    "LoadTrips",
-    Response.json({ rows: [trip], total: 2, pageSize: 1, nextCursor: cursor }),
-  );
-  const first = update(opening.model, response).model;
-  const selected = {
-    ...first,
-    genieState: {
-      ...first.genieState,
-      genieSelection: { page: "trips" as const, title: "Old page" },
-    },
-  };
-  const next = update(
-    selected,
-    Features.trips.toParentMessage(TripMessage.NextPage()),
-  );
-  assert.equal(Trips.tripPageNumber(next.model.tripsState), 2);
-  assert.equal(next.model.genieState.genieSelection, null);
-  const failed = update(
-    next.model,
-    await respond(next, "LoadTrips", originalTimeout()),
-  );
-  const error = failed.model.tripsState.trips.error;
-  assert.ok(typeof error === "string");
-  assert.match(error, /timed out/);
-  const retry = update(failed.model, AppMessage.LoadPage());
-  const retried = await runRequest(retry, "LoadTrips", async (input) => {
-    const url = new URL(input instanceof Request ? input.url : input);
-    assert.deepEqual(
-      JSON.parse(url.searchParams.get("cursor") ?? "null"),
-      cursor,
-    );
-    return Response.json({ rows: [], total: 1, pageSize: 1, nextCursor: null });
-  });
-  const last = update(retry.model, retried).model;
-  assert.equal(last.tripsState.trips.data?.nextCursor, null);
-  assert.equal(update(last, response).model, last);
-  assert.equal(
-    update(last, Features.trips.toParentMessage(TripMessage.NextPage())).model,
-    last,
-  );
-
-  const previous = update(
-    last,
-    Features.trips.toParentMessage(TripMessage.PreviousPage()),
-  );
-  assert.equal(Trips.tripPageNumber(previous.model.tripsState), 1);
-  assert.equal(
-    previous.commands?.find(({ name }) => name === "LoadTrips")?.args?.cursor,
-    null,
-  );
-
-  const filtered = update(
-    last,
-    AppMessage.Navigated({ path: "/trips", query: "zip=10002" }),
-  );
-  const request = filtered.commands?.find(
-    ({ name }) => name === "LoadTrips",
-  )?.args;
-  assert.deepEqual(request?.filters, { zip: "10002" });
-  assert.equal(request?.cursor, null);
-  assert.equal(Trips.tripPageNumber(filtered.model.tripsState), 1);
-});
-
-test("trip paging accepts a continuation beyond ten thousand pages", () => {
-  const cursor = tripCursorFor(trip, {});
-  const state: Trips.Model = {
-    ...Trips.init(),
-    pageCursors: Array.from({ length: 9_999 }, () => cursor),
-    trips: {
-      loading: false,
-      error: "",
-      data: { rows: [trip], total: 10_001, pageSize: 1, nextCursor: cursor },
-    },
-  };
-  const next = updateTrips(state, TripMessage.NextPage());
-  assert.equal(Trips.tripPageNumber(next.model), 10_001);
-  assert.deepEqual(next.outMessage, { _tag: "Reload" });
 });
 
 test("application opens Genie, dismisses mobile navigation, and requests focus", () => {

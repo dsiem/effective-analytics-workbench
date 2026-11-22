@@ -14,6 +14,10 @@ export class SavedViewNotFound extends Data.TaggedError("SavedViewNotFound")<{
   readonly message: string;
 }> {}
 
+export class TripNotFound extends Data.TaggedError("TripNotFound")<{
+  readonly message: string;
+}> {}
+
 export class AnalysisRunNotFound extends Data.TaggedError(
   "AnalysisRunNotFound",
 )<{
@@ -65,6 +69,7 @@ export type ServiceError =
   | InvalidRequest
   | PermissionDenied
   | SavedViewNotFound
+  | TripNotFound
   | AnalysisRunNotFound
   | AnalysisReportPending
   | SavedViewConflict

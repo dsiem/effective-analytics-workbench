@@ -295,7 +295,7 @@ export function view(model: Model, h: H): Document {
             slotId: "trips",
             view: tripsView,
             model: model.tripsState,
-            viewInputs: { sort: route.sort },
+            viewInputs: { sort: route.sort, mobile: model.mobile },
             toParentMessage: tripsViewMessage,
           }),
         ];
@@ -449,7 +449,7 @@ export function view(model: Model, h: H): Document {
               }),
             ]
           : []),
-        ...(model.tripsState.selectedTrip
+        ...(model.tripsState.inspector
           ? [
               h.submodel({
                 slotId: "inspector",

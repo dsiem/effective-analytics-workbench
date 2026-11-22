@@ -1,40 +1,45 @@
-import { tripDetails } from "../trip-fixture";
+import { tripPreviewResponse } from "../trip-fixture";
 import { expect, test } from "@playwright/test";
 
-test("wide trip tables scroll within a narrow viewport", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.route("**/api/trips**", (route) =>
-    route.fulfill({
-      json: {
-        rows: [
-          {
-            trip_id: "stable-trip",
-            pickup_at: "2016-01-01 10:00:00",
-            dropoff_at: "2016-01-01 10:15:00",
-            pickup_zip: "10001",
-            dropoff_zip: "10019",
-            distance: 3,
-            fare: 12,
-            duration: 15,
-            details: tripDetails,
-          },
-        ],
-        total: 1,
-        pageSize: 25,
-        nextCursor: null,
-      },
-    }),
+const trip = {
+  trip_id: "stable-trip",
+  pickup_at: "2016-01-01 10:00:00",
+  dropoff_at: "2016-01-01 10:15:00",
+  pickup_zip: "10001",
+  dropoff_zip: "10019",
+  distance: 3,
+  fare: 12,
+  duration: 15,
+};
+
+test("compact Records shows trip details and a sort menu within a phone viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  let finish = () => {};
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  await page.route("**/api/trip-comment-counts**", (route) =>
+    route.fulfill({ json: { [trip.trip_id]: 0 } }),
   );
+  await page.route("**/api/trips**", async (route) => {
+    const sort = new URL(route.request().url()).searchParams.get("sort");
+    if (sort === "fare") await pending;
+    return route.fulfill(tripPreviewResponse([trip]));
+  });
   await page.goto("/trips");
   const table = page.getByRole("table", {
     name: "Matching trips",
     exact: true,
   });
-  await expect(table.getByRole("row")).toHaveCount(2);
-  const scroll = table.locator("..");
+  await expect(table.getByText("10001 → 10019")).toBeVisible();
+  await expect(table.getByText("$12.00")).toBeVisible();
+  await expect(table.getByText(trip.pickup_at)).toBeVisible();
+  const scroll = page.getByRole("region", { name: "Scrollable trip records" });
   expect(
     await scroll.evaluate(
-      (element) => element.scrollWidth > element.clientWidth,
+      (element) => element.scrollWidth <= element.clientWidth,
     ),
   ).toBe(true);
   expect(
@@ -42,15 +47,87 @@ test("wide trip tables scroll within a narrow viewport", async ({ page }) => {
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  await scroll.evaluate((element) => {
-    element.scrollLeft = element.scrollWidth;
-  });
+  await expect(page.getByRole("combobox", { name: "Sort trips" })).toHaveCount(
+    0,
+  );
+  const trigger = page.getByRole("button", { name: /^Sort trips/ });
+  await expect(trigger).toHaveAccessibleName(
+    "Sort trips, currently Latest pickup",
+  );
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  const menu = page.getByRole("menu");
+  await expect(
+    menu.getByRole("menuitem", { name: /Latest pickup.*selected/ }),
+  ).toBeVisible();
+  const bounds = await menu.boundingBox();
+  if (!bounds) throw new Error("Sort menu has no visible bounds");
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await menu.getByRole("menuitem", { name: "Highest fare" }).click();
+  await expect(menu).toBeHidden();
+  await expect(trigger).toHaveAccessibleName(
+    "Sort trips, currently Highest fare",
+  );
+  await expect(trigger).toBeFocused();
+  finish();
   const inspect = table.getByRole("button", { name: /^Details and comments/ });
-  await expect(inspect).toBeInViewport();
   await inspect.click();
   await expect(
     page.getByRole("dialog", { name: "Record details" }),
   ).toBeVisible();
+});
+
+test("reselecting the current mobile sort preserves the list and history", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const searches: URLSearchParams[] = [];
+  await page.route("**/api/trips**", (route) => {
+    searches.push(new URL(route.request().url()).searchParams);
+    return route.fulfill(
+      tripPreviewResponse(
+        Array.from({ length: 30 }, (_, index) => ({
+          ...trip,
+          trip_id: `trip-${index}`,
+        })),
+      ),
+    );
+  });
+  await page.goto("/trips?zip=10001&sort=fare");
+  await expect(page.getByText("30 trips", { exact: true })).toBeVisible();
+  const scroller = page.getByRole("region", {
+    name: "Scrollable trip records",
+  });
+  const scrollTop = await scroller.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    return element.scrollTop;
+  });
+  expect(scrollTop).toBeGreaterThan(0);
+  const historyLength = await page.evaluate(() => history.length);
+  const trigger = page.getByRole("button", { name: /^Sort trips/ });
+  await trigger.click();
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitem")).toHaveText([
+    "Latest pickup",
+    /Highest fare.*selected/,
+    "Longest distance",
+  ]);
+  await menu.getByRole("menuitem", { name: /Highest fare.*selected/ }).click();
+  await expect(trigger).toBeFocused();
+  await expect(menu).toBeHidden();
+  await expect(page.getByText("30 trips", { exact: true })).toBeVisible();
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBe(
+    scrollTop,
+  );
+  expect(await page.evaluate(() => history.length)).toBe(historyLength);
+  expect(searches).toHaveLength(1);
+  expect(searches[0]?.get("zip")).toBe("10001");
+  expect(searches[0]?.get("sort")).toBe("fare");
 });
 
 test("sidebar collapses to icons, keeps filters, persists, and supports the keyboard shortcut", async ({

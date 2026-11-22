@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { gunzipSync } from "node:zlib";
 import {
   ConfigProvider,
   Effect,
@@ -10,11 +11,12 @@ import {
 } from "effect";
 import { HttpRouter, HttpServer } from "effect/http";
 import { OpenApi } from "effect/http-api";
-import { AppApi } from "../../shared/api.js";
+import { ApiError, AppApi } from "../../shared/api.js";
 import { GenieOperation } from "../../shared/genie.js";
 import { Analytics } from "../src/analytics.js";
 import {
   GenieFailed,
+  InvalidRequest,
   OperationTimeout,
   PermissionDenied,
   SavedViewConflict,
@@ -55,6 +57,8 @@ const appFor = (
             metadata: effect,
             overview: () => effect,
             trips: () => effect,
+            tripPage: () => effect,
+            tripDetails: () => effect,
             tripMap: () => effect,
             analysisReport: () => effect,
             ...overrides.analytics,
@@ -93,6 +97,75 @@ const appFor = (
     ),
     { disableLogger: true },
   );
+
+test("trip page responses negotiate gzip and return typed rows with a cursor", async (t) => {
+  const cursor = "00000000-0000-4000-8000-000000000000.1";
+  const rows = Array.from({ length: 12 }, (_, index) => ({
+    trip_id: `trip-${index}`,
+    pickup_at: "2016-01-20 10:00:00",
+    dropoff_at: "2016-01-20 10:10:00",
+    pickup_zip: "10001",
+    dropoff_zip: "Unknown",
+    fare: 10,
+    distance: 2,
+    duration: 10,
+  }));
+  const first = { rows, nextCursor: cursor, hasMoreMatches: true };
+  const last = { rows, nextCursor: null, hasMoreMatches: true };
+  const encode = (page: typeof first | typeof last) =>
+    new TextEncoder().encode(JSON.stringify(page));
+  const app = appFor(undefined, {
+    analytics: {
+      trips: () => Effect.succeed(encode(first)),
+      tripPage: (requested) =>
+        requested === cursor
+          ? Effect.succeed(encode(last))
+          : Effect.fail(new InvalidRequest({ message: "Invalid trip page" })),
+    },
+  });
+  t.after(app.dispose);
+  for (const [path, page] of [
+    ["/api/trips", first],
+    [`/api/trips/pages/${cursor}`, last],
+  ] as const) {
+    for (const accept of ["gzip", "gzip;q=0"]) {
+      const response = await app.handler(
+        new Request(`http://localhost${path}`, {
+          headers: { "accept-encoding": accept },
+        }),
+      );
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("link"), null);
+      assert.match(
+        response.headers.get("content-type") ?? "",
+        /^application\/json/,
+      );
+      assert.match(response.headers.get("vary") ?? "", /accept-encoding/i);
+      assert.equal(
+        response.headers.get("content-encoding"),
+        accept === "gzip" ? "gzip" : null,
+      );
+      const wire = new Uint8Array(await response.arrayBuffer());
+      assert.deepEqual(
+        JSON.parse(
+          new TextDecoder().decode(accept === "gzip" ? gunzipSync(wire) : wire),
+        ),
+        page,
+      );
+    }
+  }
+  const invalid = await app.handler(
+    new Request(
+      "http://localhost/api/trips/pages/00000000-0000-4000-8000-000000000000.2",
+    ),
+  );
+  assert.equal(invalid.status, 400);
+  assert.equal(
+    (await Schema.decodeUnknownPromise(ApiError)(await invalid.json())).error
+      .code,
+    "invalid_request",
+  );
+});
 
 const removeView = new Request(
   "http://localhost/api/saved-views/00000000-0000-4000-8000-000000000001?version=1",

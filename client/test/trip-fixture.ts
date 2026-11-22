@@ -1,6 +1,5 @@
 import { Struct } from "effect";
-import type { Filters } from "../../shared/filters";
-import { TripPosition, type Trip, type TripCursor } from "../../shared/trips";
+import { TripSummary, type Trip, type TripPage } from "../../shared/trips";
 
 export const tripDetails: Trip["details"] = {
   source_file: "test.csv",
@@ -19,14 +18,22 @@ export const tripDetails: Trip["details"] = {
   total_amount: null,
 };
 
-export function tripCursorFor(
-  trip: Trip,
-  filters: Filters,
-  sort: TripCursor["sort"] = "newest",
-): TripCursor {
+export const tripSummaryFor = (trip: TripSummary) =>
+  Struct.pick(trip, Struct.keys(TripSummary.fields));
+
+export const fixtureCursor = "00000000-0000-4000-8000-000000000001.1";
+export const fixtureContinuation = `/api/trips/pages/${fixtureCursor}`;
+
+export function tripPreviewResponse(
+  rows: readonly TripSummary[],
+  hasMoreMatches = false,
+  nextCursor: string | null = null,
+) {
   return {
-    filters,
-    sort,
-    after: Struct.pick(trip, Struct.keys(TripPosition.fields)),
+    json: {
+      rows: rows.map(tripSummaryFor),
+      nextCursor,
+      hasMoreMatches,
+    } satisfies TripPage,
   };
 }

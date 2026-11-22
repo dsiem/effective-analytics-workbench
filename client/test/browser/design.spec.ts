@@ -1,4 +1,4 @@
-import { tripDetails } from "../trip-fixture";
+import { tripDetails, tripPreviewResponse } from "../trip-fixture";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import { gpsFixture } from "../gps-fixture";
 import type { Overview } from "../../../shared/overview";
@@ -109,13 +109,16 @@ async function primaryIsDistinct(page: Page) {
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/**", (route) => {
-    const path = new URL(route.request().url()).pathname;
+    const { pathname: path, searchParams } = new URL(route.request().url());
+    if (path === "/api/trips") return route.fulfill(tripPreviewResponse(trips));
     const data: Record<string, unknown> = {
       "/api/me": { name: "Avery Morgan", email: "avery@example.com" },
       "/api/metadata": { from: "2016-01-01", to: "2016-02-29", trips: total },
       "/api/overview": overview,
       "/api/trip-map": gpsFixture(),
-      "/api/trips": { rows: trips, total, pageSize: 25, nextCursor: null },
+      "/api/trip-details": trips.find(
+        (trip) => trip.trip_id === searchParams.get("tripId"),
+      ),
       "/api/trip-comment-counts": Object.fromEntries(
         trips.map((trip, index) => [
           trip.trip_id,
@@ -352,15 +355,18 @@ test("loading, empty, and error states retain the workspace layout", async ({
     route.fulfill({
       status: 503,
       json: {
-        error: "unavailable",
-        message: "The warehouse is temporarily unavailable. Try again shortly.",
+        error: {
+          code: "warehouse_unavailable",
+          message:
+            "The warehouse is temporarily unavailable. Try again shortly.",
+        },
       },
     }),
   );
   await page.goto("/trips");
-  await expect(
-    page.getByRole("heading", { name: "Request failed" }),
-  ).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveText(
+    "The warehouse is temporarily unavailable. Try again shortly.",
+  );
   await expect(
     page.getByRole("button", { name: "Try again", exact: true }),
   ).toBeVisible();

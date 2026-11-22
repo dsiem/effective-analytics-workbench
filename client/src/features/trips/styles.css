@@ -1,9 +1,22 @@
 @layer components {
+  .trip-records .table-scroll {
+    --trip-row-height: 2.75rem;
+    max-height: min(60vh, calc(12 * var(--trip-row-height)));
+    overflow: auto;
+    overflow-anchor: none;
+  }
+  .trip-records .table-scroll table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
   .trip-records .table-scroll td {
-    height: 2.5rem;
-    padding: 0.25rem 1rem;
+    height: var(--trip-row-height);
+    padding: 0 1rem;
   }
   .trip-records .table-scroll th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
     padding: 0.625rem 1rem;
   }
   .trip-records .table-scroll :is(th, td):last-child {
@@ -15,10 +28,17 @@
     box-shadow: -1px 0 var(--row-border);
   }
   .trip-records .table-scroll th:last-child {
+    z-index: 2;
     background: var(--surface-soft);
   }
   .trip-records .table-scroll tr:hover td:last-child {
     background: var(--surface-hover);
+  }
+  .trip-records .table-scroll .trip-spacer td {
+    padding: 0;
+    border: 0;
+    position: static;
+    box-shadow: none;
   }
   .trip-row-actions,
   .trip-comment-count {
@@ -46,18 +66,47 @@
   @media (pointer: coarse) {
     .trip-records .table-scroll .btn-ghost {
       min-width: 2.75rem;
-      min-height: 2.75rem;
+      min-height: calc(var(--trip-row-height) - 1px);
     }
   }
-  .pagination {
-    display: flex;
-    flex-wrap: wrap;
+  .trip-records .trip-records-header {
     align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.875rem 1.25rem;
-    border-top: 1px solid var(--border);
+  }
+  .trip-sort-trigger {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+  .trip-records .trip-table-compact {
+    --trip-row-height: 3.5rem;
+  }
+  .trip-records .trip-table-compact :is(th, td) {
+    padding-inline: 0.5rem;
+  }
+  .trip-records .trip-table-compact :is(th, td):first-child {
+    padding-inline-start: 0.75rem;
+  }
+  .trip-records .trip-table-compact :is(th, td):last-child {
+    position: static;
+    box-shadow: none;
+  }
+  .trip-records .trip-table-compact .trip-details-button {
+    min-width: 2.75rem;
+  }
+  .trip-compact-summary {
+    display: grid;
+    gap: 0.125rem;
+    font-weight: 500;
+  }
+  .trip-compact-summary time {
+    color: var(--muted);
     font-size: 0.6875rem;
+    font-weight: 400;
+    white-space: normal;
+  }
+  .trip-refine {
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.75rem;
     color: var(--muted);
   }
   .sort-control {
@@ -68,10 +117,6 @@
   .sort-select {
     width: auto;
     font-size: 0.75rem;
-  }
-  .pagination .btn {
-    min-height: 2rem;
-    padding: 0.375rem 0.5rem;
   }
   .trip-inspector .dialog-header {
     padding: 1rem 3.5rem 1rem 1.25rem;

@@ -29,11 +29,12 @@ export const TripCommentSearch = Schema.Struct({
   cursor: Schema.optionalKey(Schema.fromJsonString(TripCommentCursor)),
 });
 export type TripCommentSearch = typeof TripCommentSearch.Type;
+export const tripCommentCountLimit = 25;
 export const TripCommentCountSearch = Schema.Struct({
   tripIds: Schema.fromJsonString(
     Schema.Array(TripSnapshot.fields.trip_id).check(
       Schema.isMinLength(1),
-      Schema.isMaxLength(25),
+      Schema.isMaxLength(tripCommentCountLimit),
     ),
   ),
 });

@@ -69,46 +69,56 @@ const request = async (
     `${path}: expected JSON, got HTTP ${response.status} ${response.headers.get("content-type")}`,
   );
   const result = await response.json();
-  assert.equal(response.status, 200, `${path}: ${JSON.stringify(result)}`);
+  if (response.status !== 200)
+    assert.fail(`${path}: HTTP ${response.status}: ${JSON.stringify(result)}`);
   return result;
 };
 const metadata = await request("/api/metadata");
 const overview = await request("/api/overview");
 assert.ok(metadata.trips > 0);
 assert.equal(overview.summary.trips, metadata.trips);
-const trips = await request("/api/trips");
-assert.equal(trips.total, metadata.trips);
-assert.ok(trips.rows.length > 0);
-assert.ok(
-  trips.rows.every(
-    (trip) =>
-      trip.details &&
-      /^yellow_tripdata_\d{4}-(0[1-9]|1[0-2])\.csv\.gz$/.test(
-        trip.details.source_file,
-      ) &&
-      Object.hasOwn(trip.details, "total_amount"),
-  ),
-  "Hosted trip records must include source lineage and itemized charges",
-);
-assert.ok(
-  trips.rows.some((trip) => trip.details.pickup_location),
-  "Hosted trip records must expose recorded GPS endpoints",
-);
-if (trips.total > trips.rows.length) {
+let tripPage = await request("/api/trips");
+const hasMoreMatches = metadata.trips > 10_000;
+const previewTripIds = [];
+const followed = new Set();
+while (true) {
+  assert.equal(tripPage.hasMoreMatches, hasMoreMatches);
+  assert.ok(Array.isArray(tripPage.rows));
+  for (const trip of tripPage.rows) {
+    assert.equal(typeof trip.trip_id, "string");
+    assert.equal(typeof trip.duration, "number");
+    assert.ok(!("details" in trip));
+    previewTripIds.push(trip.trip_id);
+  }
+  const cursor = tripPage.nextCursor;
+  if (cursor === null) break;
   assert.ok(
-    trips.nextCursor,
-    "Expected a continuation for the remaining trips",
+    typeof cursor === "string" && cursor.length > 0 && !followed.has(cursor),
+    "Expected a fresh trip page cursor",
   );
-  const query = new URLSearchParams({
-    cursor: JSON.stringify(trips.nextCursor),
-  });
-  const next = await request(`/api/trips?${query.toString()}`);
-  const seen = new Set(trips.rows.map((trip) => trip.trip_id));
-  assert.ok(
-    next.rows.length > 0 && next.rows.every((trip) => !seen.has(trip.trip_id)),
-    "The trip cursor must advance past the first page",
-  );
+  followed.add(cursor);
+  tripPage = await request(`/api/trips/pages/${encodeURIComponent(cursor)}`);
 }
+assert.equal(
+  previewTripIds.length,
+  Math.min(metadata.trips, 10_000),
+  "Hosted trip preview must return up to 10,000 matching rows",
+);
+assert.equal(new Set(previewTripIds).size, previewTripIds.length);
+const tripId = previewTripIds[0];
+const inspected = await request(
+  `/api/trip-details?${new URLSearchParams({ tripId })}`,
+);
+assert.equal(inspected.trip_id, tripId);
+assert.ok(
+  inspected.details &&
+    /^yellow_tripdata_\d{4}-(0[1-9]|1[0-2])\.csv\.gz$/.test(
+      inspected.details.source_file,
+    ) &&
+    Object.hasOwn(inspected.details, "total_amount") &&
+    Object.hasOwn(inspected.details, "pickup_location"),
+  "Hosted trip inspectors must include source lineage, charges, and pickup GPS",
+);
 for (const endpoint of ["pickup", "dropoff"]) {
   const activity = await request(`/api/trip-map?endpoint=${endpoint}`);
   assert.equal(activity.endpoint, endpoint);

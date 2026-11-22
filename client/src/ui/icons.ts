@@ -3,6 +3,9 @@
 import type { H } from "./primitives";
 
 const shapes = {
+  "arrow-down-up": <Message>(h: H<Message>) => [
+    h.path([h.Attribute("d", "m3 16 4 4 4-4M7 20V4m6 4 4-4 4 4m-4-4v16")], []),
+  ],
   lock: <Message>(h: H<Message>) => [
     h.rect(
       [

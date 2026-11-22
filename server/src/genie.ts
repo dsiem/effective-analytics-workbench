@@ -205,7 +205,7 @@ export class Genie extends Context.Service<
                 })
               : error,
           ),
-          admitDownload,
+          admitDownload.effect,
           Effect.map((csv) =>
             Stream.unwrap(
               transferSlots.takeScoped(1).pipe(
@@ -283,7 +283,7 @@ export class Genie extends Context.Service<
             : client.submit(question);
         return submitted.pipe(
           Effect.mapError(mapProtocolError),
-          admitSubmission,
+          admitSubmission.effect,
         );
       };
 

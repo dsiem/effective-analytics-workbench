@@ -2,50 +2,95 @@ import { Dialog } from "@foldkit/ui";
 import { Option } from "effect";
 import { Command } from "foldkit";
 import type { Filters } from "../../../../shared/filters";
+import { tripCommentCountLimit } from "../../../../shared/trip-comments";
 import { syncDialog } from "../../lib/dialog";
 import type { FeatureUpdate } from "../../lib/feature-update";
-import { empty } from "../../lib/request-state";
+import { pending } from "../../lib/request-state";
 import * as TripsCommands from "./commands";
 import { Message as M, type Message } from "./messages";
-import { type Model, type Sort, tripPageNumber } from "./model";
+import {
+  emptyCommentCounts,
+  type Model,
+  type Sort,
+  previewRows,
+  SortMenu,
+  tripWindow,
+} from "./model";
 
-function countComments(model: Model): FeatureUpdate<Model, Message, Out> {
-  const tripIds = model.trips.data?.rows.map((trip) => trip.trip_id) ?? [];
-  const version = model.commentCountsVersion + 1;
-  return {
-    model: {
-      ...model,
-      commentCountsVersion: version,
-      commentCounts: { ...model.commentCounts, loading: !!tripIds.length },
-    },
-    commands: tripIds.length
-      ? [TripsCommands.LoadCommentCounts({ tripIds, version })]
-      : [],
-  };
-}
-
-function comments(
+function countComments(
   model: Model,
-  more = false,
-): FeatureUpdate<Model, Message, Out> {
-  if (!model.selectedTrip) return { model };
-  const generation = model.commentLoadGeneration + 1;
+  retry = false,
+): FeatureUpdate<Model, Message> {
+  const counts = model.commentCounts;
+  if (counts.phase._tag === "Loading") return { model };
+  if (counts.phase._tag === "Failed" && !retry) return { model };
+  const rows = previewRows(model.preview);
+  const { visibleStart, visibleEnd } = tripWindow(rows.length, model.viewport);
+  const tripIds = rows
+    .slice(visibleStart, visibleEnd)
+    .map(({ trip_id }) => trip_id)
+    .filter((id) => retry || !Object.hasOwn(counts.data, id))
+    .slice(0, tripCommentCountLimit);
+  if (!tripIds.length) return { model };
+  const version = counts.version + 1;
+  const previousError =
+    counts.phase._tag === "Failed" ? counts.phase.error : null;
   return {
     model: {
       ...model,
-      commentLoadGeneration: generation,
-      comments: { ...model.comments, loading: true, error: "" },
+      commentCounts: {
+        ...counts,
+        version,
+        phase: { _tag: "Loading", previousError },
+      },
     },
-    commands: [
-      TripsCommands.LoadComments({
-        tripId: model.selectedTrip.trip_id,
-        generation,
-        cursor: more ? (model.comments.data?.nextCursor ?? null) : null,
-        more,
-      }),
-    ],
+    commands: [TripsCommands.LoadCommentCounts({ tripIds, version })],
   };
 }
+
+function invalidateCommentCounts(
+  counts: Model["commentCounts"],
+): Model["commentCounts"] {
+  const reset = emptyCommentCounts(counts.version);
+  const error =
+    counts.phase._tag === "Failed"
+      ? counts.phase.error
+      : counts.phase._tag === "Loading"
+        ? counts.phase.previousError
+        : null;
+  return error ? { ...reset, phase: { _tag: "Failed", error } } : reset;
+}
+
+function resetList(model: Model): Model {
+  return {
+    ...model,
+    viewport: null,
+    preview: { _tag: "Idle" },
+    loadGeneration: model.loadGeneration + 1,
+    commentCounts: emptyCommentCounts(model.commentCounts.version),
+    inspector: null,
+  };
+}
+
+function comments(model: Model, more = false): FeatureUpdate<Model, Message> {
+  if (!model.inspector) return { model };
+  const thread = model.inspector.comments;
+  return {
+    model: {
+      ...model,
+      commentLoadGeneration: model.commentLoadGeneration + 1,
+      inspector: {
+        ...model.inspector,
+        comments: {
+          ...thread,
+          error: "",
+          read: { cursor: more ? (thread.data?.nextCursor ?? null) : null },
+        },
+      },
+    },
+  };
+}
+
 function updateTripsState(
   model: Model,
   message: Message,
@@ -54,25 +99,17 @@ function updateTripsState(
     case "Idle":
       return { model };
     case "ResetTrips":
-      return {
-        model: {
-          ...model,
-          loadGeneration: model.loadGeneration + 1,
-          pageCursors: [],
-          trips: empty,
-          selectedTrip: null,
-        },
-      };
+      return { model: resetList(model) };
     case "CloseTrip":
-      return { model: { ...model, selectedTrip: null } };
+      return { model: { ...model, inspector: null } };
     case "InspectorDialog": {
       const changed = Dialog.update(model.inspectorDialog, message.message);
       return {
         model: {
           ...model,
           inspectorDialog: changed.model,
-          selectedTrip:
-            changed.outMessage?._tag === "Closed" ? null : model.selectedTrip,
+          inspector:
+            changed.outMessage?._tag === "Closed" ? null : model.inspector,
         },
         commands: (changed.commands ?? []).map((command) =>
           Command.mapMessage(command, (message) =>
@@ -81,99 +118,161 @@ function updateTripsState(
         ),
       };
     }
-    case "LoadedTrips":
-      return message.generation !== model.loadGeneration
-        ? { model }
-        : {
-            outMessage: { _tag: "SelectionInvalidated" },
-            ...countComments({
-              ...model,
-              commentCounts: empty,
-              displayedPage: tripPageNumber(model),
-              trips: {
-                data: message.data,
-                error: message.error,
-                loading: false,
-              },
-            }),
-          };
-    case "LoadedCommentCounts":
-      return message.version !== model.commentCountsVersion
-        ? { model }
-        : {
-            model: {
-              ...model,
-              commentCounts: {
-                data: message.data,
-                error: message.error,
-                loading: false,
-              },
-            },
-          };
-    case "NextPage": {
-      const cursor = model.trips.data?.nextCursor;
-      if (!cursor || model.trips.loading) return { model };
+    case "TripBatchReceived": {
+      const { preview } = model;
+      if (
+        message.generation !== model.loadGeneration ||
+        preview._tag !== "Loading"
+      )
+        return { model };
+      const rows = preview.rows.concat(message.rows);
+      return countComments({ ...model, preview: { ...preview, rows } });
+    }
+    case "TripPreviewFinished": {
+      const { preview } = model;
+      if (
+        message.generation !== model.loadGeneration ||
+        preview._tag !== "Loading"
+      )
+        return { model };
+      const { result } = message;
       return {
-        model: { ...model, pageCursors: [...model.pageCursors, cursor] },
-        outMessage: { _tag: "Reload" },
+        model: {
+          ...model,
+          preview:
+            result._tag === "Complete"
+              ? { _tag: "Ready", rows: preview.rows, hasMore: result.hasMore }
+              : { _tag: "Failed", rows: preview.rows, error: result.error },
+        },
       };
     }
-    case "PreviousPage":
-      if (!model.pageCursors.length || model.trips.loading) return { model };
-      return {
-        model: { ...model, pageCursors: model.pageCursors.slice(0, -1) },
-        outMessage: { _tag: "Reload" },
-      };
+    case "LoadedCommentCounts": {
+      const counts = model.commentCounts;
+      if (counts.phase._tag !== "Loading" || message.version !== counts.version)
+        return { model };
+      return countComments({
+        ...model,
+        commentCounts: {
+          ...counts,
+          data: { ...counts.data, ...message.data },
+          phase: message.error
+            ? { _tag: "Failed", error: message.error }
+            : { _tag: "Idle" },
+        },
+      });
+    }
+    case "RetryCommentCounts":
+      return model.commentCounts.phase._tag === "Failed"
+        ? countComments(model, true)
+        : { model };
+    case "TripsScrolled": {
+      const { generation, viewport } = message;
+      if (generation !== model.loadGeneration || model.preview._tag === "Idle")
+        return { model };
+      return countComments({ ...model, viewport });
+    }
     case "SortTrips":
+      return { model, outMessage: { _tag: "SortChanged", sort: message.sort } };
+    case "SortMenu": {
+      const changed = SortMenu.update(model.sortMenu, message.message);
+      const sort = changed.outMessage?.value;
       return {
-        model: { ...model, pageCursors: [], trips: empty },
-        outMessage: { _tag: "SortChanged", sort: message.sort },
+        model: { ...model, sortMenu: changed.model },
+        commands:
+          changed.commands?.map((command) =>
+            Command.mapMessage(command, (message) => M.SortMenu({ message })),
+          ) ?? [],
+        ...(sort === undefined
+          ? {}
+          : { outMessage: { _tag: "SortChanged", sort } }),
       };
+    }
     case "InspectTrip":
     case "InspectComments":
-      return comments({
-        ...model,
-        inspectorDialog: {
-          ...model.inspectorDialog,
-          maybeFocusSelector: Option.some(
-            message._tag === "InspectComments"
-              ? "#trip-comments-heading"
-              : "#trip-details-dialog-title",
-          ),
+      return {
+        model: {
+          ...model,
+          inspectorDialog: {
+            ...model.inspectorDialog,
+            maybeFocusSelector: Option.some(
+              message._tag === "InspectComments"
+                ? "#trip-comments-heading"
+                : "#trip-details-dialog-title",
+            ),
+          },
+          inspector: {
+            trip: message.trip,
+            details: pending,
+            comments: { data: null, error: "", read: { cursor: null } },
+          },
+          detailLoadGeneration: model.detailLoadGeneration + 1,
+          commentLoadGeneration: model.commentLoadGeneration + 1,
+          postError: "",
+          posted: "",
         },
-        selectedTrip: message.trip,
-        comments: empty,
-        postError: "",
-        posted: "",
-      });
+      };
+    case "RetryTripDetails": {
+      const { inspector } = model;
+      if (!inspector?.details.error) return { model };
+      return {
+        model: {
+          ...model,
+          inspector: { ...inspector, details: pending },
+          detailLoadGeneration: model.detailLoadGeneration + 1,
+        },
+      };
+    }
+    case "LoadedTripDetails": {
+      const { data, error, generation, tripId } = message;
+      const { inspector } = model;
+      if (
+        generation !== model.detailLoadGeneration ||
+        tripId !== inspector?.trip.trip_id ||
+        !inspector.details.loading
+      )
+        return { model };
+      return {
+        model: {
+          ...model,
+          inspector: { ...inspector, details: { data, error, loading: false } },
+        },
+      };
+    }
     case "LoadComments":
-      return model.comments.loading ? { model } : comments(model, message.more);
-    case "LoadedComments":
-      return message.generation !== model.commentLoadGeneration ||
-        message.tripId !== model.selectedTrip?.trip_id
+      return model.inspector?.comments.read
         ? { model }
-        : {
-            model: {
-              ...model,
-              comments: {
-                loading: false,
-                error: message.error,
-                data: message.data
+        : comments(model, message.more);
+    case "LoadedComments": {
+      const { inspector } = model;
+      if (
+        message.generation !== model.commentLoadGeneration ||
+        message.tripId !== inspector?.trip.trip_id ||
+        !inspector.comments.read
+      )
+        return { model };
+      const { data, read } = inspector.comments;
+      return {
+        model: {
+          ...model,
+          inspector: {
+            ...inspector,
+            comments: {
+              read: null,
+              error: message.error,
+              data:
+                message.data && read.cursor
                   ? {
                       ...message.data,
-                      rows: message.more
-                        ? [
-                            ...(model.comments.data?.rows ?? []),
-                            ...message.data.rows,
-                          ]
-                        : message.data.rows,
+                      rows: [...(data?.rows ?? []), ...message.data.rows],
                     }
-                  : model.comments.data,
-              },
+                  : (message.data ?? data),
             },
-          };
+          },
+        },
+      };
+    }
     case "CommentChanged": {
-      const id = model.selectedTrip?.trip_id;
+      const id = model.inspector?.trip.trip_id;
       if (!id || model.commentDrafts[id]?.body === message.body)
         return { model };
       return {
@@ -189,8 +288,12 @@ function updateTripsState(
       };
     }
     case "PostComment": {
-      const trip = model.selectedTrip;
-      const draft = trip && model.commentDrafts[trip.trip_id];
+      const selection = model.inspector?.trip;
+      const draft = selection && model.commentDrafts[selection.trip_id];
+      const trip =
+        draft?.state === "retry"
+          ? draft.trip
+          : (model.inspector?.details.data ?? selection);
       if (!trip || !draft?.body.trim() || model.postingTripId) return { model };
       return {
         model: {
@@ -205,7 +308,7 @@ function updateTripsState(
         },
         commands: [
           TripsCommands.PostComment({
-            trip: draft.state === "retry" ? draft.trip : trip,
+            trip,
             body: draft.body,
             retryId: draft.state === "retry" ? draft.id : null,
           }),
@@ -224,44 +327,34 @@ function updateTripsState(
         postingTripId: null,
         commentDrafts: drafts,
         posted: message.error ? "" : key,
-        postError: model.selectedTrip?.trip_id === key ? message.error : "",
+        postError: model.inspector?.trip.trip_id === key ? message.error : "",
       };
       if (message.error) return { model: next };
-      const counted = countComments(next);
-      if (model.selectedTrip?.trip_id !== key) return counted;
-      const refreshed = comments(counted.model);
-      return {
-        ...refreshed,
-        commands: [...(counted.commands ?? []), ...(refreshed.commands ?? [])],
-      };
+      const counted = countComments({
+        ...next,
+        commentCounts: invalidateCommentCounts(next.commentCounts),
+      });
+      if (model.inspector?.trip.trip_id !== key) return counted;
+      return { ...counted, model: comments(counted.model).model };
     }
   }
 }
 
-export type Out =
-  | { readonly _tag: "Reload" }
-  | { readonly _tag: "SortChanged"; readonly sort: typeof Sort.Type }
-  | { readonly _tag: "SelectionInvalidated" };
+export type Out = {
+  readonly _tag: "SortChanged";
+  readonly sort: typeof Sort.Type;
+};
 
 export function reloadTrips(
   model: Model,
   { filters, sort }: { filters: Filters; sort: typeof Sort.Type },
 ): FeatureUpdate<Model, Message> {
-  const generation = model.loadGeneration + 1;
+  const reset = resetList(model);
   return {
     model: {
-      ...model,
-      loadGeneration: generation,
-      trips: { ...model.trips, error: "", loading: true },
+      ...reset,
+      preview: { _tag: "Loading", query: { filters, sort }, rows: [] },
     },
-    commands: [
-      TripsCommands.LoadTrips({
-        generation,
-        filters,
-        cursor: model.pageCursors.at(-1) ?? null,
-        sort,
-      }),
-    ],
   };
 }
 
@@ -272,7 +365,7 @@ export function updateTrips(
   const result = updateTripsState(model, message);
   const dialog = syncDialog(
     result.model.inspectorDialog,
-    result.model.selectedTrip !== null,
+    result.model.inspector !== null,
   );
   return {
     ...result,

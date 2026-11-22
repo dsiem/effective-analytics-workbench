@@ -1,7 +1,6 @@
 import type { GenieContext } from "../../../shared/genie";
 import { gpsContext } from "../features/gps/context";
 import { overviewContext } from "../features/overview/context";
-import { tripsContext } from "../features/trips/context";
 import type { Model } from "./model";
 export const pageContext = (model: Model): GenieContext => {
   const { route, filters } = model.location;
@@ -11,7 +10,7 @@ export const pageContext = (model: Model): GenieContext => {
     case "Overview":
       return overviewContext(model.overviewState);
     case "Trips":
-      return tripsContext(model.tripsState, { filters, sort: route.sort });
+      return { page: "trips", title: "Trip records" };
     case "Genie":
     case "AnalysisRuns":
     case "NotFound":
