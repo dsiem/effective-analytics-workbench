@@ -43,11 +43,11 @@ export const themeSelector = (h: H, model: Model) => {
       buttonAttributes: childAttributes([
         inertHtml.Attribute("title", `Appearance: ${model.themePreference}`),
       ]),
-      itemsClassName: "theme-menu",
-      backdropClassName: "theme-menu-backdrop",
+      itemsClassName: "action-menu",
+      backdropClassName: "action-menu-backdrop",
       className: "appearance-selector",
       itemToConfig: (preference) => ({
-        className: "theme-option",
+        className: "action-menu-option",
         content: h.div(
           [h.Class("flex items-center gap-3 w-full")],
           [

@@ -1,31 +1,4 @@
 @layer components {
-  .theme-menu {
-    z-index: 70;
-    min-width: 10rem;
-    padding: 0.375rem;
-    border: 1px solid var(--border);
-    border-radius: 0.625rem;
-    background: var(--surface);
-    color: var(--foreground);
-    box-shadow: 0 12px 40px rgb(16 24 40 / 0.2);
-  }
-  .theme-menu-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-  }
-  .theme-option {
-    width: 100%;
-    padding: 0.625rem 0.75rem;
-    border-radius: 0.375rem;
-    font-size: 0.8125rem;
-    text-align: left;
-    cursor: pointer;
-  }
-  .theme-option:hover,
-  .theme-option[data-active] {
-    background: var(--subtle);
-  }
   .appearance-trigger {
     width: 100%;
     min-height: 2.5rem;

@@ -215,6 +215,33 @@
     font-size: 0.6875rem;
     color: var(--muted);
   }
+  .action-menu {
+    z-index: 70;
+    min-width: 10rem;
+    padding: 0.375rem;
+    border: 1px solid var(--border);
+    border-radius: 0.625rem;
+    background: var(--surface);
+    color: var(--foreground);
+    box-shadow: 0 12px 40px rgb(16 24 40 / 0.2);
+  }
+  .action-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+  }
+  .action-menu-option {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  .action-menu-option:hover,
+  .action-menu-option[data-active] {
+    background: var(--subtle);
+  }
   .table-scroll {
     max-width: 100%;
     overflow-x: auto;
