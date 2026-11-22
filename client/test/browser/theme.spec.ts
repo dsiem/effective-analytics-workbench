@@ -49,7 +49,7 @@ test("theme menu supports keyboard selection, navigation, persistence and prepai
     "content",
     "#141821",
   );
-  await page.getByRole("link", { name: "Overview", exact: true }).click();
+  await page.getByRole("link", { name: "Trip overview", exact: true }).click();
   await expect(dark).toBeVisible();
   await page.reload();
   await expect(dark).toBeVisible();

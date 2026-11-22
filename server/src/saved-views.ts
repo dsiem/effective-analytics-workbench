@@ -1,6 +1,7 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import * as SqlSchema from "effect/sql/SqlSchema";
 import type { Statement } from "effect/sql/Statement";
+import { pageWindow } from "../../shared/cursor-page.js";
 import {
   SavedView,
   SavedViewCursor,
@@ -8,15 +9,16 @@ import {
   type SavedViewPin,
   type SavedViewSearch,
   type SavedViewsPage,
-} from "../../shared/domain.js";
+} from "../../shared/saved-views.js";
 import { SavedViewConflict, SavedViewNotFound } from "./errors.js";
 import { Lakebase, type LakebaseSql, lakebaseFailure } from "./lakebase.js";
+
+const page = pageWindow(24);
 
 const makeSavedViews = (sql: LakebaseSql) => {
   const columns = sql`id::text AS id, title, body, filters, pinned, version,
       to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at,
       to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at`;
-  const pageSize = 24;
   const list = (search: SavedViewSearch) =>
     SqlSchema.findAll({
       Request: Schema.Void,
@@ -40,28 +42,23 @@ const makeSavedViews = (sql: LakebaseSql) => {
             filters->>'from', filters->>'to', filters->>'zip')), lower(${token})) > 0`,
         ),
       ])}
-      ORDER BY saved_views.pinned DESC, saved_views.updated_at DESC, saved_views.id DESC LIMIT ${pageSize + 1}`,
+      ORDER BY saved_views.pinned DESC, saved_views.updated_at DESC, saved_views.id DESC LIMIT ${page.fetchLimit}`,
     })(undefined).pipe(
       Effect.mapError(
         lakebaseFailure(
           "Saved views are under lock. You need permission to open them.",
         ),
       ),
-      Effect.map((results): SavedViewsPage => {
-        const rows = results.slice(0, pageSize);
-        const last = rows.at(-1);
-        return {
-          rows: rows.map(({ cursor_updated_at: _, ...savedView }) => savedView),
-          nextCursor:
-            results.length > pageSize && last
-              ? {
-                  id: last.id,
-                  pinned: last.pinned,
-                  updatedAt: last.cursor_updated_at,
-                }
-              : null,
-        };
-      }),
+      Effect.map((results): SavedViewsPage =>
+        page.fromRows(results, {
+          row: ({ cursor_updated_at: _, ...savedView }) => savedView,
+          cursor: ({ id, pinned, cursor_updated_at }) => ({
+            id,
+            pinned,
+            updatedAt: cursor_updated_at,
+          }),
+        }),
+      ),
       Effect.withSpan("savedViews.list"),
     );
   const conflict = (id: string) =>

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { SavedView, SavedViewInput } from "../../../shared/domain";
+import type { SavedView, SavedViewInput } from "../../../shared/saved-views";
 
 const filters = { from: "2016-01-10", to: "2016-01-20", zip: "10001" };
 const query = new URLSearchParams(filters).toString();
@@ -29,16 +29,16 @@ test("Explore applies changes before saving, and saved views reopen on the curre
   page,
 }) => {
   await page.goto(`/trips?${query}`);
-  const tripFilters = page.getByRole("form", { name: "Trip filters" });
+  const filtersForm = page.getByRole("form", { name: "Filters" });
   // Saving stays unavailable until the draft is applied.
   await page
     .getByRole("textbox", { name: "Pickup ZIP code", exact: true })
     .fill("10002");
   await expect(
-    tripFilters.getByRole("button", { name: "Save view", exact: true }),
+    filtersForm.getByRole("button", { name: "Save view", exact: true }),
   ).toBeDisabled();
-  await tripFilters.getByRole("button", { name: "Apply", exact: true }).click();
-  await tripFilters
+  await filtersForm.getByRole("button", { name: "Apply", exact: true }).click();
+  await filtersForm
     .getByRole("button", { name: "Save view", exact: true })
     .click();
   const dialog = page.getByRole("dialog", {
@@ -73,7 +73,7 @@ test("Explore applies changes before saving, and saved views reopen on the curre
   await expect(page.getByRole("status")).toContainText(
     "Saved “Weekday pickups”",
   );
-  await tripFilters
+  await filtersForm
     .getByRole("button", { name: "Saved views", exact: true })
     .click();
   const views = page.getByRole("dialog", { name: "Saved views", exact: true });
@@ -181,7 +181,7 @@ for (const [search, dates] of [
   }) => {
     await page.goto(`/trips${search ? `?${search}` : ""}`);
     await page
-      .getByRole("form", { name: "Trip filters" })
+      .getByRole("form", { name: "Filters" })
       .getByRole("button", { name: "Save view", exact: true })
       .click();
     const context = page.getByRole("dialog", {

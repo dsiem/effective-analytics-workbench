@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { TripSearch } from "../../../shared/domain";
+import { TripSearch } from "../../../shared/trips";
 import { tripCursorFor, tripDetails } from "../trip-fixture";
 import { expect, type Page, test } from "@playwright/test";
 import { gpsFixture } from "../gps-fixture";

@@ -99,7 +99,7 @@ test("keeps date-order validation when dates are entered directly", async ({
     page.getByRole("heading", { name: "Trip records", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("form", { name: "Trip filters" }).getByRole("alert"),
+    page.getByRole("form", { name: "Filters" }).getByRole("alert"),
   ).toContainText("start date must be on or before the end date");
 });
 

@@ -2,23 +2,30 @@ import { Notice } from "../../lib/request-state";
 import { Dialog } from "@foldkit/ui";
 import { Schema } from "effect";
 import { defineMessageUnion } from "foldkit/message";
-import * as D from "../../../../shared/domain";
+import {
+  GenieAgentPhase,
+  GenieContext,
+  GenieMode,
+  GenieModeQuery,
+  GenieOperation,
+} from "../../../../shared/genie";
+import { Filters } from "../../../../shared/filters";
 import { History, Turn } from "./model";
 
 export const QuestionSnapshot = Schema.Struct({
   question: Schema.String,
-  filters: D.Filters,
-  context: D.GenieContext,
-  ...D.GenieModeQuery.fields,
+  filters: Filters,
+  context: GenieContext,
+  ...GenieModeQuery.fields,
 });
 
 export const PollTarget = Schema.Struct({
   id: Schema.String,
-  operation: D.GenieOperation,
+  operation: GenieOperation,
 });
 
 const PollOutcome = Schema.Union([
-  Schema.Struct({ state: Schema.Literal("waiting"), phase: D.GenieAgentPhase }),
+  Schema.Struct({ state: Schema.Literal("waiting"), phase: GenieAgentPhase }),
   Schema.Struct({ state: Schema.Literal("retrieving") }),
   Schema.Struct({ state: Schema.Literal("cancelled") }),
   Schema.Struct({
@@ -34,13 +41,13 @@ export const messages = {
   GenieDialog: { message: Dialog.Message },
   RestoredConversation: { turns: History, persistenceError: Schema.String },
   OpenGenie: {
-    context: Schema.NullOr(D.GenieContext),
+    context: Schema.NullOr(GenieContext),
     question: Schema.NullOr(Schema.String),
   },
   ExpandGenie: {},
   ClearSelection: {},
   GenieDraft: { value: Schema.String },
-  SetGenieMode: { mode: D.GenieMode },
+  SetGenieMode: { mode: GenieMode },
   SendQuestion: { question: Schema.String },
   CreatedTurn: { id: Schema.String, ...QuestionSnapshot.fields },
   ChangedTurn: { turn: Turn },

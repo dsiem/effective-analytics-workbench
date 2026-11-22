@@ -1,7 +1,7 @@
 import { Clock, Effect, Schema } from "effect";
 import { Command, Navigation } from "foldkit";
 import { AnalysisInput, AnalysisRunId } from "../../../../shared/analysis-runs";
-import { Id } from "../../../../shared/domain";
+import { Id } from "../../../../shared/schema";
 import { request } from "../../lib/api-client";
 import { done, failure, result } from "../../lib/command-result";
 import { Message as M } from "./messages";

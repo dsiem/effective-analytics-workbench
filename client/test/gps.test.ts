@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { Option } from "effect";
 import { Url } from "foldkit";
 import { pageContext } from "../src/app/analysis-context";
-import { gpsMessage, genieMessage } from "../src/app/message";
+import * as Features from "../src/app/features";
 import { init, update } from "../src/app/update";
 import { Message as GenieMessage } from "../src/features/genie/messages";
 import { gpsContext } from "../src/features/gps/context";
@@ -92,7 +92,7 @@ test("leaving the GPS page ignores its late responses and keeps the current page
   ).model;
   const result = update(
     model,
-    gpsMessage(
+    Features.gps.toParentMessage(
       M.LoadedGps({
         key: dataKey("", "pickup"),
         data: summary(),
@@ -109,7 +109,7 @@ test("an old map reply keeps pinned Genie context until the map scope changes", 
     Option.getOrThrow(Url.fromString("http://localhost/trip-map")),
   ).model;
   const activity = summary();
-  const currentReply = gpsMessage(
+  const currentReply = Features.gps.toParentMessage(
     M.LoadedGps({
       key: dataKey("", "pickup", initialized.gpsState.revision),
       data: activity,
@@ -120,11 +120,13 @@ test("an old map reply keeps pinned Genie context until the map scope changes", 
   const context = { page: "map" as const, title: "Pinned map context" };
   const pinned = update(
     loaded,
-    genieMessage(GenieMessage.OpenGenie({ question: null, context })),
+    Features.genie.toParentMessage(
+      GenieMessage.OpenGenie({ question: null, context }),
+    ),
   ).model;
   const stale = update(
     pinned,
-    gpsMessage(
+    Features.gps.toParentMessage(
       M.LoadedGps({
         key: dataKey("", "pickup", pinned.gpsState.revision - 1),
         data: null,
@@ -136,7 +138,7 @@ test("an old map reply keeps pinned Genie context until the map scope changes", 
   assert.equal(stale.model, pinned);
   const rendered = update(
     stale.model,
-    gpsMessage(
+    Features.gps.toParentMessage(
       M.GpsReady({
         key: frameKey("", "pickup", null, pinned.gpsState.revision),
         error: "",
@@ -146,7 +148,10 @@ test("an old map reply keeps pinned Genie context until the map scope changes", 
   assert.deepEqual(rendered.genieState.genieSelection, context);
   const cell = activity.cells[0];
   assert.ok(cell);
-  const changed = update(rendered, gpsMessage(M.GpsSelect({ id: cell.id })));
+  const changed = update(
+    rendered,
+    Features.gps.toParentMessage(M.GpsSelect({ id: cell.id })),
+  );
   assert.equal(changed.model.gpsState.selected, cell.id);
   assert.equal(changed.model.genieState.genieSelection, null);
 });

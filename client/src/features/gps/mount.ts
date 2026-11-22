@@ -1,14 +1,15 @@
 import { Effect, Queue, Schema, Stream, SubscriptionRef } from "effect";
 import { Command, Mount } from "foldkit";
-import * as D from "../../../../shared/domain";
+import { GpsEndpoint } from "../../../../shared/map-dataset";
+import { Filters } from "../../../../shared/filters";
 import { done } from "../../lib/command-result";
 import { Message as M } from "./messages";
 
 export const gpsHostId = "gps-density-map";
 const MapData = Schema.Struct({
   query: Schema.String,
-  filters: D.Filters,
-  endpoint: D.GpsEndpoint,
+  filters: Filters,
+  endpoint: GpsEndpoint,
   revision: Schema.Int,
   key: Schema.String,
   loading: Schema.Boolean,

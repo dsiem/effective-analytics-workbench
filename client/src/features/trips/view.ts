@@ -158,7 +158,7 @@ function trips(h: H, model: Model, sort: typeof Sort.Type): Child[] {
                       label: icon(h, "chevron-right"),
                       onClick: M.InspectTrip({ trip }),
                       attributes: [
-                        h.Title("View trip details"),
+                        h.Title("View record details"),
                         h.AriaLabel(
                           `Details and comments for trip ${trip.pickup_at} from ${trip.pickup_zip} to ${trip.dropoff_zip}`,
                         ),

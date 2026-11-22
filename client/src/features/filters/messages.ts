@@ -2,7 +2,8 @@ import { DatePicker } from "@foldkit/ui";
 import { Schema } from "effect";
 import { defineMessageUnion } from "foldkit/message";
 
-export const messages = {
+export const Message = defineMessageUnion({
+  Idle: {},
   FilterChanged: {
     field: Schema.Literals(["from", "to", "zip"]),
     value: Schema.String,
@@ -14,7 +15,5 @@ export const messages = {
   ApplyFilters: {},
   ResetFilters: {},
   PickZip: { zip: Schema.String },
-};
-
-export const Message = defineMessageUnion({ Idle: {}, ...messages });
+});
 export type Message = typeof Message.Type;

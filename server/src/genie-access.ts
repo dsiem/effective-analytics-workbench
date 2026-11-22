@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Effect, Redacted } from "effect";
-import type { GenieOperation } from "../../shared/domain.js";
+import type { GenieOperation } from "../../shared/genie.js";
 import {
   type PermissionDenied,
   type ServiceUnavailable,

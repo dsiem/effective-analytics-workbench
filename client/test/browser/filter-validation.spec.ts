@@ -62,7 +62,7 @@ test("navigation preserves invalid filters until corrected and Apply can repair 
   await expect(
     page.getByRole("heading", { name: "Invalid Explore filters" }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Overview", exact: true }).click();
+  await page.getByRole("link", { name: "Trip overview", exact: true }).click();
   await expect(page).toHaveURL("/?zip=invalid");
   await expect(
     page.getByRole("heading", { name: "Invalid Explore filters" }),

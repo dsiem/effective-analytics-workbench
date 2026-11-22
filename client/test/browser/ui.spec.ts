@@ -49,7 +49,7 @@ test("wide trip tables scroll within a narrow viewport", async ({ page }) => {
   await expect(inspect).toBeInViewport();
   await inspect.click();
   await expect(
-    page.getByRole("dialog", { name: "Trip details" }),
+    page.getByRole("dialog", { name: "Record details" }),
   ).toBeVisible();
 });
 
@@ -76,7 +76,10 @@ test("sidebar collapses to icons, keeps filters, persists, and supports the keyb
   await expect
     .poll(async () => (await navigation.boundingBox())?.width)
     .toBeLessThan(65);
-  const trips = page.getByRole("link", { name: "Trip explorer", exact: true });
+  const trips = page.getByRole("link", {
+    name: "Trip explorer",
+    exact: true,
+  });
   await trips.hover();
   await expect(page.getByRole("tooltip")).toHaveText("Trip explorer");
   await page.screenshot({

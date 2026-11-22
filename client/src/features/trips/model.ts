@@ -1,8 +1,18 @@
 import { Dialog } from "@foldkit/ui";
 import { Schema } from "effect";
-import * as D from "../../../../shared/domain";
+import {
+  TripCommentCounts,
+  TripCommentInput,
+  TripComments,
+} from "../../../../shared/trip-comments";
+import {
+  TripCursor,
+  TripSnapshot,
+  TripSort,
+  Trips,
+} from "../../../../shared/trips";
 import { empty, Notice, request } from "../../lib/request-state";
-export const Sort = D.TripSort;
+export const Sort = TripSort;
 const CommentDraft = Schema.Union([
   Schema.Struct({
     state: Schema.Literals(["editing", "posting"]),
@@ -10,22 +20,22 @@ const CommentDraft = Schema.Union([
   }),
   Schema.Struct({
     state: Schema.Literal("retry"),
-    ...D.TripCommentInput.fields,
+    ...TripCommentInput.fields,
   }),
 ]);
 export const Model = Schema.Struct({
   inspectorDialog: Dialog.Model,
-  trips: request(D.Trips),
+  trips: request(Trips),
   loadGeneration: Schema.Int,
-  pageCursors: Schema.Array(D.TripCursor),
+  pageCursors: Schema.Array(TripCursor),
   displayedPage: Schema.Int,
-  selectedTrip: Schema.NullOr(D.TripSnapshot),
-  comments: request(D.TripComments),
+  selectedTrip: Schema.NullOr(TripSnapshot),
+  comments: request(TripComments),
   commentLoadGeneration: Schema.Int,
-  commentCounts: request(D.TripCommentCounts),
+  commentCounts: request(TripCommentCounts),
   commentCountsVersion: Schema.Number,
   commentDrafts: Schema.Record(Schema.String, CommentDraft),
-  postingTripId: Schema.NullOr(D.TripSnapshot.fields.trip_id),
+  postingTripId: Schema.NullOr(TripSnapshot.fields.trip_id),
   postError: Notice,
   posted: Schema.String,
 });

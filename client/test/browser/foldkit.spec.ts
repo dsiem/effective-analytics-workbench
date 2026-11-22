@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { Schema } from "effect";
-import { TripSearch, type TripCursor } from "../../../shared/domain";
+import { TripSearch, type TripCursor } from "../../../shared/trips";
 import { tripCursorFor } from "../trip-fixture";
 
 const overview = {
@@ -182,7 +182,7 @@ test("overview charts, navigation, paging, and browser history work through the 
     firstCursor,
     null,
   ]);
-  await page.getByRole("link", { name: "Overview", exact: true }).click();
+  await page.getByRole("link", { name: "Trip overview", exact: true }).click();
   await page.goBack();
   await expect(page).toHaveURL("/trips?zip=10001");
   await expect(
@@ -235,12 +235,12 @@ test("late trip responses cannot overwrite a newer filter selection", async ({
 test("saved view chooser creates, edits, reloads, and deletes views with their filters", async ({
   page,
 }) => {
-  const stored: import("../../../shared/domain").SavedView[] = [];
+  const stored: import("../../../shared/saved-views").SavedView[] = [];
   await page.route("**/api/saved-views**", (route) => {
     const request = route.request();
     if (request.method() === "PUT") {
       const input =
-        request.postDataJSON() as import("../../../shared/domain").SavedViewInput;
+        request.postDataJSON() as import("../../../shared/saved-views").SavedViewInput;
       expect(input.filters).toEqual({ zip: "10001" });
       const previous = stored.find((savedView) => savedView.id === input.id);
       expect(input.version).toBe(previous?.version ?? null);
@@ -470,7 +470,10 @@ test("trip inspector shows recorded endpoints, payment and the full charge", asy
   await page
     .getByRole("button", { name: /^Details and comments for trip/ })
     .click();
-  const panel = page.getByRole("dialog", { name: "Trip details", exact: true });
+  const panel = page.getByRole("dialog", {
+    name: "Record details",
+    exact: true,
+  });
   await expect(panel.getByText("Cash", { exact: true })).toBeVisible();
   await expect(panel.getByText("$15.80", { exact: true })).toBeVisible();
   await panel.locator("summary").filter({ hasText: "Source details" }).click();

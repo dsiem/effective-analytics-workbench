@@ -1,4 +1,4 @@
-import type { GenieContext } from "../../../shared/domain";
+import type { GenieContext } from "../../../shared/genie";
 import { gpsContext } from "../features/gps/context";
 import { overviewContext } from "../features/overview/context";
 import { tripsContext } from "../features/trips/context";

@@ -1,15 +1,18 @@
 import { Effect, Schema } from "effect";
 import { Command } from "foldkit";
-import * as D from "../../../../shared/domain";
+import { Id } from "../../../../shared/schema";
+import { TripCommentCursor } from "../../../../shared/trip-comments";
+import { Filters } from "../../../../shared/filters";
+import { TripCursor, TripSnapshot, TripSort } from "../../../../shared/trips";
 import { request } from "../../lib/api-client";
 import { result } from "../../lib/command-result";
 import { Message as M } from "./messages";
 export const LoadTrips = Command.define("LoadTrips", {
   args: {
     generation: Schema.Int,
-    filters: D.Filters,
-    cursor: Schema.NullOr(D.TripCursor),
-    sort: D.TripSort,
+    filters: Filters,
+    cursor: Schema.NullOr(TripCursor),
+    sort: TripSort,
   },
   messages: [M.LoadedTrips],
   execute: ({ generation, filters, cursor, sort }) =>
@@ -23,9 +26,9 @@ export const LoadTrips = Command.define("LoadTrips", {
 });
 export const LoadComments = Command.define("LoadComments", {
   args: {
-    tripId: D.TripSnapshot.fields.trip_id,
+    tripId: TripSnapshot.fields.trip_id,
     generation: Schema.Int,
-    cursor: Schema.NullOr(D.TripCommentCursor),
+    cursor: Schema.NullOr(TripCommentCursor),
     more: Schema.Boolean,
   },
   messages: [M.LoadedComments],
@@ -44,7 +47,7 @@ export const LoadComments = Command.define("LoadComments", {
 });
 export const LoadCommentCounts = Command.define("LoadCommentCounts", {
   args: {
-    tripIds: Schema.Array(D.TripSnapshot.fields.trip_id),
+    tripIds: Schema.Array(TripSnapshot.fields.trip_id),
     version: Schema.Number,
   },
   messages: [M.LoadedCommentCounts],
@@ -55,9 +58,9 @@ export const LoadCommentCounts = Command.define("LoadCommentCounts", {
 });
 export const PostComment = Command.define("PostComment", {
   args: {
-    trip: D.TripSnapshot,
+    trip: TripSnapshot,
     body: Schema.String,
-    retryId: Schema.NullOr(D.Id),
+    retryId: Schema.NullOr(Id),
   },
   messages: [M.PostedComment],
   execute: ({ trip, body, retryId }) =>

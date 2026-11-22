@@ -1,7 +1,7 @@
-import { Schema } from "effect";
-import * as D from "../../../shared/domain";
+import { Schema, Struct } from "effect";
+import { Filters } from "../../../shared/filters";
 export const filtersFromQuery = (query: string | URLSearchParams) => {
-  const parsed = Schema.decodeUnknownOption(D.Filters)(
+  const parsed = Schema.decodeUnknownOption(Filters)(
     Object.fromEntries(
       typeof query === "string" ? new URLSearchParams(query) : query,
     ),
@@ -10,9 +10,10 @@ export const filtersFromQuery = (query: string | URLSearchParams) => {
 };
 export const filterError =
   "Check the dates and five-digit ZIP code. The start date must be on or before the end date.";
-export const queryFor = (filters: D.Filters) =>
+const filterKeys = Struct.keys(Filters.fields);
+export const queryFor = (filters: Filters) =>
   new URLSearchParams(
-    (["from", "to", "zip"] as const).flatMap((key) => {
+    filterKeys.flatMap((key) => {
       const value = filters[key];
       return value ? [[key, value]] : [];
     }),
@@ -20,9 +21,9 @@ export const queryFor = (filters: D.Filters) =>
 export const href = (path: string, query: string) =>
   path + (query ? `?${query}` : "");
 
-export const withTripSort = (query: string, sort: typeof D.TripSort.Type) => {
+export const withSort = (query: string, sort: string, defaultSort: string) => {
   const params = new URLSearchParams(query);
   params.delete("sort");
-  if (sort !== "newest") params.set("sort", sort);
+  if (sort !== defaultSort) params.set("sort", sort);
   return params.toString();
 };

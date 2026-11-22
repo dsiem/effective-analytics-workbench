@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Schema } from "effect";
-import { GenieInput, Trip } from "../../shared/domain";
+import { GenieInput } from "../../shared/genie";
+import { Trip } from "../../shared/trips";
 import { tripsContext } from "../src/features/trips/context";
 import { init } from "../src/features/trips/model";
 import { tripDetails } from "./trip-fixture";

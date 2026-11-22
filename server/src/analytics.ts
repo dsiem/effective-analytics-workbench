@@ -5,21 +5,22 @@ import {
   RouteReliabilityReport,
 } from "../../shared/analysis-runs.js";
 import {
-  Daily,
-  type Filters,
   GpsCell,
   type GpsEndpoint,
   type GpsSearch,
-  Hourly,
   mapCellLimit,
-  Metadata,
+  type TripMap,
+} from "../../shared/map-dataset.js";
+import {
+  Daily,
+  Hourly,
   type Overview,
   Summary,
-  type TripMap,
-  type TripSearch,
-  type Trips,
   Zone,
-} from "../../shared/domain.js";
+} from "../../shared/overview.js";
+import { type Filters } from "../../shared/filters.js";
+import { DatasetMetadata } from "../../shared/dataset.js";
+import type { TripSearch, Trips } from "../../shared/trips.js";
 import {
   type ServiceUnavailable,
   type OperationTimeout,
@@ -41,7 +42,10 @@ type WarehouseError = ServiceUnavailable | OperationTimeout | PermissionDenied;
 export class Analytics extends Context.Service<
   Analytics,
   {
-    readonly metadata: Effect.Effect<typeof Metadata.Type, WarehouseError>;
+    readonly metadata: Effect.Effect<
+      typeof DatasetMetadata.Type,
+      WarehouseError
+    >;
     readonly overview: (
       filters: Filters,
     ) => Effect.Effect<Overview, WarehouseError>;
@@ -104,7 +108,7 @@ export class Analytics extends Context.Service<
       const metadataCache = yield* Cache.makeWith(
         (_key: "dataset") =>
           read(
-            Metadata,
+            DatasetMetadata,
             sql`SELECT
       CAST(MIN(tpep_pickup_datetime) AS DATE)::STRING AS from,
       CAST(MAX(tpep_pickup_datetime) AS DATE)::STRING AS to,

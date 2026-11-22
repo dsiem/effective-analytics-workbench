@@ -2,11 +2,10 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { tripDetails } from "../trip-fixture";
 import type {
-  Trip,
   TripComment,
   TripCommentInput,
-  TripSnapshot,
-} from "../../../shared/domain";
+} from "../../../shared/trip-comments";
+import type { Trip, TripSnapshot } from "../../../shared/trips";
 
 const historicalTrip: TripSnapshot = {
   trip_id: "7b2c6ab2-6f7d-4f8a-a05f-d07e4eb84a19",
@@ -96,7 +95,7 @@ for (const width of [1440, 360]) {
       .getByRole("button", { name: /^Details and comments for trip/ })
       .click();
     const panel = page.getByRole("dialog", {
-      name: "Trip details",
+      name: "Record details",
       exact: true,
     });
     const summary = panel.getByRole("region", { name: "Selected trip" });
@@ -154,7 +153,7 @@ for (const width of [1440, 360]) {
     expect((await field.boundingBox())?.height).toBeGreaterThan(compactHeight);
     await field.fill("");
     await panel
-      .getByRole("heading", { name: "Trip details", exact: true })
+      .getByRole("heading", { name: "Record details", exact: true })
       .focus();
     await expect(field).toHaveCSS("height", `${compactHeight}px`);
     await page.keyboard.press("Escape");
@@ -212,7 +211,7 @@ for (const width of [1440, 360]) {
     await conversation.focus();
     await page.keyboard.press("Enter");
     const panel = page.getByRole("dialog", {
-      name: "Trip details",
+      name: "Record details",
       exact: true,
     });
     await expect(
@@ -228,7 +227,7 @@ for (const width of [1440, 360]) {
       .first();
     await details.click();
     await expect(
-      panel.getByRole("heading", { name: "Trip details", exact: true }),
+      panel.getByRole("heading", { name: "Record details", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(details).toBeFocused();
@@ -268,7 +267,7 @@ test("unavailable counts remain unknown while details and comments still open", 
   await expect(unknown).toHaveText("–");
   await unknown.click();
   await expect(
-    page.getByRole("dialog", { name: "Trip details" }),
+    page.getByRole("dialog", { name: "Record details" }),
   ).toContainText("Know the story behind this ride?");
 });
 
@@ -306,7 +305,7 @@ test("denied comment access leaves trip records, details and navigation usable",
     .getByRole("button", { name: /^Details and comments for trip/ })
     .first()
     .click();
-  const details = page.getByRole("dialog", { name: "Trip details" });
+  const details = page.getByRole("dialog", { name: "Record details" });
   await expect(
     details.getByRole("region", { name: "Selected trip" }),
   ).toContainText(trip.pickup_at);
@@ -356,7 +355,7 @@ for (const width of [1440, 360]) {
     });
     await inspect.first().click();
     const panel = page.getByRole("dialog", {
-      name: "Trip details",
+      name: "Record details",
       exact: true,
     });
     await expect(
@@ -429,7 +428,10 @@ test("drafts follow the trip ID when refreshed record details change", async ({
     name: /^Details and comments for trip/,
   });
   await inspect.first().click();
-  const panel = page.getByRole("dialog", { name: "Trip details", exact: true });
+  const panel = page.getByRole("dialog", {
+    name: "Record details",
+    exact: true,
+  });
   const field = panel.getByRole("textbox", { name: "Add a comment" });
   await field.fill("Keep investigating this trip");
   await page.keyboard.press("Escape");
@@ -482,7 +484,10 @@ test("failed posts keep the draft across inspection and retry the same submissio
     name: /^Details and comments for trip/,
   });
   await inspect.first().click();
-  const panel = page.getByRole("dialog", { name: "Trip details", exact: true });
+  const panel = page.getByRole("dialog", {
+    name: "Record details",
+    exact: true,
+  });
   const field = panel.getByRole("textbox", {
     name: "Add a comment",
     exact: true,
@@ -542,7 +547,7 @@ test("loading older comments preserves the visible conversation through an outag
     .getByRole("button", { name: /^Details and comments for trip/ })
     .first()
     .click();
-  const panel = page.getByRole("dialog", { name: "Trip details" });
+  const panel = page.getByRole("dialog", { name: "Record details" });
   await panel.getByRole("button", { name: "Load older comments" }).click();
   await expect(panel.getByRole("alert")).toHaveText(
     "Try loading older comments again.",
@@ -582,7 +587,7 @@ test("typing while a comment posts keeps the new draft with a distinct retry ide
     .getByRole("button", { name: /^Details and comments for trip/ })
     .first()
     .click();
-  const panel = page.getByRole("dialog", { name: "Trip details" });
+  const panel = page.getByRole("dialog", { name: "Record details" });
   const field = panel.getByRole("textbox", { name: "Add a comment" });
   await field.fill("First finding");
   await panel

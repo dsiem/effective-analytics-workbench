@@ -1,6 +1,6 @@
 import { DatePicker } from "@foldkit/ui";
 import { Schema } from "effect";
-import type * as D from "../../../../shared/domain";
+import type { Filters } from "../../../../shared/filters";
 export const FilterDraft = Schema.Struct({
   from: Schema.String,
   to: Schema.String,
@@ -16,7 +16,7 @@ export const Model = Schema.Struct({
 
 export type Model = typeof Model.Type;
 
-export const init = (filters: D.Filters = {}): Model => ({
+export const init = (filters: Filters = {}): Model => ({
   error: "",
   datePickers: null,
   filterDraft: {

@@ -1,8 +1,32 @@
 # Effect and Foldkit patterns for Databricks Apps
 
-Use Overview as the example for a query and Analysis Runs as the example for work
-that continues after an HTTP request ends. Both use the same Effect HTTP contract
-to connect the server to Foldkit.
+Use **Trip overview** as the example for a query and **Analysis runs** as the
+example for work that continues after an HTTP request ends. Both use the same
+Effect HTTP contract to connect the server to Foldkit.
+
+## How the workbench fits together
+
+The browser and server import their feature schemas from `shared/`.
+`AppApi` describes the HTTP operations, and the server supplies their handlers
+with Effect services at startup. [HTTP contract](../shared/api.ts) ·
+[Server layers](../server/src/main.ts)
+
+- **Filters** select the records included in an exploration. **Trip explorer**
+  and **Trip map** share pickup dates and ZIP. Saved views and pagination
+  cursors use the same filter comparison.
+  [Filter schema](../shared/filters.ts)
+- **A cursor page** contains rows and an optional continuation cursor. The
+  server fetches one extra row to tell whether another page exists. It builds
+  the cursor from the last visible database row, preserving sort values such
+  as a nullable fare or a timestamp with microsecond precision.
+  [Page schema and construction](../shared/cursor-page.ts) · [Trip ordering](../server/src/trip-pagination.ts)
+- **A browser feature** owns its model, messages, and update function. Its
+  binding connects that model and those messages to the app shell. The shell
+  handles actions that involve another feature, such as opening Genie from a
+  chart. [Feature bindings](../client/src/app/features.ts) · [Shell update](../client/src/app/update.ts)
+- **A Genie answer** contains ordered attachments and an optional warning.
+  Chat and Agent both return this shape. The server turns it into the text and
+  query tables the workbench displays. [Answer type](../packages/genie-client/src/answer.ts) · [Genie service](../server/src/genie.ts)
 
 ## Carry a query through one HTTP contract
 

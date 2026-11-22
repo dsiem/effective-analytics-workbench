@@ -2,7 +2,7 @@ import { Dialog, Menu, Tooltip } from "@foldkit/ui";
 import { Option } from "effect";
 import { Command, Update } from "foldkit";
 import type { Url } from "foldkit/url";
-import { href, queryFor, withTripSort } from "../domain/filters";
+import { href, queryFor, withSort } from "../domain/filters";
 import * as AnalysisDates from "../features/analysis-runs/dates";
 import * as AnalysisRuns from "../features/analysis-runs/model";
 import {
@@ -32,15 +32,8 @@ import { syncDialog } from "../lib/dialog";
 import { pending } from "../lib/request-state";
 import { pageContext } from "./analysis-context";
 import * as AppCommands from "./commands";
-import {
-  analysisRunsMessage,
-  genieMessage,
-  tripsMessage,
-  gpsMessage,
-  Message as M,
-  type Message,
-  savedViewsMessage,
-} from "./message";
+import * as Features from "./features";
+import { Message as M, type Message } from "./message";
 import type { Model } from "./model";
 import { loadPage, sortTrips } from "./navigation";
 import { parseLocation, routePath, showsExplore } from "./route";
@@ -80,7 +73,10 @@ export function init(url: Url): Update.Return<Model, Message, ApiClient> {
     commands: [
       ...(loaded.commands ?? []),
       AppCommands.Boot(),
-      Command.mapMessage(GenieCommands.RestoreConversation(), genieMessage),
+      Command.mapMessage(
+        GenieCommands.RestoreConversation(),
+        Features.genie.toParentMessage,
+      ),
       AppCommands.LoadMetadata(),
       AppCommands.LoadUser(),
     ],
@@ -136,13 +132,13 @@ function updateApplication(
         ...loaded,
         commands: [
           ...(reset.commands ?? []).map((command) =>
-            Command.mapMessage(command, tripsMessage),
+            Command.mapMessage(command, Features.trips.toParentMessage),
           ),
           ...(analysis.commands ?? []).map((command) =>
-            Command.mapMessage(command, analysisRunsMessage),
+            Command.mapMessage(command, Features.analysisRuns.toParentMessage),
           ),
           ...(savedViews.commands ?? []).map((command) =>
-            Command.mapMessage(command, savedViewsMessage),
+            Command.mapMessage(command, Features.savedViews.toParentMessage),
           ),
           ...(loaded.commands ?? []),
           ...(route._tag === "AnalysisRuns" &&
@@ -270,6 +266,7 @@ function updateApplication(
       return loadPage(model);
     case "AnalysisRuns":
       return Update.foldChild({
+        ...Features.analysisRuns,
         update: (
           child: AnalysisRuns.Model,
           childMessage: typeof message.message,
@@ -279,62 +276,43 @@ function updateApplication(
             childMessage,
             route._tag === "AnalysisRuns" ? query : null,
           ),
-        read: (parent: Model) => Option.some(parent.analysisRunsState),
-        write: (parent, child) =>
-          parent.analysisRunsState === child
-            ? parent
-            : { ...parent, analysisRunsState: child },
-        toParentMessage: analysisRunsMessage,
       })(model, message.message);
-    case "FilterDatePicker":
-    case "FilterChanged":
-    case "ApplyFilters":
-    case "ResetFilters":
-    case "PickZip": {
-      const changed = updateFilters(model.filtersState, message, {
-        filters,
-        metadata: model.metadata.data,
-      });
-      const next = { ...model, filtersState: changed.model };
-      return changed.outMessage
-        ? {
-            model: next,
-            commands: [
-              AppCommands.Navigate({
-                href: href(
-                  routePath(route),
-                  route._tag === "Trips"
-                    ? withTripSort(changed.outMessage.query, route.sort)
-                    : changed.outMessage.query,
-                ),
-                external: false,
-              }),
-            ],
-          }
-        : { model: next, commands: changed.commands ?? [] };
-    }
-    case "MetricTabs":
-    case "LoadedOverview": {
+    case "Filters":
+      return Update.foldChild({
+        ...Features.filters,
+        update: (child: Filters.Model, childMessage: typeof message.message) =>
+          updateFilters(child, childMessage, {
+            filters,
+            metadata: model.metadata.data,
+          }),
+        foldOutMessage: (out) => (parent) => ({
+          model: parent,
+          commands: [
+            AppCommands.Navigate({
+              href: href(
+                routePath(route),
+                route._tag === "Trips"
+                  ? withSort(out.query, route.sort, "newest")
+                  : out.query,
+              ),
+              external: false,
+            }),
+          ],
+        }),
+      })(model, message.message);
+    case "Overview":
       if (route._tag !== "Overview" || !filters) return { model };
-      const changed = updateOverview(model.overviewState, message);
-      const next =
-        changed.model === model.overviewState
-          ? model
-          : { ...model, overviewState: changed.model };
-      return {
-        model: changed.outMessage ? invalidateGenieSelection(next) : next,
-        commands: changed.commands ?? [],
-      };
-    }
+      return Update.foldChild({
+        ...Features.overview,
+        update: updateOverview,
+        foldOutMessage: () => (parent) => ({
+          model: invalidateGenieSelection(parent),
+        }),
+      })(model, message.message);
     case "Trips":
       return Update.foldChild({
+        ...Features.trips,
         update: updateTrips,
-        read: (parent: Model) => Option.some(parent.tripsState),
-        write: (parent, child) =>
-          parent.tripsState === child
-            ? parent
-            : { ...parent, tripsState: child },
-        toParentMessage: tripsMessage,
         foldOutMessage: (out) => (parent) => {
           switch (out._tag) {
             case "Reload":
@@ -350,16 +328,11 @@ function updateApplication(
       })(model, message.message);
     case "SavedViews":
       return Update.foldChild({
+        ...Features.savedViews,
         update: (
           child: SavedViews.Model,
           childMessage: typeof message.message,
         ) => updateSavedViews(child, childMessage, { filters: filters ?? {} }),
-        read: (parent: Model) => Option.some(parent.savedViewsState),
-        write: (parent, child) =>
-          parent.savedViewsState === child
-            ? parent
-            : { ...parent, savedViewsState: child },
-        toParentMessage: savedViewsMessage,
         foldOutMessage:
           ({ filters: restoredFilters }) =>
           (parent) => ({
@@ -381,17 +354,12 @@ function updateApplication(
       })(model, message.message);
     case "Genie":
       return Update.foldChild({
+        ...Features.genie,
         update: (child: Genie.Model, childMessage: typeof message.message) =>
           updateGenie(child, childMessage, {
             filters,
             context: pageContext(model),
           }),
-        read: (parent: Model) => Option.some(parent.genieState),
-        write: (parent, child) =>
-          parent.genieState === child
-            ? parent
-            : { ...parent, genieState: child },
-        toParentMessage: genieMessage,
         foldOutMessage: (out) => (parent) => ({
           model:
             out._tag === "Opened" && parent.mobileNavigation
@@ -403,12 +371,9 @@ function updateApplication(
     case "Gps":
       if (route._tag !== "TripMap" || !filters) return { model };
       return Update.foldChild({
+        ...Features.gps,
         update: (child: Gps.Model, childMessage: typeof message.message) =>
           updateGps(child, childMessage, { query, filters }),
-        read: (parent: Model) => Option.some(parent.gpsState),
-        write: (parent, child) =>
-          parent.gpsState === child ? parent : { ...parent, gpsState: child },
-        toParentMessage: gpsMessage,
         foldOutMessage: () => (parent) => ({
           model: invalidateGenieSelection(parent),
         }),
@@ -459,7 +424,7 @@ export function update(
         ),
       ),
       ...(genie.commands ?? []).map((command) =>
-        Command.mapMessage(command, genieMessage),
+        Command.mapMessage(command, Features.genie.toParentMessage),
       ),
     ],
   };

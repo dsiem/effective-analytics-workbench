@@ -1,6 +1,7 @@
 import { Option, Schema } from "effect";
 import { defineRouteUnion } from "foldkit/route";
-import { Filters, TripSort } from "../../../shared/domain";
+import { Filters } from "../../../shared/filters";
+import { TripSort } from "../../../shared/trips";
 import { filtersFromQuery } from "../domain/filters";
 import {
   analysisPath,

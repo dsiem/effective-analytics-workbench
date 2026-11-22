@@ -1,10 +1,11 @@
 import { Notice } from "../../lib/request-state";
 import { Dialog } from "@foldkit/ui";
 import { Schema } from "effect";
-import * as D from "../../../../shared/domain";
+import { SavedView, SavedViewInput } from "../../../../shared/saved-views";
+import { Filters } from "../../../../shared/filters";
 import * as Browser from "./browser-model";
 export const SavedViewEditor = Schema.Struct({
-  draft: D.SavedViewInput,
+  draft: SavedViewInput,
   saving: Schema.Boolean,
   error: Notice,
 });
@@ -12,14 +13,14 @@ export const Model = Schema.Struct({
   dialogs: Schema.Struct({ savedView: Dialog.Model, delete: Dialog.Model }),
   browser: Browser.Model,
   editor: Schema.NullOr(SavedViewEditor),
-  deleting: Schema.NullOr(D.SavedView),
+  deleting: Schema.NullOr(SavedView),
   savedViewBusy: Schema.Boolean,
   savedViewError: Notice,
   selection: Schema.NullOr(
     Schema.Struct({
       id: Schema.String,
       title: Schema.String,
-      filters: D.Filters,
+      filters: Filters,
     }),
   ),
   notice: Schema.String,

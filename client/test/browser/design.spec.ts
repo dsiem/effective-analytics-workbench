@@ -1,7 +1,8 @@
 import { tripDetails } from "../trip-fixture";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import { gpsFixture } from "../gps-fixture";
-import type { Overview, Trip } from "../../../shared/domain";
+import type { Overview } from "../../../shared/overview";
+import type { Trip } from "../../../shared/trips";
 
 // Deliberately offline review data: production continues to use the warehouse.
 const daily = Array.from({ length: 31 }, (_, index) => {
@@ -258,7 +259,7 @@ for (const colorScheme of ["light", "dark"] as const) {
         .first()
         .click();
       const inspector = page.getByRole("dialog", {
-        name: "Trip details",
+        name: "Record details",
         exact: true,
       });
       await expect(

@@ -1,7 +1,8 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import * as SqlSchema from "effect/sql/SqlSchema";
+import { pageWindow } from "../../shared/cursor-page.js";
+import type { CurrentUser } from "../../shared/current-user.js";
 import {
-  type CurrentUser,
   TripComment,
   type TripCommentCountSearch,
   TripCommentCounts,
@@ -9,9 +10,11 @@ import {
   type TripCommentInput,
   type TripCommentSearch,
   type TripComments as TripCommentsPage,
-} from "../../shared/domain.js";
+} from "../../shared/trip-comments.js";
 import { InvalidRequest } from "./errors.js";
 import { Lakebase, type LakebaseSql, lakebaseFailure } from "./lakebase.js";
+
+const page = pageWindow(25);
 
 const makeTripComments = (sql: LakebaseSql) => {
   const counts = ({ tripIds }: TripCommentCountSearch) =>
@@ -53,22 +56,20 @@ const makeTripComments = (sql: LakebaseSql) => {
           (${search.cursor.createdAt}::timestamptz, ${search.cursor.id}::uuid)`
             : sql``
         }
-        ORDER BY comments.created_at DESC, comments.id DESC LIMIT 26`,
+        ORDER BY comments.created_at DESC, comments.id DESC LIMIT ${page.fetchLimit}`,
     })(undefined).pipe(
       Effect.mapError(
         lakebaseFailure("The trip is in view. The comments are under lock."),
       ),
-      Effect.map((results): TripCommentsPage => {
-        const rows = results.slice(0, 25);
-        const last = rows.at(-1);
-        return {
-          rows: rows.map(({ cursor_created_at: _, ...comment }) => comment),
-          nextCursor:
-            results.length > 25 && last
-              ? { id: last.id, createdAt: last.cursor_created_at }
-              : null,
-        };
-      }),
+      Effect.map((results): TripCommentsPage =>
+        page.fromRows(results, {
+          row: ({ cursor_created_at: _, ...comment }) => comment,
+          cursor: ({ id, cursor_created_at }) => ({
+            id,
+            createdAt: cursor_created_at,
+          }),
+        }),
+      ),
       Effect.withSpan("tripComments.list"),
     );
   const add = (input: TripCommentInput, author: CurrentUser | null) =>

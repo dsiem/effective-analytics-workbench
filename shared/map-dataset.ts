@@ -1,5 +1,42 @@
 import { Schema, Struct } from "effect";
-import { GpsCell, TripMap } from "./domain.js";
+import { filteredSearch } from "./filters.js";
+import { Zip } from "./schema.js";
+
+export const GpsEndpoint = Schema.Literals(["pickup", "dropoff"]);
+export type GpsEndpoint = typeof GpsEndpoint.Type;
+export const GpsSearch = filteredSearch({
+  endpoint: Schema.optionalKey(GpsEndpoint),
+});
+
+const GpsRing = Schema.mutable(
+  Schema.Array(Schema.mutable(Schema.Tuple([Schema.Number, Schema.Number]))),
+);
+export const GpsCell = Schema.Struct({
+  id: Schema.String,
+  longitude: Schema.Number,
+  latitude: Schema.Number,
+  boundary: Schema.Struct({
+    type: Schema.Literal("Polygon"),
+    coordinates: Schema.mutable(Schema.Array(GpsRing)),
+  }),
+  trips: Schema.Number,
+  avg_fare: Schema.Number,
+  avg_distance: Schema.Number,
+  zip: Schema.NullOr(Zip),
+});
+export type GpsCell = typeof GpsCell.Type;
+export const mapCellLimit = 100_000;
+export const TripMap = Schema.Struct({
+  endpoint: GpsEndpoint,
+  matchingTrips: Schema.Number,
+  locatedTrips: Schema.Number,
+  shownTrips: Schema.Number,
+  totalCells: Schema.Number,
+  truncated: Schema.Boolean,
+  cells: Schema.Array(GpsCell).check(Schema.isMaxLength(mapCellLimit)),
+  queriedAt: Schema.String,
+});
+export type TripMap = typeof TripMap.Type;
 
 export const MapCellSummary = GpsCell.mapFields(Struct.omit(["boundary"]));
 export type MapCellSummary = typeof MapCellSummary.Type;

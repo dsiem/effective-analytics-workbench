@@ -1,25 +1,33 @@
 import { Notice } from "../../lib/request-state";
 import { Dialog } from "@foldkit/ui";
 import { Schema } from "effect";
-import * as D from "../../../../shared/domain";
+import {
+  GenieAgentPhase,
+  GenieContext,
+  GenieMode,
+  GenieModeQuery,
+  GenieOperation,
+  GenieReply,
+} from "../../../../shared/genie";
+import { Filters } from "../../../../shared/filters";
 export const TurnBase = {
   id: Schema.String,
   question: Schema.String,
-  filters: Schema.optionalKey(D.Filters),
-  context: Schema.optionalKey(D.GenieContext),
-  ...D.GenieModeQuery.fields,
+  filters: Schema.optionalKey(Filters),
+  context: Schema.optionalKey(GenieContext),
+  ...GenieModeQuery.fields,
 };
 export const StoppingTurn = Schema.Struct({
   ...TurnBase,
   state: Schema.Literal("stopping"),
-  operation: D.GenieOperation,
+  operation: GenieOperation,
 });
 export const Turn = Schema.Union([
   StoppingTurn,
   Schema.Struct({
     ...TurnBase,
     state: Schema.Literal("cancelled"),
-    operation: D.GenieOperation,
+    operation: GenieOperation,
   }),
   Schema.Struct({ ...TurnBase, state: Schema.Literal("submitting") }),
   Schema.Struct({
@@ -34,26 +42,26 @@ export const Turn = Schema.Union([
   Schema.Struct({
     ...TurnBase,
     state: Schema.Literals(["waiting", "retrieving"]),
-    phase: Schema.optionalKey(D.GenieAgentPhase),
-    operation: D.GenieOperation,
+    phase: Schema.optionalKey(GenieAgentPhase),
+    operation: GenieOperation,
   }),
   Schema.Struct({
     ...TurnBase,
     state: Schema.Literal("paused"),
-    operation: D.GenieOperation,
+    operation: GenieOperation,
     stage: Schema.Literals(["waiting", "retrieving"]),
     error: Notice,
   }),
   Schema.Struct({
     ...TurnBase,
     state: Schema.Literal("failed"),
-    operation: D.GenieOperation,
+    operation: GenieOperation,
     error: Notice,
   }),
   Schema.Struct({
     ...TurnBase,
     state: Schema.Literal("complete"),
-    reply: D.GenieReply,
+    reply: GenieReply,
   }),
 ]);
 export type Turn = typeof Turn.Type;
@@ -70,8 +78,8 @@ export const Model = Schema.Struct({
   genieOpen: Schema.Boolean,
   genieExpanded: Schema.Boolean,
   genieDraft: Schema.String,
-  genieMode: D.GenieMode,
-  genieSelection: Schema.NullOr(D.GenieContext),
+  genieMode: GenieMode,
+  genieSelection: Schema.NullOr(GenieContext),
   turns: History,
   pollGeneration: Schema.Int,
   persistenceError: Schema.String,

@@ -1,11 +1,12 @@
 import { DatePicker } from "@foldkit/ui";
 import { Option } from "effect";
 import { Calendar } from "foldkit";
-import type * as D from "../../../../shared/domain";
+import type { Filters } from "../../../../shared/filters";
+import type { DatasetMetadata } from "../../../../shared/dataset";
 import { calendarDay } from "../../lib/format";
 import { init, type Model } from "./model";
 
-export type Metadata = typeof D.Metadata.Type | null;
+export type Metadata = typeof DatasetMetadata.Type | null;
 
 function viewDate(
   field: "from" | "to",
@@ -86,7 +87,7 @@ export function focusOnOpen(
 
 export function reset(
   model: Model,
-  filters: D.Filters,
+  filters: Filters,
   metadata: Metadata,
 ): Model {
   const fresh = init(filters);

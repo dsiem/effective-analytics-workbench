@@ -221,9 +221,7 @@ test("selected GPS area reaches Genie with the correct endpoint and coverage", a
 });
 
 for (const width of [390, 1440])
-  test(`Trip map fits ${width}px in light and dark themes`, async ({
-    page,
-  }) => {
+  test(`Map fits ${width}px in light and dark themes`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/trip-map");
     await ready(page);

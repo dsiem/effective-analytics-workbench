@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import type { SavedView, SavedViewCursor } from "../../../shared/domain";
+import type { SavedView, SavedViewCursor } from "../../../shared/saved-views";
 
 const makeSavedViews = (count: number): SavedView[] =>
   Array.from({ length: count }, (_, index) => ({

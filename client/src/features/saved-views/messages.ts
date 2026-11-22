@@ -2,7 +2,7 @@ import { Notice } from "../../lib/request-state";
 import { Dialog, Popover } from "@foldkit/ui";
 import { Schema } from "effect";
 import { defineMessageUnion } from "foldkit/message";
-import * as D from "../../../../shared/domain";
+import { SavedView, SavedViewsPage } from "../../../../shared/saved-views";
 import { RecentIds, Shortcuts } from "./browser-model";
 
 const messages = {
@@ -14,14 +14,14 @@ const messages = {
   ClearView: {},
   NewSavedView: {},
   CreatedSavedView: { id: Schema.String },
-  EditSavedView: { savedView: D.SavedView },
+  EditSavedView: { savedView: SavedView },
   SavedViewChanged: {
     field: Schema.Literals(["title", "body"]),
     value: Schema.String,
   },
   SaveSavedView: {},
   SavedViewSaved: {
-    savedView: Schema.NullOr(D.SavedView),
+    savedView: Schema.NullOr(SavedView),
     error: Notice,
   },
   LoadSavedViews: { more: Schema.Boolean },
@@ -41,17 +41,17 @@ const messages = {
     debounce: Schema.Boolean,
   },
   LoadedSavedViews: {
-    data: Schema.NullOr(D.SavedViewsPage),
+    data: Schema.NullOr(SavedViewsPage),
     error: Notice,
     more: Schema.Boolean,
     pages: Schema.Number,
     version: Schema.Number,
   },
-  PinSavedView: { savedView: D.SavedView },
-  DeleteSavedView: { savedView: D.SavedView },
+  PinSavedView: { savedView: SavedView },
+  DeleteSavedView: { savedView: SavedView },
   ConfirmDelete: {},
   MutatedSavedView: { removed: Schema.Boolean, error: Notice },
-  RestoreView: { savedView: D.SavedView },
+  RestoreView: { savedView: SavedView },
 };
 
 export const Message = defineMessageUnion({ Idle: {}, ...messages });

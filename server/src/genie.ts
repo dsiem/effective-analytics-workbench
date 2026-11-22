@@ -5,7 +5,7 @@ import {
   GenieMessageUnavailable,
   GenieQueryFailed,
   GenieQueryUnavailable,
-  type GenieResult,
+  type GenieAnswer,
   GenieResponseError,
   makeGenieClient,
   makeGenieDownloadClient,
@@ -15,7 +15,6 @@ import {
   type GenieRequest,
   type GenieAgentOperation,
 } from "@dsiem/genie-client";
-import { genieResultTimeoutMs } from "../../shared/api.js";
 import {
   type GenieInput,
   type GenieOperation,
@@ -23,7 +22,8 @@ import {
   type GenieProgress,
   type GenieQueryPath,
   type GenieReply,
-} from "../../shared/domain.js";
+  genieResultTimeoutMs,
+} from "../../shared/genie.js";
 import { makeAdmission } from "./admission.js";
 import {
   GenieFailed,
@@ -51,6 +51,58 @@ const permissionCopy = {
 };
 
 const isGenieId = Schema.is(GenieId);
+
+const genieReply = (
+  operation: GenieOperation,
+  { attachments, warning }: GenieAnswer,
+): GenieReply => {
+  const undisplayedCount =
+    (warning?.count ?? 0) +
+    attachments.filter(({ kind }) => kind !== "text" && kind !== "query")
+      .length;
+  return {
+    ...operation,
+    ...(undisplayedCount > 0
+      ? {
+          warning: {
+            kind: "unsupported-attachments",
+            count: undisplayedCount,
+          },
+        }
+      : {}),
+    text: attachments
+      .filter((attachment) => attachment.kind === "text")
+      .map((attachment) => attachment.content)
+      .join("\n\n"),
+    queries: attachments
+      .filter((attachment) => attachment.kind === "query")
+      .map(
+        ({
+          attachmentId,
+          sql,
+          description,
+          columns,
+          rows,
+          truncated,
+          totalRowCount,
+          nextChunkIndex,
+        }) => ({
+          ...(operation.mode !== "agent" && isGenieId(attachmentId)
+            ? { attachmentId }
+            : {}),
+          sql,
+          description: description ?? "Query result",
+          columns: columns.map((column) => column.name),
+          rows: rows.slice(0, 100),
+          truncated:
+            truncated ||
+            nextChunkIndex !== undefined ||
+            (totalRowCount ?? rows.length) > 100 ||
+            (totalRowCount ?? rows.length) > rows.length,
+        }),
+      ),
+  };
+};
 
 const mapProtocolError = (
   error: WorkspaceRequestError | GenieResponseError | GeniePermissionDenied,
@@ -266,16 +318,17 @@ export class Genie extends Context.Service<
 
       const result = (operation: GenieOperation) => {
         const response: Effect.Effect<
-          Pick<GenieResult, "attachments" | "warning">,
+          GenieAnswer,
           | WorkspaceRequestError
           | GenieResponseError
           | GeniePermissionDenied
           | GenieMessageUnavailable
           | GenieQueryFailed
           | GenieQueryUnavailable
-        > = operation.mode === "agent"
-          ? agent.result(agentReference(operation))
-          : client.result(operation);
+        > =
+          operation.mode === "agent"
+            ? agent.result(agentReference(operation))
+            : client.result(operation);
         return response.pipe(
           Effect.catchTags({
             GenieMessageUnavailable: ({ state, status }) =>
@@ -311,55 +364,7 @@ export class Genie extends Context.Service<
           Effect.mapError((error) =>
             error instanceof GenieFailed ? error : mapProtocolError(error),
           ),
-          Effect.map(({ attachments, warning }): GenieReply => {
-            const undisplayedCount =
-              (warning?.count ?? 0) +
-              attachments.filter(
-                ({ kind }) => kind !== "text" && kind !== "query",
-              ).length;
-            return {
-              ...operation,
-              ...(undisplayedCount > 0
-                ? {
-                    warning: {
-                      kind: "unsupported-attachments",
-                      count: undisplayedCount,
-                    },
-                  }
-                : {}),
-              text: attachments
-                .filter((attachment) => attachment.kind === "text")
-                .map((attachment) => attachment.content)
-                .join("\n\n"),
-              queries: attachments
-                .filter((attachment) => attachment.kind === "query")
-                .map(
-                  ({
-                    attachmentId,
-                    sql,
-                    description,
-                    columns,
-                    rows,
-                    truncated,
-                    totalRowCount,
-                    nextChunkIndex,
-                  }) => ({
-                    ...(operation.mode !== "agent" && isGenieId(attachmentId)
-                      ? { attachmentId }
-                      : {}),
-                    sql,
-                    description: description ?? "Query result",
-                    columns: columns.map((column) => column.name),
-                    rows: rows.slice(0, 100),
-                    truncated:
-                      truncated ||
-                      nextChunkIndex !== undefined ||
-                      (totalRowCount ?? rows.length) > 100 ||
-                      (totalRowCount ?? rows.length) > rows.length,
-                  }),
-                ),
-            };
-          }),
+          Effect.map((answer) => genieReply(operation, answer)),
           Effect.timeoutOrElse({
             duration: genieResultTimeoutMs,
             orElse: () =>

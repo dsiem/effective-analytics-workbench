@@ -1,6 +1,7 @@
 import { Dialog } from "@foldkit/ui";
 import { Command } from "foldkit";
-import type * as D from "../../../../shared/domain";
+import type { GenieContext, GenieMode } from "../../../../shared/genie";
+import type { Filters } from "../../../../shared/filters";
 import type { ApiClient } from "../../lib/api-client";
 import { syncDialog } from "../../lib/dialog";
 import type { FeatureUpdate } from "../../lib/feature-update";
@@ -214,7 +215,7 @@ export function updateGenie(
   }
 }
 
-function conversationFor(turns: ReadonlyArray<Turn>, mode: D.GenieMode) {
+function conversationFor(turns: ReadonlyArray<Turn>, mode: GenieMode) {
   const previous = turns.findLast(
     (prior) =>
       ("operation" in prior || prior.state === "complete") &&
@@ -257,8 +258,8 @@ function changeTurn(
 }
 
 export type Context = {
-  readonly filters: D.Filters | null;
-  readonly context: D.GenieContext;
+  readonly filters: Filters | null;
+  readonly context: GenieContext;
 };
 export type Out =
   | { readonly _tag: "Opened" }

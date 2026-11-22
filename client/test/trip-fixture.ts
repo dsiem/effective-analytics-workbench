@@ -1,10 +1,6 @@
 import { Struct } from "effect";
-import {
-  TripPosition,
-  type Filters,
-  type Trip,
-  type TripCursor,
-} from "../../shared/domain";
+import type { Filters } from "../../shared/filters";
+import { TripPosition, type Trip, type TripCursor } from "../../shared/trips";
 
 export const tripDetails: Trip["details"] = {
   source_file: "test.csv",

@@ -207,7 +207,7 @@ function overview(h: H, model: Model): Child[] {
                         h.Class("btn btn-small"),
                         h.AriaLabel("View pickup map"),
                       ],
-                      [icon(h, "map"), "Trip map"],
+                      [icon(h, "map"), "Map"],
                     ),
                   ],
                 }),

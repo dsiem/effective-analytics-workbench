@@ -9,12 +9,8 @@ import {
 } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { ApiError, AppApi } from "../../shared/api.js";
-import {
-  tripPageSize,
-  type SavedView,
-  type SavedViewInput,
-  type TripCursor,
-} from "../../shared/domain.js";
+import type { SavedView, SavedViewInput } from "../../shared/saved-views.js";
+import { tripPageSize, type TripCursor } from "../../shared/trips.js";
 import { Analytics } from "../src/analytics.js";
 import { Genie } from "../src/genie.js";
 import { Routes } from "../src/routes.js";

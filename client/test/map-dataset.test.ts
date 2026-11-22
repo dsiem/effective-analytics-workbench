@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Schema } from "effect";
-import { mapCellLimit, TripMap } from "../../shared/domain";
-import { MapSummary } from "../../shared/map-dataset";
+import { mapCellLimit, MapSummary, TripMap } from "../../shared/map-dataset";
 import { jsonMap, pickedIndex } from "../src/features/gps/dataset";
 import { gpsFixture } from "./gps-fixture";
 

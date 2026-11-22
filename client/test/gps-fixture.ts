@@ -1,4 +1,8 @@
-import type { GpsCell, GpsEndpoint, TripMap } from "../../shared/domain.js";
+import type {
+  GpsCell,
+  GpsEndpoint,
+  TripMap,
+} from "../../shared/map-dataset.js";
 
 const cells: GpsCell[] = [
   {

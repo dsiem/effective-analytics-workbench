@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { tableFromArrays } from "apache-arrow";
 import { ConfigProvider, Effect, Layer, Redacted } from "effect";
 import { gpsFixture } from "../../client/test/gps-fixture.js";
-import { mapCellLimit } from "../../shared/domain.js";
+import { mapCellLimit } from "../../shared/map-dataset.js";
 import { Analytics } from "../src/analytics.js";
 import { Settings } from "../src/settings.js";
 import { Workspace } from "../src/workspace.js";

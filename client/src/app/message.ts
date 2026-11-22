@@ -3,7 +3,8 @@ import { Dialog, Menu, Tooltip } from "@foldkit/ui";
 import { Schema } from "effect";
 import { Calendar } from "foldkit";
 import { defineMessageUnion } from "foldkit/message";
-import * as D from "../../../shared/domain";
+import { CurrentUser } from "../../../shared/current-user";
+import { DatasetMetadata } from "../../../shared/dataset";
 import * as AnalysisRuns from "../features/analysis-runs/messages";
 import * as Filters from "../features/filters/messages";
 import * as Genie from "../features/genie/messages";
@@ -30,13 +31,13 @@ export const Message = defineMessageUnion({
   SystemThemeChanged: {},
   Tooltip: { id: Schema.String, message: Tooltip.Message },
   LoadedMetadata: {
-    data: Schema.NullOr(D.Metadata),
+    data: Schema.NullOr(DatasetMetadata),
     error: Notice,
     today: Calendar.CalendarDate,
   },
-  LoadedUser: { user: Schema.NullOr(D.CurrentUser) },
-  ...Filters.messages,
-  ...Overview.messages,
+  LoadedUser: { user: Schema.NullOr(CurrentUser) },
+  Filters: { message: Filters.Message },
+  Overview: { message: Overview.Message },
   Trips: { message: Trips.Message },
   SavedViews: { message: SavedViews.Message },
   Genie: { message: Genie.Message },
@@ -44,13 +45,3 @@ export const Message = defineMessageUnion({
   AnalysisRuns: { message: AnalysisRuns.Message },
 });
 export type Message = typeof Message.Type;
-
-export const savedViewsMessage = (message: SavedViews.Message) =>
-  Message.SavedViews({ message });
-export const tripsMessage = (message: Trips.Message) =>
-  Message.Trips({ message });
-export const genieMessage = (message: Genie.Message) =>
-  Message.Genie({ message });
-export const gpsMessage = (message: Gps.Message) => Message.Gps({ message });
-export const analysisRunsMessage = (message: AnalysisRuns.Message) =>
-  Message.AnalysisRuns({ message });

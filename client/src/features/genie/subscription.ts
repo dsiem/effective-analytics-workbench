@@ -1,7 +1,7 @@
 import { Clock, Effect, Result, Schema, Stream } from "effect";
 import { genieAccessHeaders } from "../../../../shared/api";
 import { Subscription } from "foldkit";
-import type { GenieAgentPhase } from "../../../../shared/domain";
+import type { GenieAgentPhase } from "../../../../shared/genie";
 import { type ApiClient, request } from "../../lib/api-client";
 import { failure } from "../../lib/command-result";
 import { Message as M, type Message, PollTarget } from "./messages";

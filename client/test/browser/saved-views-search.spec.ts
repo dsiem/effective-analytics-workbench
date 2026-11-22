@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { expect, type Page, test } from "@playwright/test";
-import type { SavedView, SavedViewCursor } from "../../../shared/domain";
+import type { SavedView, SavedViewCursor } from "../../../shared/saved-views";
 
 const storageKey = "taxi.recent-saved-views";
 const makeViews = (): SavedView[] =>

@@ -1,4 +1,5 @@
-import type { Filters, GenieContext } from "../../../../shared/domain";
+import type { GenieContext } from "../../../../shared/genie";
+import type { Filters } from "../../../../shared/filters";
 import { endpointName, type Model } from "./model";
 export function gpsContext(model: Model, filters: Filters): GenieContext {
   const data = model.activity.data;

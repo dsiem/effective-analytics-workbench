@@ -11,7 +11,7 @@ import {
 import { HttpRouter, HttpServer } from "effect/http";
 import { OpenApi } from "effect/http-api";
 import { AppApi } from "../../shared/api.js";
-import { GenieOperation } from "../../shared/domain.js";
+import { GenieOperation } from "../../shared/genie.js";
 import { Analytics } from "../src/analytics.js";
 import {
   GenieFailed,

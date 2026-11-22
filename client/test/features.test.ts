@@ -7,13 +7,9 @@ import { HttpApiClient } from "effect/http-api";
 import { Url } from "foldkit";
 import { given, message, model, story } from "foldkit/story";
 import { AppApi } from "../../shared/api";
-import { TripCommentInput } from "../../shared/domain";
-import {
-  genieMessage,
-  Message as AppMessage,
-  savedViewsMessage,
-  tripsMessage,
-} from "../src/app/message";
+import { TripCommentInput } from "../../shared/trip-comments";
+import { Message as AppMessage } from "../src/app/message";
+import * as Features from "../src/app/features";
 import { init, update } from "../src/app/update";
 import { overviewViewMessage } from "../src/app/view-messages";
 import { Message as FilterMessage } from "../src/features/filters/messages";
@@ -122,7 +118,10 @@ test("view intents are translated by the shell with their analysis scope intact"
   assert.equal(changed.model.genieState.genieOpen, true);
   assert.deepEqual(changed.model.genieState.genieSelection, context);
   assert.equal(changed.model.genieState.genieDraft, "Explain these fares");
-  const picked = update(app("/trip-map"), AppMessage.PickZip({ zip: "10019" }));
+  const picked = update(
+    app("/trip-map"),
+    Features.filters.toParentMessage(FilterMessage.PickZip({ zip: "10019" })),
+  );
   assert.ok(
     picked.commands?.some(
       (command) => command.args?.href === "/trip-map?zip=10019",
@@ -190,9 +189,14 @@ test("returning to an Overview filter keeps the fresh summary when the original 
 });
 
 test("reopening the same trip keeps fresh comments when the original list arrives late", async () => {
-  const inspect = tripsMessage(TripMessage.InspectComments({ trip }));
+  const inspect = Features.trips.toParentMessage(
+    TripMessage.InspectComments({ trip }),
+  );
   const opened = update(app("/trips"), inspect);
-  const closed = update(opened.model, tripsMessage(TripMessage.CloseTrip()));
+  const closed = update(
+    opened.model,
+    Features.trips.toParentMessage(TripMessage.CloseTrip()),
+  );
   const reopened = update(closed.model, inspect);
   const note = {
     id: "00000000-0000-4000-8000-000000000001",
@@ -228,7 +232,7 @@ test("reopening the same trip keeps fresh comments when the original list arrive
 test("lost comment responses replay the attempted payload until the draft is edited", async () => {
   let next = open("/trips");
   const send = (action: TripMessage) => {
-    next = update(next.model, tripsMessage(action));
+    next = update(next.model, Features.trips.toParentMessage(action));
   };
   async function post() {
     send(TripMessage.PostComment());
@@ -298,7 +302,7 @@ test("a standalone trip feature closes its inspector and ignores late comments",
 test("navigation retains the trip feature's dialog cleanup commands", () => {
   const opened = update(
     app("/trips"),
-    tripsMessage(TripMessage.InspectTrip({ trip })),
+    Features.trips.toParentMessage(TripMessage.InspectTrip({ trip })),
   );
   const navigated = update(
     opened.model,
@@ -320,7 +324,7 @@ test("sort URLs survive reload and history; saved views restore global scope wit
   assert.equal(tripLoad(opened)?.sort, "fare");
   const sorted = update(
     opened.model,
-    tripsMessage(TripMessage.SortTrips({ sort: "distance" })),
+    Features.trips.toParentMessage(TripMessage.SortTrips({ sort: "distance" })),
   );
   assert.equal(tripLoad(sorted)?.sort, "distance");
   assert.ok(
@@ -338,7 +342,10 @@ test("sort URLs survive reload and history; saved views restore global scope wit
     AppMessage.Navigated({ path: "/trips", query: "zip=10001&sort=fare" }),
   );
   assert.equal(tripLoad(back)?.sort, "fare");
-  const applied = update(back.model, AppMessage.ApplyFilters());
+  const applied = update(
+    back.model,
+    Features.filters.toParentMessage(FilterMessage.ApplyFilters()),
+  );
   assert.ok(
     applied.commands?.some(
       (command) => command.args?.href === "/trips?zip=10001&sort=fare",
@@ -346,7 +353,7 @@ test("sort URLs survive reload and history; saved views restore global scope wit
   );
   const restoring = update(
     back.model,
-    savedViewsMessage(
+    Features.savedViews.toParentMessage(
       SavedMessage.RestoreView({
         savedView: {
           id: "00000000-0000-4000-8000-000000000003",
@@ -543,11 +550,13 @@ test("Genie submits the filters and pinned chart from Send after navigation", as
   };
   const pinned = update(
     app("/?zip=10001"),
-    genieMessage(GenieMessage.OpenGenie({ context: chart, question: null })),
+    Features.genie.toParentMessage(
+      GenieMessage.OpenGenie({ context: chart, question: null }),
+    ),
   ).model;
   const sent = update(
     pinned,
-    genieMessage(
+    Features.genie.toParentMessage(
       GenieMessage.SendQuestion({ question: "Explain these fares" }),
     ),
   );
@@ -652,7 +661,10 @@ test("trip paging clears the previous selection and retries from the same cursor
       genieSelection: { page: "trips" as const, title: "Old page" },
     },
   };
-  const next = update(selected, tripsMessage(TripMessage.NextPage()));
+  const next = update(
+    selected,
+    Features.trips.toParentMessage(TripMessage.NextPage()),
+  );
   assert.equal(Trips.tripPageNumber(next.model.tripsState), 2);
   assert.equal(next.model.genieState.genieSelection, null);
   const failed = update(
@@ -674,9 +686,15 @@ test("trip paging clears the previous selection and retries from the same cursor
   const last = update(retry.model, retried).model;
   assert.equal(last.tripsState.trips.data?.nextCursor, null);
   assert.equal(update(last, response).model, last);
-  assert.equal(update(last, tripsMessage(TripMessage.NextPage())).model, last);
+  assert.equal(
+    update(last, Features.trips.toParentMessage(TripMessage.NextPage())).model,
+    last,
+  );
 
-  const previous = update(last, tripsMessage(TripMessage.PreviousPage()));
+  const previous = update(
+    last,
+    Features.trips.toParentMessage(TripMessage.PreviousPage()),
+  );
   assert.equal(Trips.tripPageNumber(previous.model.tripsState), 1);
   assert.equal(
     previous.commands?.find(({ name }) => name === "LoadTrips")?.args?.cursor,
@@ -715,7 +733,9 @@ test("application opens Genie, dismisses mobile navigation, and requests focus",
   const model = { ...app("/trips"), mobileNavigation: true };
   const changed = update(
     model,
-    genieMessage(GenieMessage.OpenGenie({ context: null, question: null })),
+    Features.genie.toParentMessage(
+      GenieMessage.OpenGenie({ context: null, question: null }),
+    ),
   );
   assert.equal(changed.model.genieState.genieOpen, true);
   assert.equal(changed.model.mobileNavigation, false);

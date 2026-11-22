@@ -1,5 +1,6 @@
 import { Struct } from "effect";
-import type { Filters, GenieContext } from "../../../../shared/domain";
+import type { GenieContext } from "../../../../shared/genie";
+import type { Filters } from "../../../../shared/filters";
 import { type Model, type Sort, tripPageNumber } from "./model";
 
 export function tripsContext(

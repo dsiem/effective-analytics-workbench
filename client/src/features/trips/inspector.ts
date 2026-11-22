@@ -1,7 +1,7 @@
 import { Dialog, Textarea } from "@foldkit/ui";
 import type { HtmlBuilder } from "foldkit/html";
 import { defineView } from "foldkit/submodel";
-import type { Coordinates } from "../../../../shared/domain";
+import type { Coordinates } from "../../../../shared/trips";
 import { money } from "../../lib/format";
 import { dialog } from "../../ui/dialog";
 import { icon } from "../../ui/icons";
@@ -81,7 +81,7 @@ function inspector(h: H, model: Model) {
                 ]
               : []),
             h.ol(
-              [h.AriaLabel("Trip comments"), h.Class("space-y-3")],
+              [h.AriaLabel("Record comments"), h.Class("space-y-3")],
               rows.map((comment) =>
                 h.li(
                   [h.Key(comment.id), h.Class("rounded-lg border p-3")],
@@ -144,7 +144,7 @@ function inspector(h: H, model: Model) {
         [
           h.h2(
             [h.Id(Dialog.titleId(model.inspectorDialog)), h.Tabindex(-1)],
-            ["Trip details"],
+            ["Record details"],
           ),
         ],
       ),

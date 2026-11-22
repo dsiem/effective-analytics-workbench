@@ -19,7 +19,7 @@ import {
   SqlError,
   UnknownError,
 } from "effect/sql/SqlError";
-import type { SavedView, SavedViewSearch } from "../../shared/domain.js";
+import type { SavedView, SavedViewSearch } from "../../shared/saved-views.js";
 import {
   type ServiceError,
   type WorkspaceRequestError,

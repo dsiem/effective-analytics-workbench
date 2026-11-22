@@ -1,6 +1,7 @@
 import { Dialog, Menu, Tooltip } from "@foldkit/ui";
 import { Schema } from "effect";
-import * as D from "../../../shared/domain";
+import { CurrentUser } from "../../../shared/current-user";
+import { DatasetMetadata } from "../../../shared/dataset";
 import * as AnalysisRuns from "../features/analysis-runs/model";
 import * as Filters from "../features/filters/model";
 import * as Genie from "../features/genie/model";
@@ -20,8 +21,8 @@ export const Model = Schema.Struct({
   mobileNavigation: Schema.Boolean,
   tooltips: Schema.Record(Schema.String, Tooltip.Model),
   navigationDialog: Dialog.Model,
-  metadata: request(D.Metadata),
-  user: Schema.NullOr(D.CurrentUser),
+  metadata: request(DatasetMetadata),
+  user: Schema.NullOr(CurrentUser),
   filtersState: Filters.Model,
   overviewState: Overview.Model,
   tripsState: Trips.Model,
@@ -32,7 +33,7 @@ export const Model = Schema.Struct({
 });
 export type Model = typeof Model.Type;
 export const navigation = [
-  { path: paths.Overview, label: "Overview", icon: "layout-dashboard" },
+  { path: paths.Overview, label: "Trip overview", icon: "layout-dashboard" },
   { path: paths.Trips, label: "Trip explorer", icon: "table-2" },
   { path: paths.TripMap, label: "Trip map", icon: "map" },
   { path: paths.AnalysisRuns, label: "Analysis runs", icon: "activity" },

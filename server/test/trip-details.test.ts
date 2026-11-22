@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { tableFromArrays } from "apache-arrow";
 import { ConfigProvider, Effect, Layer, Redacted } from "effect";
-import type { TripCursor, TripSearch } from "../../shared/domain.js";
+import type { TripCursor, TripSearch } from "../../shared/trips.js";
 import { Analytics } from "../src/analytics.js";
 import { Settings } from "../src/settings.js";
 import { Workspace } from "../src/workspace.js";

@@ -1,6 +1,6 @@
 import { DatePicker } from "@foldkit/ui";
 import { Command, type Update } from "foldkit";
-import type { Filters } from "../../../../shared/domain";
+import type { Filters } from "../../../../shared/filters";
 import { filterError, filtersFromQuery, queryFor } from "../../domain/filters";
 import type { FeatureUpdate } from "../../lib/feature-update";
 import { isoDay } from "../../lib/format";

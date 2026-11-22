@@ -1,10 +1,13 @@
 import { Tabs } from "@foldkit/ui";
 import { Schema } from "effect";
-import * as D from "../../../../shared/domain";
-import { MapCellSummary, MapSummary } from "../../../../shared/map-dataset";
+import {
+  GpsEndpoint,
+  MapCellSummary,
+  MapSummary,
+} from "../../../../shared/map-dataset";
 import { empty, Notice, request } from "../../lib/request-state";
 export const Model = Schema.Struct({
-  endpoint: D.GpsEndpoint,
+  endpoint: GpsEndpoint,
   endpointTabs: Tabs.Model,
   activity: request(MapSummary),
   revision: Schema.Int,
@@ -14,13 +17,13 @@ export const Model = Schema.Struct({
   mapError: Notice,
 });
 export type Model = typeof Model.Type;
-export const endpointName = (endpoint: D.GpsEndpoint) =>
+export const endpointName = (endpoint: GpsEndpoint) =>
   endpoint === "pickup" ? "pickups" : "drop-offs";
-export const dataKey = (query: string, endpoint: D.GpsEndpoint, revision = 0) =>
+export const dataKey = (query: string, endpoint: GpsEndpoint, revision = 0) =>
   JSON.stringify([query, endpoint, revision]);
 export const frameKey = (
   query: string,
-  endpoint: D.GpsEndpoint,
+  endpoint: GpsEndpoint,
   selected: string | null,
   revision = 0,
 ) => JSON.stringify([query, endpoint, selected, revision]);

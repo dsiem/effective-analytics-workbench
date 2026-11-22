@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Schema } from "effect";
-import { GenieContext, type Overview } from "../../shared/domain";
+import { GenieContext } from "../../shared/genie";
+import type { Overview } from "../../shared/overview";
 import {
   dailyChartContext,
   hourlyChartContext,

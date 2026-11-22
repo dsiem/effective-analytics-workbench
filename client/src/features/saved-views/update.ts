@@ -1,7 +1,6 @@
 import { Dialog } from "@foldkit/ui";
 import { Command } from "foldkit";
-import type * as D from "../../../../shared/domain";
-import { queryFor } from "../../domain/filters";
+import { type Filters, sameFilters } from "../../../../shared/filters";
 import { syncDialog } from "../../lib/dialog";
 import type { FeatureUpdate } from "../../lib/feature-update";
 import type * as Browser from "./browser-model";
@@ -157,7 +156,7 @@ function updateSavedViewsState(
             : null,
         selection:
           message.savedView &&
-          queryFor(message.savedView.filters) === queryFor(context.filters)
+          sameFilters(message.savedView.filters, context.filters)
             ? {
                 id: message.savedView.id,
                 title: message.savedView.title,
@@ -264,10 +263,10 @@ function updateSavedViewsState(
   }
 }
 
-export type Context = { readonly filters: D.Filters };
+export type Context = { readonly filters: Filters };
 export type Out = {
   readonly _tag: "RestoreFilters";
-  readonly filters: D.Filters;
+  readonly filters: Filters;
 };
 
 export function updateSavedViews(

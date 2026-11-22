@@ -1,7 +1,7 @@
 import { Dialog } from "@foldkit/ui";
 import { Option } from "effect";
 import { Command } from "foldkit";
-import type { Filters } from "../../../../shared/domain";
+import type { Filters } from "../../../../shared/filters";
 import { syncDialog } from "../../lib/dialog";
 import type { FeatureUpdate } from "../../lib/feature-update";
 import { empty } from "../../lib/request-state";

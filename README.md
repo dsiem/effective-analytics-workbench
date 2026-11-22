@@ -42,7 +42,7 @@ Set up the example and run it locally with your Databricks CLI login.
 | Replace                       | Start here                                                                               |
 | ----------------------------- | ---------------------------------------------------------------------------------------- |
 | Sample data and queries       | [Seed job](jobs/seed-trip-snapshot.sql) and [analytics service](server/src/analytics.ts) |
-| API and data types            | [Shared HTTP contract](shared/api.ts) and [domain schemas](shared/domain.ts)             |
+| API and data types            | [Shared HTTP contract](shared/api.ts) and [schemas by feature](shared/)                  |
 | Filters and views             | [Foldkit features](client/src/features)                                                  |
 | Genie tables and instructions | [Genie resource](resources/genie.yml)                                                    |
 | Route analysis                | [Route reliability SQL](jobs/route-reliability.sql)                                      |

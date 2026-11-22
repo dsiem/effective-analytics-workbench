@@ -5,6 +5,7 @@ import { filterSummary } from "../domain/filter-summary";
 import { filterError, href, queryFor } from "../domain/filters";
 import { withoutRun } from "../features/analysis-runs/model";
 import { analysisRunsView } from "../features/analysis-runs/view";
+import { Message as FilterMessage } from "../features/filters/messages";
 import { filterFields } from "../features/filters/view";
 import { genieHelperView, genieView } from "../features/genie/view";
 import { gpsMapView } from "../features/gps/view";
@@ -22,13 +23,8 @@ import { filterPanel } from "../ui/filter-panel";
 import { icon } from "../ui/icons";
 import { button, type Child, card } from "../ui/primitives";
 import { pageContext } from "./analysis-context";
-import {
-  analysisRunsMessage,
-  genieMessage,
-  tripsMessage,
-  Message as M,
-  savedViewsMessage,
-} from "./message";
+import * as Features from "./features";
+import { Message as M } from "./message";
 import { type Model, navigation } from "./model";
 import { paths, routePath, showsExplore } from "./route";
 import { themeSelector } from "./theme-view";
@@ -200,7 +196,7 @@ function filters(h: H, model: Model) {
   const hasChanges =
     !applied || queryFor(model.filtersState.filterDraft) !== queryFor(applied);
   return filterPanel(h, {
-    label: "Trip filters",
+    label: "Filters",
     viewPicker: h.submodel({
       slotId: "saved-views-picker",
       view: savedViewsView,
@@ -209,20 +205,28 @@ function filters(h: H, model: Model) {
         filters: applied ?? {},
         canSave: !!applied && !hasChanges,
       },
-      toParentMessage: savedViewsMessage,
+      toParentMessage: Features.savedViews.toParentMessage,
     }),
     fields: filterFields(h, {
       draft: model.filtersState.filterDraft,
       datePickers: model.filtersState.datePickers,
-      onDateMessage: (field, message) => M.FilterDatePicker({ field, message }),
-      onChange: (field, value) => M.FilterChanged({ field, value }),
+      onDateMessage: (field, message) =>
+        Features.filters.toParentMessage(
+          FilterMessage.FilterDatePicker({ field, message }),
+        ),
+      onChange: (field, value) =>
+        Features.filters.toParentMessage(
+          FilterMessage.FilterChanged({ field, value }),
+        ),
     }),
     saveAction: button(h, {
       label: h.span(
         [h.Class("inline-flex items-center gap-2")],
         [icon(h, "plus"), "Save view"],
       ),
-      onClick: savedViewsMessage(SavedViewMessage.NewSavedView()),
+      onClick: Features.savedViews.toParentMessage(
+        SavedViewMessage.NewSavedView(),
+      ),
       disabled: !applied || hasChanges,
       attributes: [
         h.Attribute(
@@ -233,8 +237,14 @@ function filters(h: H, model: Model) {
         ),
       ],
     }),
-    onApply: M.ApplyFilters(),
-    ...(query || hasChanges ? { onReset: M.ResetFilters() } : {}),
+    onApply: Features.filters.toParentMessage(FilterMessage.ApplyFilters()),
+    ...(query || hasChanges
+      ? {
+          onReset: Features.filters.toParentMessage(
+            FilterMessage.ResetFilters(),
+          ),
+        }
+      : {}),
     hasChanges,
     ...(applied ? { appliedSummary: filterSummary(h, applied) } : {}),
     error: model.filtersState.error,
@@ -254,7 +264,9 @@ export function view(model: Model, h: H): Document {
           h.p([h.Class("muted text-sm mt-3 mb-5")], [filterError]),
           button(h, {
             label: "Clear invalid filters",
-            onClick: M.ResetFilters(),
+            onClick: Features.filters.toParentMessage(
+              FilterMessage.ResetFilters(),
+            ),
           }),
         ],
         "p-8",
@@ -305,7 +317,7 @@ export function view(model: Model, h: H): Document {
             view: analysisRunsView,
             model: model.analysisRunsState,
             viewInputs: { query },
-            toParentMessage: analysisRunsMessage,
+            toParentMessage: Features.analysisRuns.toParentMessage,
           }),
         ];
         break;
@@ -320,7 +332,7 @@ export function view(model: Model, h: H): Document {
               mobile: model.mobile,
               filters: applied,
             },
-            toParentMessage: genieMessage,
+            toParentMessage: Features.genie.toParentMessage,
           }),
         ];
         break;
@@ -422,7 +434,7 @@ export function view(model: Model, h: H): Document {
                   mobile: model.mobile,
                   filters: applied,
                 },
-                toParentMessage: genieMessage,
+                toParentMessage: Features.genie.toParentMessage,
               }),
             ]
           : []),
@@ -445,7 +457,7 @@ export function view(model: Model, h: H): Document {
                 model: {
                   ...model.tripsState,
                 },
-                toParentMessage: tripsMessage,
+                toParentMessage: Features.trips.toParentMessage,
               }),
             ]
           : []),
@@ -455,7 +467,7 @@ export function view(model: Model, h: H): Document {
                 slotId: "deleteDialog",
                 view: deleteDialogView,
                 model: model.savedViewsState,
-                toParentMessage: savedViewsMessage,
+                toParentMessage: Features.savedViews.toParentMessage,
               }),
             ]
           : []),
@@ -465,7 +477,7 @@ export function view(model: Model, h: H): Document {
                 slotId: "editor",
                 view: editorView,
                 model: model.savedViewsState,
-                toParentMessage: savedViewsMessage,
+                toParentMessage: Features.savedViews.toParentMessage,
               }),
             ]
           : []),

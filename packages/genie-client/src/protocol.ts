@@ -19,3 +19,42 @@ export const decode = <A>(schema: Schema.Decoder<A>, value: unknown) =>
   Schema.decodeUnknownEffect(schema)(value).pipe(
     Effect.mapError((cause) => new GenieResponseError({ cause })),
   );
+
+export const GenieOperation = Schema.Struct({
+  conversationId: GenieId,
+  messageId: GenieId,
+});
+export type GenieOperation = typeof GenieOperation.Type;
+
+export const GenieProgress = Schema.Struct({
+  ...GenieOperation.fields,
+  state: Schema.Literals(["pending", "completed", "failed"]),
+  status: Schema.String,
+});
+export type GenieProgress = typeof GenieProgress.Type;
+
+export class GeniePermissionDenied extends Data.TaggedError(
+  "GeniePermissionDenied",
+)<{
+  readonly source: "warehouse" | "query";
+}> {}
+
+export interface GenieQueryReference extends GenieOperation {
+  readonly attachmentId: string;
+}
+
+export const chatPaths = (spaceId: string) => {
+  const space = `/api/2.0/genie/spaces/${encodeURIComponent(spaceId)}`;
+  const messages = (conversationId: string) =>
+    `${space}/conversations/${encodeURIComponent(conversationId)}/messages`;
+  const message = ({ conversationId, messageId }: GenieOperation) =>
+    `${messages(conversationId)}/${encodeURIComponent(messageId)}`;
+  const attachment = (reference: GenieQueryReference) =>
+    `${message(reference)}/attachments/${encodeURIComponent(reference.attachmentId)}`;
+  return {
+    startConversation: `${space}/start-conversation`,
+    messages,
+    message,
+    attachment,
+  };
+};

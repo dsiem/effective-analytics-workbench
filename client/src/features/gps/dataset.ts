@@ -1,7 +1,8 @@
-import type { GpsCell, TripMap } from "../../../../shared/domain.js";
 import type {
+  GpsCell,
   MapCellSummary,
   MapSummary,
+  TripMap,
 } from "../../../../shared/map-dataset.js";
 
 export const activityBucket = (trips: number, maximum: number) =>

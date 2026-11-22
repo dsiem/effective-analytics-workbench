@@ -10,6 +10,10 @@ This project is independently maintained and is not affiliated with or endorsed 
 
 Run `npm run build --workspace @dsiem/genie-client` at the repository root.
 
+Use `GenieAnswer` as the parameter type for code that displays results from
+both modes. It contains the attachments in response order and an optional
+warning with the number of unsupported attachments.
+
 ## Chat mode
 
 Pass a Genie space ID and a `request` function that sends authenticated

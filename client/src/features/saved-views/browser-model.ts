@@ -1,9 +1,9 @@
 import { Popover } from "@foldkit/ui";
 import { Schema } from "effect";
-import * as D from "../../../../shared/domain";
+import { SavedView, SavedViewsPage } from "../../../../shared/saved-views";
 import { empty, request } from "../../lib/request-state";
 
-export const RecentIds = Schema.Array(D.SavedView.fields.id).check(
+export const RecentIds = Schema.Array(SavedView.fields.id).check(
   Schema.isMaxLength(5),
 );
 export const PickerMode = Schema.Union([
@@ -12,11 +12,11 @@ export const PickerMode = Schema.Union([
   Schema.TaggedStruct("Search", { query: Schema.String }),
 ]);
 export const Shortcuts = Schema.Struct({
-  rows: Schema.Array(D.SavedView),
-  recents: Schema.Array(D.SavedView),
+  rows: Schema.Array(SavedView),
+  recents: Schema.Array(SavedView),
 });
 export const Model = Schema.Struct({
-  savedViews: request(D.SavedViewsPage),
+  savedViews: request(SavedViewsPage),
   savedViewPages: Schema.Number,
   pickerMode: PickerMode,
   searchVersion: Schema.Number,

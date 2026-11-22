@@ -1,5 +1,4 @@
-import type { GpsEndpoint } from "../../../../shared/domain";
-import type { MapSummary } from "../../../../shared/map-dataset";
+import type { GpsEndpoint, MapSummary } from "../../../../shared/map-dataset";
 import { compact, money, number } from "../../lib/format";
 import { button, card } from "../../ui/primitives";
 import { endpointName, type Model } from "./model";
@@ -168,13 +167,7 @@ export function mapInsights(h: H, model: Model) {
       h.AriaBusy(model.activity.loading),
     ],
     model.activity.loading
-      ? [
-          card(
-            h,
-            [h.p([h.Class("muted text-sm")], ["Updating trip map…"])],
-            "p-5",
-          ),
-        ]
+      ? [card(h, [h.p([h.Class("muted text-sm")], ["Updating map…"])], "p-5")]
       : [
           tripCoverage(h, model.endpoint, model.activity.data),
           selectedArea(h, model.selectedCell),

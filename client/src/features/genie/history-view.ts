@@ -1,5 +1,5 @@
 import { Lexer } from "marked";
-import type { GenieReply } from "../../../../shared/domain";
+import type { GenieReply } from "../../../../shared/genie";
 import { filterSummary } from "../../domain/filter-summary";
 import { icon } from "../../ui/icons";
 import { alert, button, type Child, table } from "../../ui/primitives";

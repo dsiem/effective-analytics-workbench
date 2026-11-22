@@ -1,13 +1,13 @@
 import { DatePicker } from "@foldkit/ui";
 import { Option } from "effect";
 import { Calendar } from "foldkit";
-import type { Metadata } from "../../../../shared/domain";
+import type { DatasetMetadata } from "../../../../shared/dataset";
 import { calendarDay } from "../../lib/format";
 import type { Model, WeekField } from "./model";
 
 export function withMetadata(
   model: Model,
-  metadata: typeof Metadata.Type | null,
+  metadata: typeof DatasetMetadata.Type | null,
   today: Calendar.CalendarDate,
 ): Model {
   const from = calendarDay(metadata?.from);

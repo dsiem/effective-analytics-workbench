@@ -1,10 +1,11 @@
 import { Effect, Option, Schema, Stream } from "effect";
 import { Sse } from "effect/encoding";
-import type { GenieAttachment, GenieProgress } from "./index.js";
+import type { GenieAnswer, GenieAttachment } from "./answer.js";
 import {
   decode,
   GenieId,
   GenieMessageUnavailable,
+  type GenieProgress,
   GenieResponseError,
 } from "./protocol.js";
 
@@ -336,7 +337,8 @@ export const makeGenieAgentClient = <
           });
         }
       }
-      return { ...operation, attachments };
+      return { ...operation, attachments } satisfies GenieAgentOperation &
+        GenieAnswer;
     }).pipe(Effect.withSpan("genie.agent.result"));
 
   return { submit, poll, cancel, result };

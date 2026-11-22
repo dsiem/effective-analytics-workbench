@@ -1,7 +1,11 @@
 import { Effect, Schema } from "effect";
 import { Command } from "foldkit";
 import * as Dom from "foldkit/dom";
-import * as D from "../../../../shared/domain";
+import {
+  SavedView,
+  SavedViewCursor,
+  SavedViewInput,
+} from "../../../../shared/saved-views";
 import { request } from "../../lib/api-client";
 import { result } from "../../lib/command-result";
 import { Message as M } from "./messages";
@@ -44,7 +48,7 @@ export const PersistRecentSavedViews = Command.define(
 export const RememberRecentSavedView = Command.define(
   "RememberRecentSavedView",
   {
-    args: { id: D.SavedView.fields.id, fallback: RecentIds },
+    args: { id: SavedView.fields.id, fallback: RecentIds },
     messages: [M.Idle],
     execute: ({ id, fallback }) =>
       Effect.sync(() => {
@@ -61,7 +65,7 @@ export const LoadSavedViewShortcuts = Command.define("LoadSavedViewShortcuts", {
   args: {
     version: Schema.Number,
     fallback: RecentIds,
-    removedId: Schema.NullOr(D.SavedView.fields.id),
+    removedId: Schema.NullOr(SavedView.fields.id),
   },
   messages: [M.LoadedSavedViewShortcuts],
   execute: ({ version, fallback, removedId }) =>
@@ -101,7 +105,7 @@ export const NewSavedView = Command.define("CreateSavedViewDraft", {
     Effect.sync(() => M.CreatedSavedView({ id: crypto.randomUUID() })),
 });
 export const SaveSavedView = Command.define("SaveSavedView", {
-  args: { draft: D.SavedViewInput },
+  args: { draft: SavedViewInput },
   messages: [M.SavedViewSaved],
   execute: ({ draft }) =>
     result(
@@ -118,7 +122,7 @@ export const SaveSavedView = Command.define("SaveSavedView", {
 });
 export const LoadSavedViews = Command.define("LoadSavedViews", {
   args: {
-    cursor: Schema.NullOr(D.SavedViewCursor),
+    cursor: Schema.NullOr(SavedViewCursor),
     pages: Schema.Number,
     more: Schema.Boolean,
     query: Schema.String,
@@ -132,7 +136,7 @@ export const LoadSavedViews = Command.define("LoadSavedViews", {
       Effect.gen(function* () {
         if (debounce) yield* Effect.sleep("180 millis");
         let next = cursor;
-        const rows: D.SavedView[] = [];
+        const rows: SavedView[] = [];
         for (let page = 0; page < pages; page++) {
           const response = yield* request((client) =>
             client.savedViews({
@@ -155,7 +159,7 @@ export const LoadSavedViews = Command.define("LoadSavedViews", {
     ),
 });
 export const PinSavedView = Command.define("PinSavedView", {
-  args: { savedView: D.SavedView },
+  args: { savedView: SavedView },
   messages: [M.MutatedSavedView],
   execute: ({ savedView }) =>
     result(
@@ -170,7 +174,7 @@ export const PinSavedView = Command.define("PinSavedView", {
     ),
 });
 export const DeleteSavedView = Command.define("DeleteSavedView", {
-  args: { savedView: D.SavedView },
+  args: { savedView: SavedView },
   messages: [M.MutatedSavedView],
   execute: ({ savedView }) =>
     result(

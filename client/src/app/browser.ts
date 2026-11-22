@@ -1,13 +1,9 @@
-import { Effect, Option, Queue, Stream } from "effect";
+import { Effect, Queue, Stream } from "effect";
 import { Subscription } from "foldkit";
 import { subscriptions as analysisSubscriptions } from "../features/analysis-runs/subscription";
 import { subscriptions as genieSubscriptions } from "../features/genie/subscription";
-import {
-  analysisRunsMessage,
-  genieMessage,
-  Message as M,
-  type Message,
-} from "./message";
+import * as Features from "./features";
+import { Message as M, type Message } from "./message";
 import type { Model } from "./model";
 import { systemThemeQuery } from "./theme";
 
@@ -54,12 +50,8 @@ const appSubscriptions = Subscription.make<Model, Message>()((entry) => ({
 export const subscriptions = Subscription.aggregate(
   appSubscriptions,
   Subscription.lift(analysisSubscriptions)<Model, Message>({
-    read: (model) => Option.some(model.analysisRunsState),
-    toParentMessage: analysisRunsMessage,
+    ...Features.analysisRuns,
     when: (model) => model.location.route._tag === "AnalysisRuns",
   }),
-  Subscription.lift(genieSubscriptions)<Model, Message>({
-    read: (model) => Option.some(model.genieState),
-    toParentMessage: genieMessage,
-  }),
+  Subscription.lift(genieSubscriptions)<Model, Message>(Features.genie),
 );

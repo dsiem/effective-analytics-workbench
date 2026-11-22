@@ -2,7 +2,12 @@ import { Notice } from "../../lib/request-state";
 import { Dialog } from "@foldkit/ui";
 import { Schema } from "effect";
 import { defineMessageUnion } from "foldkit/message";
-import * as D from "../../../../shared/domain";
+import {
+  TripCommentCounts,
+  TripCommentInput,
+  TripComments,
+} from "../../../../shared/trip-comments";
+import { TripSnapshot, Trips } from "../../../../shared/trips";
 import { Sort } from "./model";
 
 export const messages = {
@@ -11,30 +16,30 @@ export const messages = {
   InspectorDialog: { message: Dialog.Message },
   LoadedTrips: {
     generation: Schema.Int,
-    data: Schema.NullOr(D.Trips),
+    data: Schema.NullOr(Trips),
     error: Notice,
   },
   NextPage: {},
   PreviousPage: {},
   SortTrips: { sort: Sort },
-  InspectTrip: { trip: D.TripSnapshot },
-  InspectComments: { trip: D.TripSnapshot },
+  InspectTrip: { trip: TripSnapshot },
+  InspectComments: { trip: TripSnapshot },
   LoadedCommentCounts: {
     version: Schema.Number,
-    data: Schema.NullOr(D.TripCommentCounts),
+    data: Schema.NullOr(TripCommentCounts),
     error: Notice,
   },
   LoadComments: { more: Schema.Boolean },
   LoadedComments: {
     tripId: Schema.String,
     generation: Schema.Int,
-    data: Schema.NullOr(D.TripComments),
+    data: Schema.NullOr(TripComments),
     error: Notice,
     more: Schema.Boolean,
   },
   CommentChanged: { body: Schema.String },
   PostComment: {},
-  PostedComment: { input: D.TripCommentInput, error: Notice },
+  PostedComment: { input: TripCommentInput, error: Notice },
 };
 
 export const Message = defineMessageUnion({ Idle: {}, ...messages });

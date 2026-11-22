@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import type { CurrentUser } from "../../shared/domain.js";
+import type { CurrentUser } from "../../shared/current-user.js";
 import { Settings } from "./settings.js";
 import { Workspace } from "./workspace.js";
 

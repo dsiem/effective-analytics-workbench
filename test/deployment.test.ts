@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import { gpsFixture } from "../client/test/gps-fixture.js";
-import type { SavedView } from "../shared/domain.js";
+import type { SavedView } from "../shared/saved-views.js";
 
 const run = promisify(execFile);
 

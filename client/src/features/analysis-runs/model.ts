@@ -9,7 +9,7 @@ import {
   AnalysisRunSummary,
   RouteReliabilityReport,
 } from "../../../../shared/analysis-runs";
-import { Id } from "../../../../shared/domain";
+import { Id } from "../../../../shared/schema";
 import { href } from "../../domain/filters";
 import { Notice, request } from "../../lib/request-state";
 

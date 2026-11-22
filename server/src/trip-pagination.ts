@@ -1,6 +1,7 @@
 import { Schema, Struct } from "effect";
 import type { Fragment } from "effect/sql/Statement";
 import type { DatabricksClient } from "@dsiem/sql-warehouse";
+import { pageWindow } from "../../shared/cursor-page.js";
 import {
   Trip,
   TripDetails,
@@ -8,10 +9,11 @@ import {
   tripPageSize,
   type TripCursor,
   type Trips,
-} from "../../shared/domain.js";
+} from "../../shared/trips.js";
 
 type Sql = DatabricksClient.DatabricksClient;
 type SortKey = Exclude<keyof TripPosition, "trip_id">;
+const page = pageWindow(tripPageSize);
 export const tripZip = (sql: Sql, key: "pickup_zip" | "dropoff_zip") =>
   sql`COALESCE(CAST(${sql(key)} AS STRING), 'Unknown')`;
 const timeKeys: readonly SortKey[] = ["pickup_at", "dropoff_at"];
@@ -50,7 +52,7 @@ export function tripPageWindow(
       ? sql`${columns[key]} DESC NULLS LAST`
       : sql`${columns[key]} ASC NULLS FIRST`,
   );
-  const window = sql`ORDER BY ${sql.csv([...order, sql`trip_id ASC`])} LIMIT ${sql.param("INT", String(tripPageSize + 1))}`;
+  const window = sql`ORDER BY ${sql.csv([...order, sql`trip_id ASC`])} LIMIT ${sql.param("INT", String(page.fetchLimit))}`;
   if (!after) return window;
 
   // At the first unequal key the row must sort later. The unique ID breaks a complete tie.
@@ -86,19 +88,16 @@ export function formatTripPage(
   total: number,
   scope: Pick<TripCursor, "sort" | "filters">,
 ): typeof Trips.Type {
-  const page = rows.slice(0, tripPageSize);
-  const last = page.at(-1);
   return {
-    rows: page.map((row) => ({
-      ...row,
-      distance: row.distance ?? 0,
-      fare: row.fare ?? 0,
-    })),
+    ...page.fromRows(rows, {
+      row: (trip) => ({
+        ...trip,
+        distance: trip.distance ?? 0,
+        fare: trip.fare ?? 0,
+      }),
+      cursor: (trip) => ({ ...scope, after: Struct.pick(trip, positionKeys) }),
+    }),
     total,
     pageSize: tripPageSize,
-    nextCursor:
-      rows.length > tripPageSize && last
-        ? { ...scope, after: Struct.pick(last, positionKeys) }
-        : null,
   };
 }

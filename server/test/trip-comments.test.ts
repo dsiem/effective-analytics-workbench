@@ -4,10 +4,10 @@ import { test } from "node:test";
 import { Effect, Schema } from "effect";
 import * as Reactivity from "effect/reactivity/Reactivity";
 import {
-  type TripSnapshot,
   TripCommentInput,
   type TripCommentSearch,
-} from "../../shared/domain.js";
+} from "../../shared/trip-comments.js";
+import type { TripSnapshot } from "../../shared/trips.js";
 import { initializeAppSchema } from "../src/lakebase-schema.js";
 import { lakebaseFixture } from "./lakebase-fixture.js";
 

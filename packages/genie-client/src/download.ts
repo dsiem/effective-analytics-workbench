@@ -1,10 +1,5 @@
 import { Clock, Data, Effect, Schema, Stream } from "effect";
-import type { GenieOperation } from "./index.js";
-import { GenieId } from "./protocol.js";
-
-export interface GenieQueryReference extends GenieOperation {
-  readonly attachmentId: string;
-}
+import { chatPaths, GenieId, type GenieQueryReference } from "./protocol.js";
 
 export type GenieDownloadRequest =
   | { readonly kind: "start"; readonly method: "POST"; readonly path: string }
@@ -81,7 +76,7 @@ export const makeGenieDownloadClient = <E, R>(options: {
 }) => {
   const fetch = options.fetch ?? globalThis.fetch;
   const request = options.request;
-  const space = `/api/2.0/genie/spaces/${encodeURIComponent(options.spaceId)}`;
+  const paths = chatPaths(options.spaceId);
 
   const storageUrl = (link: string) =>
     Effect.try({
@@ -152,7 +147,7 @@ export const makeGenieDownloadClient = <E, R>(options: {
 
   const download = (reference: GenieQueryReference) =>
     Effect.gen(function* () {
-      const path = `${space}/conversations/${encodeURIComponent(reference.conversationId)}/messages/${encodeURIComponent(reference.messageId)}/attachments/${encodeURIComponent(reference.attachmentId)}/downloads`;
+      const path = `${paths.attachment(reference)}/downloads`;
       const started = yield* request({
         kind: "start",
         method: "POST",

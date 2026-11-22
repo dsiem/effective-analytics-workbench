@@ -14,9 +14,8 @@ import {
   AnalysisSubmission,
   RouteReliabilityReport,
 } from "./analysis-runs.js";
+import { CurrentUser } from "./current-user.js";
 import {
-  CurrentUser,
-  Filters,
   GenieAgentPath,
   GenieInput,
   GenieModeQuery,
@@ -26,24 +25,27 @@ import {
   GenieQueryPath,
   GenieProgress,
   GenieReply,
-  GpsSearch,
-  Metadata,
-  Overview,
+} from "./genie.js";
+import { GpsSearch, TripMap } from "./map-dataset.js";
+import { Overview } from "./overview.js";
+import {
   SavedView,
   SavedViewInput,
   SavedViewPin,
   SavedViewSearch,
   SavedViewsPage,
+} from "./saved-views.js";
+import {
   TripComment,
   TripCommentCountSearch,
   TripCommentCounts,
   TripCommentInput,
   TripCommentSearch,
   TripComments,
-  TripMap,
-  TripSearch,
-  Trips,
-} from "./domain.js";
+} from "./trip-comments.js";
+import { Filters } from "./filters.js";
+import { DatasetMetadata } from "./dataset.js";
+import { TripSearch, Trips } from "./trips.js";
 
 const errorBody = <S extends Schema.Top>(code: S, status: number) =>
   Schema.Struct({
@@ -119,8 +121,6 @@ export class ApiBoundary extends HttpApiMiddleware.Service<ApiBoundary>()(
   {},
 ) {}
 
-export const genieResultTimeoutMs = 180_000;
-
 const warehouseErrors = [
   PermissionDeniedBody,
   UnavailableBody,
@@ -162,7 +162,7 @@ export const AppApi = HttpApi.make("taxi").add(
         success: Schema.NullOr(CurrentUser),
       }),
       HttpApiEndpoint.get("metadata", "/api/metadata", {
-        success: Metadata,
+        success: DatasetMetadata,
         error: warehouseErrors,
       }),
       HttpApiEndpoint.get("overview", "/api/overview", {

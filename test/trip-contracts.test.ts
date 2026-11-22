@@ -5,11 +5,10 @@ import { FetchHttpClient } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { AppApi } from "../shared/api.js";
 import {
-  Trip,
   TripCommentInput,
   TripCommentSearch,
-  TripSnapshot,
-} from "../shared/domain.js";
+} from "../shared/trip-comments.js";
+import { Trip, TripSnapshot } from "../shared/trips.js";
 
 const historical: TripSnapshot = {
   trip_id: "00000000-0000-4000-8000-000000000001",

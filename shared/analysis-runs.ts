@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Day, Id, Zip } from "./domain.js";
+import { Day, Id, Zip } from "./schema.js";
 
 export const AnalysisRunId = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),

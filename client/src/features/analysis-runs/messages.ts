@@ -9,7 +9,7 @@ import {
   AnalysisRunSummary,
   RouteReliabilityReport,
 } from "../../../../shared/analysis-runs";
-import { Id } from "../../../../shared/domain";
+import { Id } from "../../../../shared/schema";
 import { Selection, WeekField } from "./model";
 
 const messages = {

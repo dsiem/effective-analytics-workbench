@@ -1,14 +1,14 @@
 import { Schema } from "effect";
 import type { HtmlBuilder } from "foldkit/html";
-import * as D from "../../../shared/domain";
+import { GenieContext } from "../../../shared/genie";
 import { icon } from "../ui/icons";
 import { button } from "../ui/primitives";
 
 export const ask = <Message>(
   h: HtmlBuilder<Message>,
-  onOpen: (context: D.GenieContext | null, question: string | null) => Message,
+  onOpen: (context: GenieContext | null, question: string | null) => Message,
   label = "Ask Genie",
-  context: D.GenieContext | null = null,
+  context: GenieContext | null = null,
   question: string | null = null,
 ) =>
   button(h, {
@@ -21,6 +21,6 @@ export const ask = <Message>(
 
 // A request to analyze displayed data; the application chooses its recipient.
 export const analysisRequest = {
-  context: Schema.NullOr(D.GenieContext),
+  context: Schema.NullOr(GenieContext),
   question: Schema.NullOr(Schema.String),
 };

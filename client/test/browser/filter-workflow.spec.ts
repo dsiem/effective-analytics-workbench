@@ -15,7 +15,7 @@ for (const width of [360, 768, 1024, 1440]) {
         `/trips${populated ? "?from=2016-01-10&to=2016-02-20&zip=10001" : ""}`,
       );
       const form = page.getByRole("form", {
-        name: "Trip filters",
+        name: "Filters",
         exact: true,
       });
       await expect(form.getByLabel("Pickup start date")).toBeVisible();
@@ -130,7 +130,7 @@ test("pending edits must be applied before saving and the saved view keeps those
     });
   });
   await page.goto("/trips?zip=10001");
-  const form = page.getByRole("form", { name: "Trip filters" });
+  const form = page.getByRole("form", { name: "Filters" });
   await expect(
     form.getByRole("button", { name: "Apply", exact: true }),
   ).toBeDisabled();
@@ -215,7 +215,7 @@ test("opening an already-applied view discards unapplied edits even when its URL
   ).not.toBeVisible();
   await expect(
     page
-      .getByRole("form", { name: "Trip filters" })
+      .getByRole("form", { name: "Filters" })
       .getByRole("button", { name: "Save view", exact: true }),
   ).toBeEnabled();
 });

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, type Page, test } from "@playwright/test";
 import { Schema } from "effect";
-import { SavedViewsPage } from "../../../shared/domain";
+import { SavedViewsPage } from "../../../shared/saved-views";
 
 const pickupDate = process.env.DATABRICKS_APP_TEST_DATE ?? "2016-01-15";
 const date = new URLSearchParams({
@@ -50,7 +50,7 @@ test("filters and pages live trip records and opens their source details", async
     .first()
     .click();
   const details = page.getByRole("dialog", {
-    name: "Trip details",
+    name: "Record details",
     exact: true,
   });
   await details.getByText("Source details", { exact: true }).click();

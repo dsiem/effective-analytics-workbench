@@ -1,10 +1,10 @@
 import { Tabs } from "@foldkit/ui";
 import { Schema } from "effect";
-import * as D from "../../../../shared/domain";
+import { Overview } from "../../../../shared/overview";
 import { empty, request } from "../../lib/request-state";
 export const Model = Schema.Struct({
   metricTabs: Tabs.Model,
-  overview: request(D.Overview),
+  overview: request(Overview),
   loadGeneration: Schema.Int,
   series: Schema.Literals(["trips", "revenue"]),
 });

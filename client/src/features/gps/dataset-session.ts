@@ -1,5 +1,5 @@
-import type { Filters, GpsEndpoint } from "../../../../shared/domain";
-import type { MapSummary } from "../../../../shared/map-dataset";
+import type { GpsEndpoint, MapSummary } from "../../../../shared/map-dataset";
+import type { Filters } from "../../../../shared/filters";
 import type { MapResource } from "./dataset";
 import { dataKey } from "./model";
 

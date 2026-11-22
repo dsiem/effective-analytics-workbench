@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { SavedView } from "../../../shared/domain";
+import type { SavedView } from "../../../shared/saved-views";
 
 const original: SavedView = {
   id: "472a6613-2337-4af1-a416-e9b6b61064dd",
