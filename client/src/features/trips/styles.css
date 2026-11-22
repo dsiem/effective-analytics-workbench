@@ -25,7 +25,7 @@
     width: 1%;
     padding-inline: 0.5rem;
     background: var(--surface);
-    box-shadow: -1px 0 var(--row-border);
+    box-shadow: var(--trip-actions-shadow, -1px 0 var(--row-border));
   }
   .trip-records .table-scroll th:last-child {
     z-index: 2;
@@ -76,32 +76,11 @@
     min-width: 2.75rem;
     min-height: 2.75rem;
   }
-  .trip-records .trip-table-compact {
-    --trip-row-height: 3.5rem;
-  }
-  .trip-records .trip-table-compact :is(th, td) {
-    padding-inline: 0.5rem;
-  }
-  .trip-records .trip-table-compact :is(th, td):first-child {
-    padding-inline-start: 0.75rem;
-  }
-  .trip-records .trip-table-compact :is(th, td):last-child {
-    position: static;
-    box-shadow: none;
-  }
-  .trip-records .trip-table-compact .trip-details-button {
-    min-width: 2.75rem;
-  }
-  .trip-compact-summary {
-    display: grid;
-    gap: 0.125rem;
-    font-weight: 500;
-  }
-  .trip-compact-summary time {
-    color: var(--muted);
-    font-size: 0.6875rem;
-    font-weight: 400;
-    white-space: normal;
+  @media (max-width: 767px) {
+    .trip-records .table-scroll[data-more-columns] {
+      --trip-actions-shadow:
+        -1px 0 var(--row-border), -0.375rem 0 0.5rem -0.25rem rgb(0 0 0 / 0.22);
+    }
   }
   .trip-refine {
     padding: 0.75rem 1.25rem;

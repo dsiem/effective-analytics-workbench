@@ -20,6 +20,10 @@ export const RecordsViewport = Mount.defineStream("RecordsViewport", {
         let last: Scrolled["viewport"] | undefined;
         const report = () => {
           if (!live) return;
+          element.toggleAttribute(
+            "data-more-columns",
+            element.scrollWidth - element.clientWidth - element.scrollLeft > 1,
+          );
           const rowHeight =
             body.querySelector(rowSelector)?.getBoundingClientRect().height ??
             0;

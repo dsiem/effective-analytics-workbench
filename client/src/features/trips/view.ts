@@ -56,7 +56,6 @@ function tripRow(
   index: number,
   counts: Model["commentCounts"],
   tabbable: boolean,
-  compact: boolean,
 ) {
   const count = Object.hasOwn(counts.data, trip.trip_id)
     ? counts.data[trip.trip_id]
@@ -69,25 +68,13 @@ function tripRow(
           ? "Comment count unavailable"
           : "View comments"
       : `${number(count)} ${count === 1 ? "comment" : "comments"}`;
-  const route = `${trip.pickup_zip} → ${trip.dropoff_zip}`;
-  const fare = money(trip.fare, 2);
   const cells = [
-    ...(compact
-      ? [
-          h.div(
-            [h.Class("trip-compact-summary")],
-            [h.span([], [route]), h.time([], [trip.pickup_at])],
-          ),
-          fare,
-        ]
-      : [
-          trip.pickup_at,
-          route,
-          trip.dropoff_at,
-          `${trip.distance.toFixed(2)} mi`,
-          `${trip.duration.toFixed(1)} min`,
-          fare,
-        ]),
+    trip.pickup_at,
+    `${trip.pickup_zip} → ${trip.dropoff_zip}`,
+    trip.dropoff_at,
+    `${trip.distance.toFixed(2)} mi`,
+    `${trip.duration.toFixed(1)} min`,
+    money(trip.fare, 2),
     h.div(
       [h.Class("trip-row-actions")],
       [
@@ -132,28 +119,21 @@ function tripRow(
   );
 }
 
-function tripTable(
-  h: H,
-  model: Model,
-  rows: readonly TripSummary[],
-  compact: boolean,
-) {
+function tripTable(h: H, model: Model, rows: readonly TripSummary[]) {
   const window = tripWindow(rows.length, model.viewport);
-  const headers = compact
-    ? ["Trip", "Fare"]
-    : [
-        "Pickup time",
-        "Route · ZIP codes",
-        "Drop-off time",
-        "Distance",
-        "Duration",
-        "Fare",
-      ];
-  const columns = [...headers, h.span([h.Class("sr-only")], ["Trip actions"])];
+  const columns = [
+    "Pickup time",
+    "Route · ZIP codes",
+    "Drop-off time",
+    "Distance",
+    "Duration",
+    "Fare",
+    "Comments",
+  ];
   return h.div(
     [
       h.Key(`records-${model.loadGeneration}`),
-      h.Class(compact ? "table-scroll trip-table-compact" : "table-scroll"),
+      h.Class("table-scroll"),
       h.Role("region"),
       h.AriaLabel("Scrollable trip records"),
       h.Tabindex(0),
@@ -195,7 +175,6 @@ function tripTable(
                   index,
                   model.commentCounts,
                   index >= window.tabStart && index < window.tabEnd,
-                  compact,
                 );
               }),
               ...spacer(
@@ -330,7 +309,7 @@ function trips(
             sortControl(h, model.sortMenu, sort, mobile),
           ],
         ),
-        ...(rows.length ? [tripTable(h, model, rows, mobile)] : []),
+        ...(rows.length ? [tripTable(h, model, rows)] : []),
         ...(previewFailed || countError
           ? [
               h.div(

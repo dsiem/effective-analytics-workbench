@@ -33,15 +33,15 @@ test("compact Records shows trip details and a sort menu within a phone viewport
     name: "Matching trips",
     exact: true,
   });
-  await expect(table.getByText("10001 → 10019")).toBeVisible();
-  await expect(table.getByText("$12.00")).toBeVisible();
-  await expect(table.getByText(trip.pickup_at)).toBeVisible();
-  const scroll = page.getByRole("region", { name: "Scrollable trip records" });
-  expect(
-    await scroll.evaluate(
-      (element) => element.scrollWidth <= element.clientWidth,
-    ),
-  ).toBe(true);
+  await expect(table.getByRole("row").last().getByRole("cell")).toHaveText([
+    trip.pickup_at,
+    "10001 → 10019",
+    trip.dropoff_at,
+    "3.00 mi",
+    "15.0 min",
+    "$12.00",
+    "0",
+  ]);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -80,6 +80,73 @@ test("compact Records shows trip details and a sort menu within a phone viewport
   await expect(
     page.getByRole("dialog", { name: "Record details" }),
   ).toBeVisible();
+});
+
+test("mobile trip records scroll through the desktop columns with the Comments header pinned", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const rows = Array.from({ length: 40 }, (_, index) => ({
+    ...trip,
+    trip_id: `trip-${index}`,
+    duration: index + 15,
+  }));
+  await page.route("**/api/trips**", (route) =>
+    route.fulfill(tripPreviewResponse(rows)),
+  );
+  await page.goto("/trips");
+
+  const scroll = page.getByRole("region", { name: "Scrollable trip records" });
+  const table = scroll.getByRole("table", { name: "Matching trips" });
+  const headers = table.getByRole("columnheader");
+  const desktopColumns = [
+    "Pickup time",
+    "Route · ZIP codes",
+    "Drop-off time",
+    "Distance",
+    "Duration",
+    "Fare",
+    "Comments",
+  ];
+  await expect(headers).toHaveText(desktopColumns);
+  await scroll.scrollIntoViewIfNeeded();
+  const comments = table.getByRole("columnheader", { name: "Comments" });
+  const shadowCount = () =>
+    comments.evaluate(
+      (header) => getComputedStyle(header).boxShadow.match(/rgba?\(/g)?.length,
+    );
+  await expect.poll(shadowCount).toBe(2);
+  const initial = await comments.boundingBox();
+  if (!initial) throw new Error("No visible trip actions header cell");
+  const offsets = await scroll.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    element.scrollLeft = element.scrollWidth;
+    return { left: element.scrollLeft, top: element.scrollTop };
+  });
+  expect(offsets.top).toBeGreaterThan(0);
+  expect(offsets.left).toBeGreaterThan(0);
+  await expect.poll(shadowCount).toBe(1);
+
+  const pinned = await comments.boundingBox();
+  expect(pinned?.y).toBeCloseTo(initial.y, 0);
+  expect(pinned?.x).toBeCloseTo(initial.x, 0);
+  const duration = table.getByRole("cell", { name: "54.0 min", exact: true });
+  await expect(duration).toBeInViewport({ ratio: 1 });
+  expect(
+    await duration.evaluate((cell) => {
+      const { x, y, width, height } = cell.getBoundingClientRect();
+      return cell.contains(
+        document.elementFromPoint(x + width / 2, y + height / 2),
+      );
+    }),
+  ).toBe(true);
+  await scroll.evaluate((element) => {
+    element.scrollLeft = 0;
+  });
+  await expect.poll(shadowCount).toBe(2);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(headers).toHaveText(desktopColumns);
 });
 
 test("reselecting the current mobile sort preserves the list and history", async ({
