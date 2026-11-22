@@ -64,7 +64,7 @@ test("warehouse trips decode actual GPS, zero tips and missing endpoints into AP
     "fetch",
     warehouseFetch(async (statement) =>
       statement.includes("AS total FROM")
-        ? tableFromArrays({ total: [1] })
+        ? [{ total: 1 }]
         : tableFromArrays({
             trip_id: ["trip-1"],
             pickup_at: ["2016-01-01 10:00:00"],
@@ -123,6 +123,7 @@ test("trip pages preserve the warehouse order across ties, nulls, deleted anchor
       const { rows, fields } = await db.query<
         Record<string, string | number | null>
       >(query, values);
+      if (statement.includes("AS total FROM")) return rows;
       return tableFromArrays(
         Object.fromEntries(
           fields.map(({ name }) => [name, rows.map((row) => row[name])]),

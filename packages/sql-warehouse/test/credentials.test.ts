@@ -136,7 +136,7 @@ test("OAuth network failures allow retry before SQL submission", async () => {
       return Response.json({
         statement_id: "s",
         status: { state: "SUCCEEDED" },
-        manifest: { format: "ARROW_STREAM", total_chunk_count: 0 },
+        manifest: { format: "JSON_ARRAY", total_chunk_count: 0 },
       });
     },
   });

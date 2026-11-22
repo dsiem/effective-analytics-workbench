@@ -15,7 +15,7 @@ import {
 // are intentionally ignored so additive server changes do not break the driver.
 // https://docs.databricks.com/api/statement-execution/v1/statement-execution
 const Index = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
-export const StatementId = Schema.NonEmptyString.pipe(
+const StatementId = Schema.NonEmptyString.pipe(
   Schema.brand("DatabricksStatementId"),
 );
 const ExternalLink = Schema.Struct({
@@ -57,6 +57,13 @@ export const StatementResponse = Schema.Struct({
     ),
     sql_state: Schema.optional(Schema.String),
   }),
+  manifest: Schema.optional(Schema.Unknown),
+  result: Schema.optional(Schema.Unknown),
+});
+export type StatementResponse = typeof StatementResponse.Type;
+
+export const ArrowStatementResponse = Schema.Struct({
+  ...StatementResponse.fields,
   manifest: Schema.optional(
     Schema.Struct({
       format: Schema.String,
@@ -75,7 +82,7 @@ export const StatementResponse = Schema.Struct({
   ),
   result: Schema.optional(ResultChunk),
 });
-export type StatementResponse = typeof StatementResponse.Type;
+
 export type ResultChunk = typeof ResultChunk.Type;
 
 export const failure = (message: string, operation: string) =>

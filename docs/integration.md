@@ -35,10 +35,10 @@ with Effect services at startup. [HTTP contract](../shared/api.ts) ·
    decodes the input and passes it to the handler, which calls `Analytics.overview`.
    [HTTP contract](../shared/api.ts) · [Server handlers](../server/src/routes.ts)
 2. Bind user values as SQL parameters and quote table identifiers through the
-   adapter. The Overview queries project counts as numbers and dates as strings.
-   `warehouse.read` uses `SqlSchema.findAll` to decode the returned rows. Choose
-   a string representation for IDs and decimals that need exact precision in
-   JSON. [Overview queries](../server/src/analytics.ts) ·
+   adapter. Ordinary warehouse queries return inline JSON. Overview uses
+   `SqlSchema.findAll` to decode numeric text into numbers for the browser.
+   The map requests Arrow explicitly for its query of up to 100,000 cell
+   polygons. [Overview and map queries](../server/src/analytics.ts) ·
    [Warehouse service](../server/src/warehouse.ts) · [SQL adapter](../packages/sql-warehouse/README.md)
 3. Provide `ApiClient.layer` once in Foldkit's `Runtime.makeApplication`.
    `LoadOverview` calls the generated client and returns a `LoadedOverview`

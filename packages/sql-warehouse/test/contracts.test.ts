@@ -37,7 +37,20 @@ const fixture = () => {
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : input.toString();
     if (url.startsWith("https://storage.example")) return new Response(bytes);
-    submitted.push(JSON.parse(await new Request(input, init).text()));
+    const body = JSON.parse(await new Request(input, init).text());
+    submitted.push(body);
+    if (body.format === "JSON_ARRAY") {
+      return Response.json({
+        statement_id: "statement",
+        status: { state: "SUCCEEDED" },
+        manifest: {
+          format: "JSON_ARRAY",
+          total_chunk_count: 1,
+          schema: { columns: [{ name: "id" }] },
+        },
+        result: { data_array: [["9007199254740993"]] },
+      });
+    }
     return Response.json({
       statement_id: "statement",
       status: { state: "SUCCEEDED" },
@@ -78,7 +91,7 @@ test("layerConfig supplies the same client under both SQL services", async () =>
       ),
     ),
   );
-  assert.deepEqual(rows, [{ id: 9007199254740993n }]);
+  assert.deepEqual(rows, [{ id: "9007199254740993" }]);
 });
 
 test("layerConfig distinguishes missing config from invalid client options", async () => {
@@ -259,7 +272,7 @@ test("SqlSchema validates decoded rows without losing BIGINT precision", async (
       const execute = (id: bigint) => sql`SELECT ${id} AS id`;
       const find = SqlSchema.findAll({
         Request: Schema.BigInt,
-        Result: Schema.Struct({ id: Schema.BigInt }),
+        Result: Schema.Struct({ id: Schema.BigIntFromString }),
         execute,
       });
       assert.deepEqual(yield* find(9007199254740993n), [

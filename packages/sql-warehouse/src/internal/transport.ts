@@ -86,6 +86,7 @@ export const makeTransport = (options: DatabricksClientConfig) =>
           options.workspaceHttpClient,
         ).pipe(
           Effect.mapError((cause) => {
+            if (cause instanceof SqlError) return cause;
             // Map the reason only. Raw HTTP errors contain credentials and bodies.
             const reason = HttpClientError.isHttpClientError(cause)
               ? cause.reason

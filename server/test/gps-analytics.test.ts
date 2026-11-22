@@ -49,10 +49,7 @@ for (const truncated of [false, true])
     globalThis.fetch = warehouseFetch(async (statement, _, parameters) => {
       statements++;
       if (!statement.includes("WITH bins"))
-        return tableFromArrays({
-          matching: [located + 20],
-          located: [located],
-        });
+        return [{ matching: located + 20, located }];
       assert.deepEqual(parameters, [
         { name: "p1", type: "INT", value: String(mapCellLimit) },
       ]);

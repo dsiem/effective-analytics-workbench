@@ -1,4 +1,4 @@
-import { Cache, Context, Effect, Exit, Layer, Schema } from "effect";
+import { Cache, Context, Effect, Exit, Layer, Schema, Stream } from "effect";
 import * as Reactivity from "effect/reactivity/Reactivity";
 import {
   type AnalysisRunId,
@@ -108,7 +108,7 @@ export class Analytics extends Context.Service<
       const metadataCache = yield* Cache.makeWith(
         (_key: "dataset") =>
           read(
-            DatasetMetadata,
+            Schema.toCodecStringTree(DatasetMetadata),
             sql`SELECT
       CAST(MIN(tpep_pickup_datetime) AS DATE)::STRING AS from,
       CAST(MAX(tpep_pickup_datetime) AS DATE)::STRING AS to,
@@ -130,7 +130,7 @@ export class Analytics extends Context.Service<
           return Effect.all(
             {
               summary: read(
-                Summary,
+                Schema.toCodecStringTree(Summary),
                 sql`SELECT CAST(COUNT(*) AS DOUBLE) AS trips,
           CAST(COALESCE(SUM(fare_amount), 0) AS DOUBLE) AS revenue,
           CAST(COALESCE(AVG(fare_amount), 0) AS DOUBLE) AS avg_fare,
@@ -150,19 +150,19 @@ export class Analytics extends Context.Service<
                 ),
               ),
               daily: read(
-                Daily,
+                Schema.toCodecStringTree(Daily),
                 sql`SELECT CAST(CAST(tpep_pickup_datetime AS DATE) AS STRING) AS day,
           CAST(COUNT(*) AS DOUBLE) AS trips, CAST(COALESCE(SUM(fare_amount),0) AS DOUBLE) AS revenue
           FROM ${snapshot} ${predicate} GROUP BY 1 ORDER BY 1`,
               ),
               hourly: read(
-                Hourly,
+                Schema.toCodecStringTree(Hourly),
                 sql`SELECT CAST(HOUR(tpep_pickup_datetime) AS DOUBLE) AS hour,
           CAST(COUNT(*) AS DOUBLE) AS trips, CAST(COALESCE(AVG(fare_amount),0) AS DOUBLE) AS avg_fare
           FROM ${snapshot} ${predicate} GROUP BY 1 ORDER BY 1`,
               ),
               zones: read(
-                Zone,
+                Schema.toCodecStringTree(Zone),
                 sql`SELECT COALESCE(CAST(pickup_zip AS STRING), 'Unknown') AS zip,
           CAST(COUNT(*) AS DOUBLE) AS trips, CAST(COALESCE(SUM(fare_amount),0) AS DOUBLE) AS revenue,
           CAST(COALESCE(AVG(fare_amount),0) AS DOUBLE) AS avg_fare
@@ -191,7 +191,8 @@ export class Analytics extends Context.Service<
           {
             rows: read(
               WarehouseTrip,
-              sql`SELECT CAST(trip_id AS STRING) AS trip_id,
+              sql
+                .arrowStream(sql`SELECT CAST(trip_id AS STRING) AS trip_id,
           CAST(tpep_pickup_datetime AS STRING) AS pickup_at,
           CAST(tpep_dropoff_datetime AS STRING) AS dropoff_at,
           ${tripZip(sql, "pickup_zip")} AS pickup_zip,
@@ -201,10 +202,15 @@ export class Analytics extends Context.Service<
           CAST(COALESCE(timestampdiff(SECOND,tpep_pickup_datetime,tpep_dropoff_datetime)/60.0,0) AS DOUBLE) AS duration,
           ${tripDetailsProjection(sql)}
           FROM ${snapshot} ${predicate}
-          ${tripPageWindow(sql, sort, cursor?.after)}`,
+          ${tripPageWindow(sql, sort, cursor?.after)}`)
+                .pipe(
+                  Stream.flatMap((batch) => Stream.fromIterable(batch)),
+                  Stream.map((row) => row.toJSON()),
+                  Stream.runCollect,
+                ),
             ),
             total: read(
-              Schema.Struct({ total: Schema.Number }),
+              Schema.Struct({ total: Schema.NumberFromString }),
               sql`SELECT CAST(COUNT(*) AS DOUBLE) AS total FROM ${snapshot} ${predicate}`,
             ).pipe(Effect.map((rows) => rows[0]?.total ?? 0)),
           },
@@ -237,8 +243,8 @@ export class Analytics extends Context.Service<
             {
               totals: read(
                 Schema.Struct({
-                  matching: Schema.Number,
-                  located: Schema.Number,
+                  matching: Schema.NumberFromString,
+                  located: Schema.NumberFromString,
                 }),
                 sql`SELECT COUNT(*)::DOUBLE AS matching, count_if(${valid})::DOUBLE AS located FROM ${snapshot} ${where(search)}`,
               ),
@@ -248,7 +254,8 @@ export class Analytics extends Context.Service<
                   boundary: Schema.fromJsonString(GpsCell.fields.boundary),
                   total_cells: Schema.Number,
                 }),
-                sql`WITH bins AS (
+                sql
+                  .arrowStream(sql`WITH bins AS (
             SELECT h3_longlatash3(${longitude}, ${latitude}, 10) AS cell,
               COUNT(*)::DOUBLE AS trips, AVG(fare_amount) AS avg_fare,
               AVG(trip_distance) AS avg_distance, mode(${zip}, true) AS zip
@@ -258,7 +265,12 @@ export class Analytics extends Context.Service<
             (h3_centerasgeojson(cell):coordinates[1])::DOUBLE AS latitude,
             h3_boundaryasgeojson(cell) AS boundary, trips, avg_fare, avg_distance, zip,
             COUNT(*) OVER()::DOUBLE AS total_cells
-          FROM bins ORDER BY trips DESC, cell LIMIT ${sql.param("INT", String(mapCellLimit))}`,
+          FROM bins ORDER BY trips DESC, cell LIMIT ${sql.param("INT", String(mapCellLimit))}`)
+                  .pipe(
+                    Stream.flatMap((batch) => Stream.fromIterable(batch)),
+                    Stream.map((row) => row.toJSON()),
+                    Stream.runCollect,
+                  ),
               ),
             },
             { concurrency: 2 },

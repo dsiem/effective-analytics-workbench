@@ -194,9 +194,11 @@ for (const stage of ["submission", "poll", "download"] as const) {
       Effect.gen(function* () {
         const sql = yield* DatabricksClient.DatabricksClient;
         return yield* Effect.flip(
-          sql`SELECT 1`.pipe(
-            Effect.retry({ while: (error) => error.isRetryable, times: 1 }),
-          ),
+          sql
+            .arrow(sql`SELECT 1`)
+            .pipe(
+              Effect.retry({ while: (error) => error.isRetryable, times: 1 }),
+            ),
         );
       }).pipe(
         Effect.provide(
@@ -212,6 +214,10 @@ for (const stage of ["submission", "poll", "download"] as const) {
     );
     assert.equal(submissions, 1);
     assert.equal(error.isRetryable, false);
+    assert.equal(
+      error.reason.operation,
+      stage === "submission" ? "submit" : stage,
+    );
   });
 }
 

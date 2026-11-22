@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { tableFromArrays } from "apache-arrow";
 import { ConfigProvider, Layer, Schema } from "effect";
 import { HttpRouter, HttpServer } from "effect/http";
 import { AnalysisRun } from "../../shared/analysis-runs.js";
@@ -45,7 +44,7 @@ test("analysis runs record the requester across retries, scope history and resul
       parameters.map(({ value }) => value),
       ["123"],
     );
-    return tableFromArrays({ report_json: [JSON.stringify(report)] });
+    return [{ report_json: JSON.stringify(report) }];
   });
   const original = globalThis.fetch;
   t.after(() => {

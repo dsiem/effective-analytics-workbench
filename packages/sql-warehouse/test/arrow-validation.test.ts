@@ -89,7 +89,7 @@ test("decoded Arrow results reject junk bytes while raw IPC preserves them", asy
       const statement = sql`SELECT 1`;
       return {
         raw: yield* Stream.runCollect(sql.ipcStream(statement)),
-        rows: yield* Effect.result(statement),
+        rows: yield* Effect.result(sql.arrow(statement)),
       };
     }),
   );
@@ -125,13 +125,15 @@ test("decoded chunk streams reject schema changes without prefetching", async ()
   const firstRows = await server.run(
     Effect.gen(function* () {
       const sql = yield* DatabricksClient.DatabricksClient;
-      return yield* sql`SELECT id FROM sales`.stream.pipe(
-        Stream.take(1),
-        Stream.runCollect,
-      );
+      return yield* sql
+        .arrowChunks(sql`SELECT id FROM sales`)
+        .pipe(Stream.take(1), Stream.runCollect);
     }),
   );
-  assert.deepEqual(firstRows, [{ id: 1 }]);
+  assert.deepEqual(
+    firstRows.flatMap((table) => [...table].map((row) => row.toJSON())),
+    [{ id: 1 }],
+  );
   assert.deepEqual(server.downloads, [0]);
 
   const failures = await server.run(
@@ -139,9 +141,8 @@ test("decoded chunk streams reject schema changes without prefetching", async ()
       const sql = yield* DatabricksClient.DatabricksClient;
       const statement = sql`SELECT id FROM sales`;
       return yield* Effect.all([
-        Effect.result(statement),
-        Effect.result(statement.values),
-        Effect.result(Stream.runCollect(statement.stream)),
+        Effect.result(sql.arrow(statement)),
+        Effect.result(Stream.runCollect(sql.arrowChunks(statement))),
         Effect.result(Stream.runCollect(sql.arrowStream(statement))),
       ]);
     }),
@@ -174,7 +175,7 @@ test("zero chunks cannot account for a positive manifest row count", async () =>
   const result = await server.run(
     Effect.gen(function* () {
       const sql = yield* DatabricksClient.DatabricksClient;
-      return yield* Effect.result(sql`SELECT id FROM sales`);
+      return yield* Effect.result(sql.arrow(sql`SELECT id FROM sales`));
     }),
   );
 

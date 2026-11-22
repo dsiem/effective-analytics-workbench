@@ -5,6 +5,7 @@ import {
   type Duration,
   Effect,
   Layer,
+  Option,
   type Redacted,
   Stream,
 } from "effect";
@@ -20,7 +21,32 @@ import {
   UnsupportedSqlFragment,
 } from "./internal/protocol.js";
 
+/** Ordinary statements use inline JSON. Both the default result and .raw collect named rows. */
 export interface DatabricksClient extends Client.Base {
+  /** Streams inline JSON_ARRAY chunks as named rows. Each SQL value is a string or null. */
+  readonly jsonStream: (
+    statement: Statement.Statement<unknown>,
+  ) => Stream.Stream<Record<string, string | null>, SqlError>;
+  /** Reads the first inline JSON chunk as named rows and exposes a paged reader. */
+  readonly jsonPage: (
+    statement: Statement.Statement<unknown>,
+    options: { readonly rowLimit: number },
+  ) => Effect.Effect<
+    {
+      readonly rows: ReadonlyArray<Record<string, string | null>>;
+      readonly pageCount: number;
+      readonly truncated: boolean;
+      /** Fetches a continuation using the row count accumulated through earlier chunks. */
+      readonly readChunk: (
+        index: number,
+        offset: number,
+      ) => Effect.Effect<
+        ReadonlyArray<Record<string, string | null>>,
+        SqlError
+      >;
+    },
+    SqlError
+  >;
   /** Materializes all result chunks as one columnar Arrow table. */
   readonly arrow: (
     statement: Statement.Statement<unknown>,
@@ -121,7 +147,7 @@ export const make = (
   Reactivity.Reactivity
 > =>
   Effect.gen(function* () {
-    const { connection, chunks, ipc, collectTable, withQueryTimeout } =
+    const { connection, page, chunks, ipc, collectTable, withQueryTimeout } =
       yield* makeExecution(options);
     const compiler = makeCompiler();
     const spanAttributes: ReadonlyArray<readonly [string, unknown]> = [
@@ -176,6 +202,24 @@ export const make = (
       withoutTransforms: () => client,
       arrow: (statement: Statement.Statement<unknown>) =>
         collectTable(arrowChunks(statement)),
+      jsonStream: (statement: Statement.Statement<unknown>) =>
+        client<Record<string, string | null>>`${statement}`.stream,
+      jsonPage: (
+        statement: Statement.Statement<unknown>,
+        { rowLimit }: { readonly rowLimit: number },
+      ) =>
+        streamStatement((text, params) => page(text, params, rowLimit))(
+          statement,
+        ).pipe(
+          Stream.runHead,
+          Effect.flatMap(
+            Option.match({
+              onSome: Effect.succeed,
+              onNone: () =>
+                Effect.fail(failure("Missing inline JSON page", "decodeJson")),
+            }),
+          ),
+        ),
       arrowChunks,
       arrowStream: (statement: Statement.Statement<unknown>) =>
         arrowChunks(statement).pipe(

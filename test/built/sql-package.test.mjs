@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { tableFromArrays, tableToIPC } from "apache-arrow";
-import { Config, ConfigProvider, Effect } from "effect";
+import { Config, ConfigProvider, Effect, Stream } from "effect";
 
 // Import and execute the actual distribution, outside the source tree. This
 // catches missing runtime files and bad package exports without a registry.
@@ -44,10 +44,43 @@ try {
     tableFromArrays({ id: BigInt64Array.of(9007199254740993n) }),
     "stream",
   );
-  const table = await Effect.runPromise(
+  const submissions = [];
+  const fetch = async (input, init) => {
+    const request = new Request(input, init);
+    if (request.url === "https://storage.example/0") return new Response(ipc);
+    assert.equal(
+      request.url,
+      "https://workspace.example/api/2.0/sql/statements",
+    );
+    const { format, disposition } = await request.json();
+    submissions.push([format, disposition]);
+    const inline = format === "JSON_ARRAY";
+    return Response.json({
+      statement_id: "packed-statement",
+      status: { state: "SUCCEEDED" },
+      manifest: {
+        format,
+        total_chunk_count: 1,
+        schema: { columns: [{ name: "id", type_name: "LONG" }] },
+      },
+      result: inline
+        ? { data_array: [["9007199254740993"]] }
+        : {
+            external_links: [
+              { chunk_index: 0, external_link: "https://storage.example/0" },
+            ],
+          },
+    });
+  };
+  const { table, rows, streamed } = await Effect.runPromise(
     Effect.gen(function* () {
       const sql = yield* exports.DatabricksClient.DatabricksClient;
-      return yield* sql.arrow(sql`SELECT ${9007199254740993n} AS id`);
+      const statement = sql`SELECT ${9007199254740993n} AS id`;
+      return {
+        rows: yield* statement,
+        streamed: yield* Stream.runCollect(sql.jsonStream(statement)),
+        table: yield* sql.arrow(statement),
+      };
     }).pipe(
       Effect.provide(
         exports.DatabricksClient.layerConfig(
@@ -57,23 +90,7 @@ try {
             accessToken: Config.Redacted("DATABRICKS_TOKEN").pipe(
               Config.map(Effect.succeed),
             ),
-            fetch: Config.succeed(async (input) =>
-              new URL(String(input)).hostname === "storage.example"
-                ? new Response(ipc)
-                : Response.json({
-                    statement_id: "packed-statement",
-                    status: { state: "SUCCEEDED" },
-                    manifest: { format: "ARROW_STREAM", total_chunk_count: 1 },
-                    result: {
-                      external_links: [
-                        {
-                          chunk_index: 0,
-                          external_link: "https://storage.example/0",
-                        },
-                      ],
-                    },
-                  }),
-            ),
+            fetch: Config.succeed(fetch),
           }),
         ),
       ),
@@ -88,9 +105,16 @@ try {
       ),
     ),
   );
+  assert.deepEqual(submissions, [
+    ["JSON_ARRAY", "INLINE"],
+    ["JSON_ARRAY", "INLINE"],
+    ["ARROW_STREAM", "EXTERNAL_LINKS"],
+  ]);
+  assert.deepEqual(rows, [{ id: "9007199254740993" }]);
+  assert.deepEqual(streamed, rows);
   assert.equal(table.getChild("id").get(0), 9007199254740993n);
   console.log(
-    "Packed Databricks SQL adapter imported and executed an Arrow query",
+    "Packed Databricks SQL adapter imported and executed Arrow and inline JSON queries",
   );
 } finally {
   rmSync(directory, { recursive: true, force: true });

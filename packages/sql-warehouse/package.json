@@ -1,7 +1,7 @@
 {
   "name": "@dsiem/sql-warehouse",
   "version": "0.1.0",
-  "description": "Independent Effect 4 adapter for Databricks SQL warehouses with Apache Arrow results",
+  "description": "Effect 4 adapter for Databricks SQL warehouses with inline JSON and Apache Arrow results",
   "license": "MIT",
   "repository": {
     "type": "git",

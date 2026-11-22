@@ -34,6 +34,10 @@ type Request = {
 };
 interface Scenario {
   readonly tables?: Table[];
+  readonly inline?: {
+    readonly columns: string[];
+    readonly chunks: (string | null)[][][];
+  };
   readonly running?: boolean;
   readonly immediate?: boolean;
   readonly failure?: string;
@@ -98,15 +102,27 @@ const warehouse = async (scenario: Scenario = {}) => {
       },
     ],
   });
+  const resultChunk = (index: number) =>
+    scenario.inline
+      ? { chunk_index: index, data_array: scenario.inline.chunks[index] }
+      : link(index);
+  const chunkCount = scenario.inline?.chunks.length ?? chunks.length;
   const success = (id: string) => ({
     statement_id: id,
     status: { state: "SUCCEEDED" },
     manifest: {
-      format: "ARROW_STREAM",
-      total_chunk_count: chunks.length,
+      format: scenario.inline ? "JSON_ARRAY" : "ARROW_STREAM",
+      ...(scenario.inline
+        ? {
+            schema: {
+              columns: scenario.inline.columns.map((name) => ({ name })),
+            },
+          }
+        : {}),
+      total_chunk_count: chunkCount,
       truncated: scenario.truncated ?? false,
     },
-    ...(chunks.length ? { result: link(0) } : {}),
+    ...(chunkCount ? { result: resultChunk(0) } : {}),
   });
   const workspace = await listen(async (req, res) => {
     const buffers = [];
@@ -152,7 +168,7 @@ const warehouse = async (scenario: Scenario = {}) => {
       res.end("{}");
     } else if (path.includes("/result/chunks/")) {
       refreshed = true;
-      res.end(JSON.stringify(link(Number(path.split("/").at(-1)))));
+      res.end(JSON.stringify(resultChunk(Number(path.split("/").at(-1)))));
     } else {
       polls++;
       if (scenario.transientPoll && polls === 1) {
@@ -257,7 +273,19 @@ test("queries a SQL warehouse using Arrow and preserves bigint, nulls, and chunk
 });
 
 test("provides the generic Effect SQL row, value, raw, and streaming APIs", async (t) => {
-  const server = await warehouse({ immediate: true });
+  const server = await warehouse({
+    immediate: true,
+    inline: {
+      columns: ["id", "name"],
+      chunks: [
+        [
+          ["9007199254740993", "first"],
+          ["2", null],
+        ],
+        [["3", "last"]],
+      ],
+    },
+  });
   t.after(server.close);
   const result = await server.run(
     Effect.gen(function* () {
@@ -267,7 +295,9 @@ test("provides the generic Effect SQL row, value, raw, and streaming APIs", asyn
         rows: yield* sql`SELECT * FROM sales`,
         values: yield* sql`SELECT * FROM sales`.values,
         raw: yield* sql`SELECT * FROM sales`.raw,
-        streamed: yield* Stream.runCollect(sql`SELECT * FROM sales`.stream),
+        batches: yield* Stream.runCollect(
+          Stream.chunks(sql`SELECT * FROM sales`.stream),
+        ),
         unprepared: yield* sql`SELECT * FROM sales`.unprepared,
         unpreparedValues: yield* sql`SELECT * FROM sales`.valuesUnprepared,
       };
@@ -275,20 +305,29 @@ test("provides the generic Effect SQL row, value, raw, and streaming APIs", asyn
   );
   assert.equal(result.driver, "databricks");
   assert.deepEqual(result.rows, [
-    { id: 9007199254740993n, name: "first" },
-    { id: 2n, name: null },
-    { id: 3n, name: "last" },
+    { id: "9007199254740993", name: "first" },
+    { id: "2", name: null },
+    { id: "3", name: "last" },
   ]);
-  assert.deepEqual(result.streamed, result.rows);
+  assert.deepEqual(result.batches, [
+    result.rows.slice(0, 2),
+    result.rows.slice(2),
+  ]);
   assert.deepEqual(result.unprepared, result.rows);
   assert.deepEqual(result.values, [
-    [9007199254740993n, "first"],
-    [2n, null],
-    [3n, "last"],
+    ["9007199254740993", "first"],
+    ["2", null],
+    ["3", "last"],
   ]);
   assert.deepEqual(result.unpreparedValues, result.values);
-  assert.ok(result.raw instanceof Table);
-  assert.equal(result.raw.numRows, 3);
+  assert.deepEqual(result.raw, result.rows);
+  const submissions = server.requests.filter((req) => req.method === "POST");
+  assert.equal(submissions.length, 6);
+  for (const { body } of submissions) {
+    assert.equal(body.format, "JSON_ARRAY");
+    assert.equal(body.disposition, "INLINE");
+  }
+  assert.deepEqual(server.downloads, []);
 });
 
 test("streams Arrow batches and independently decodable IPC chunks", async (t) => {
@@ -655,23 +694,20 @@ test("preserves decimal precision and scale in columnar results", async (t) => {
   assert.equal(amount.get(1), null);
 });
 
-test("returns values in SQL column order even for numeric column names", async (t) => {
+test("values preserve SQL column order and duplicate column names", async (t) => {
   const server = await warehouse({
-    tables: [
-      new Table({
-        "1": vectorFromArray([1n], new Int64()),
-        "2": vectorFromArray([2n], new Int64()),
-      }).select(["2", "1"]),
-    ],
+    inline: { columns: ["2", "1", "2"], chunks: [[["a", "b", "c"]]] },
   });
   t.after(server.close);
-  const result = await server.run(
+  await server.run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      return yield* sql`SELECT 2 AS \`2\`, 1 AS \`1\``.values;
+      const statement = sql`SELECT 'a' AS \`2\`, 'b' AS \`1\`, 'c' AS \`2\``;
+      assert.deepEqual(yield* statement.values, [["a", "b", "c"]]);
+      assert.deepEqual(yield* statement.valuesUnprepared, [["a", "b", "c"]]);
     }),
   );
-  assert.deepEqual(result, [[2n, 1n]]);
+  assert.deepEqual(server.downloads, []);
 });
 
 test("isolates concurrent statements and allows the same Arrow stream to be rerun", async (t) => {
