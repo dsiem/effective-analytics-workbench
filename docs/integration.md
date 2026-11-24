@@ -67,6 +67,7 @@ from a listed row can use its summary while details load.
    `SqlSchema.findAll` to decode numeric text into numbers for the browser.
    The map requests Arrow explicitly for its query of up to 100,000 cell
    polygons. [Overview queries](../server/src/taxi/overview.ts) · [Map queries](../server/src/taxi/trip-map.ts) ·
+   [Snapshot table and filters](../server/src/taxi/snapshot.ts) ·
    [Warehouse service](../server/src/warehouse.ts) · [SQL adapter](../packages/sql-warehouse/README.md)
 3. Provide `ApiClient.layer` once in Foldkit's `Runtime.makeApplication`.
    `LoadOverview` calls the generated client and returns a `LoadedOverview`
@@ -178,10 +179,11 @@ Initialize the schema during target setup. [Lakebase service](../server/src/lake
 ## Bound upstream work and verify real requests
 
 Create one concurrency limiter per service instance. The warehouse limiter
-shares permits across queries, including the queries that make up one Overview
-request. Genie has its own limiter for submissions. Put the deadline around both
-permit acquisition and execution so an expired request cannot start work after
-waiting in the queue. Each app process has its own limits.
+shares permits across taxi snapshot queries and analysis report reads. Each
+query in an Overview request takes a permit. Genie has its own limiter for
+submissions. Apply the deadline to permit acquisition and execution so an
+expired request cannot start work after waiting in the queue. Each app process
+has its own limits.
 [Admission control](../server/src/admission.ts) · [Warehouse service](../server/src/warehouse.ts) ·
 [Genie service](../server/src/genie.ts)
 

@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Cause, ConfigProvider, Effect, Exit, Layer, Redacted } from "effect";
+import {
+  Cause,
+  ConfigProvider,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Redacted,
+  Schema,
+} from "effect";
 import { Analytics } from "../src/analytics.js";
 import { unavailable } from "../src/errors.js";
 import { Genie } from "../src/genie.js";
@@ -22,6 +31,63 @@ const config = Layer.succeed(
     LAKEBASE_ENDPOINT: "projects/test/branches/main/endpoints/primary",
   }),
 );
+
+test("Warehouse can read a different table without a trip snapshot", async (t) => {
+  const statements: string[] = [];
+  t.mock.method(
+    globalThis,
+    "fetch",
+    warehouseFetch(async (statement) => {
+      statements.push(statement);
+      return [{ count: 3 }];
+    }),
+  );
+  const services = Analytics.layer.pipe(
+    Layer.provideMerge(Warehouse.layer),
+    Layer.provide(Workspace.layer),
+    Layer.provide(Settings.layer),
+    Layer.provide(
+      Layer.succeed(
+        ConfigProvider.ConfigProvider,
+        ConfigProvider.fromEnvRecord({
+          DATABRICKS_HOST: "https://workspace.invalid",
+          DATABRICKS_TOKEN: "fixture",
+          DATABRICKS_WAREHOUSE_ID: "warehouse",
+        }),
+      ),
+    ),
+  );
+
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const analytics = yield* Analytics;
+      const metadata = yield* Effect.result(analytics.metadata);
+      assert.ok(
+        metadata._tag === "Failure" &&
+          metadata.failure._tag === "ServiceUnavailable",
+      );
+      assert.match(metadata.failure.message, /TRIP_SNAPSHOT_TABLE/);
+      assert.deepEqual(statements, []);
+
+      const warehouse = yield* Warehouse;
+      assert.ok(Option.isSome(warehouse));
+      const { sql, queries } = warehouse.value;
+      const { read } = queries({
+        deniedMessage: "Cannot read the test table.",
+        unavailable: (cause) =>
+          unavailable("warehouse", "Reading the test table failed.", cause),
+      });
+      const rows = yield* read(
+        Schema.Struct({ count: Schema.NumberFromString }),
+        sql`SELECT COUNT(*) AS count FROM ${sql("test")}.${sql("reports")}.${sql("results")}`,
+      );
+      assert.deepEqual(rows, [{ count: 3 }]);
+      assert.deepEqual(statements, [
+        "SELECT COUNT(*) AS count FROM `test`.`reports`.`results`",
+      ]);
+    }).pipe(Effect.provide(services)),
+  );
+});
 
 test("Lakebase discovery failures leave other services running and can be retried", async (t) => {
   const originalFetch = globalThis.fetch;
