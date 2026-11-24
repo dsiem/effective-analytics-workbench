@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ConfigProvider, Effect, Layer, Redacted, Schema } from "effect";
+import {
+  ConfigProvider,
+  Effect,
+  Layer,
+  Redacted,
+  Schema,
+  Stream,
+} from "effect";
 import {
   FetchHttpClient,
   HttpClient,
@@ -11,6 +18,7 @@ import { HttpApiClient } from "effect/http-api";
 import { ApiError, AppApi } from "../../shared/api.js";
 import type { SavedView, SavedViewInput } from "../../shared/saved-views.js";
 import { type Trip } from "../../shared/trips.js";
+import { AnalysisRuns } from "../src/analysis-runs.js";
 import { Analytics } from "../src/analytics.js";
 import { TripNotFound } from "../src/errors.js";
 import { Genie } from "../src/genie.js";
@@ -96,6 +104,7 @@ const fixture = () => {
       calls.push([name, input]);
       return output;
     });
+  const unexpectedRun = Effect.die("Unexpected analysis operation");
   const app = HttpRouter.toWebHandler(
     Routes.pipe(
       Layer.provide(
@@ -106,11 +115,15 @@ const fixture = () => {
             accessToken: Effect.succeed(Redacted.make("unused")),
             request: () => Effect.die("Unexpected workspace request"),
           }),
+          Layer.succeed(AnalysisRuns, {
+            list: unexpectedRun,
+            get: () => unexpectedRun,
+            submit: () => unexpectedRun,
+            result: () => unexpectedRun,
+          }),
           Layer.succeed(Analytics, {
             metadata: Effect.succeed(metadata),
             overview: (input) => record("overview", input, overview),
-            analysisReport: () =>
-              Effect.die("Unexpected analysis report request"),
             tripMap: (input) =>
               record("gps", input, {
                 endpoint: input.endpoint ?? "pickup",
@@ -131,31 +144,39 @@ const fixture = () => {
                 : Effect.fail(new TripNotFound({ message: "Trip not found" })),
           }),
           Layer.succeed(Genie, {
-            downloadCsv: () => Effect.die("Unexpected Genie CSV download"),
-            submit: (input) => record("submit", input, operation),
-            poll: (input) =>
-              record("poll", input, {
-                ...operation,
-                state: "completed" as const,
-                status: "COMPLETED",
-              }),
-            cancel: ({ conversationId, responseId }) =>
-              record(
-                "cancelGenieAgent",
-                { conversationId, responseId },
-                {
-                  conversationId,
-                  messageId: responseId,
-                  mode: "agent" as const,
-                  state: "cancelled" as const,
-                  status: "CANCELLED",
-                },
-              ),
-            result: (input) =>
-              record("result", input, {
-                ...operation,
-                text: "Ten trips",
-                queries: [],
+            forViewer: () =>
+              Effect.succeed({
+                downloadCsv: (reference) =>
+                  record(
+                    "downloadCsv",
+                    reference,
+                    Stream.make(new TextEncoder().encode("count\r\n10\r\n")),
+                  ),
+                submit: (input) => record("submit", input, operation),
+                poll: (input) =>
+                  record("poll", input, {
+                    ...operation,
+                    state: "completed" as const,
+                    status: "COMPLETED",
+                  }),
+                cancel: ({ conversationId, responseId }) =>
+                  record(
+                    "cancelGenieAgent",
+                    { conversationId, responseId },
+                    {
+                      conversationId,
+                      messageId: responseId,
+                      mode: "agent" as const,
+                      state: "cancelled" as const,
+                      status: "CANCELLED",
+                    },
+                  ),
+                result: (input) =>
+                  record("result", input, {
+                    ...operation,
+                    text: "Ten trips",
+                    queries: [],
+                  }),
               }),
           }),
           Layer.succeed(TripComments, {
@@ -232,52 +253,59 @@ const fixture = () => {
       Effect.provide(FetchHttpClient.layer),
       Effect.provideService(FetchHttpClient.Fetch, fetch),
     ),
-  ).app;
+  );
   return { app, client, calls };
 };
 
-test("generated client round-trips every endpoint through the real HTTP contract", async (t) => {
+test("generated client round-trips typed JSON endpoints through the real HTTP contract", async (t) => {
   const { app, client, calls } = fixture();
   t.after(app.dispose);
   await Effect.runPromise(
     Effect.gen(function* () {
-      assert.equal(yield* client.currentUser(), null);
-      assert.deepEqual(yield* client.metadata(), metadata);
-      assert.deepEqual(yield* client.overview({ query: filters }), overview);
+      assert.equal(yield* client.viewer.current(), null);
+      assert.deepEqual(yield* client.analytics.metadata(), metadata);
+      assert.deepEqual(
+        yield* client.analytics.overview({ query: filters }),
+        overview,
+      );
       assert.equal(
-        (yield* client.tripMap({
+        (yield* client.analytics.tripMap({
           query: { ...filters, endpoint: "dropoff" },
         })).matchingTrips,
         10,
       );
       assert.deepEqual(
-        yield* client.tripCommentCounts({
+        yield* client.tripComments.counts({
           query: { tripIds: ["trip-1", "trip-2"] },
         }),
         {},
       );
       assert.deepEqual(
-        yield* client.tripDetails({ query: { tripId: trip.trip_id } }),
+        yield* client.analytics.tripDetails({
+          query: { tripId: trip.trip_id },
+        }),
         trip,
       );
-      const page = yield* client.trips({
+      const page = yield* client.analytics.trips({
         query: { ...filters, sort, limit: 2 },
       });
       assert.deepEqual(page, firstTripPage);
       assert.ok(page.nextCursor);
       assert.deepEqual(
-        yield* client.tripPage({ params: { cursor: page.nextCursor } }),
+        yield* client.analytics.tripPage({
+          params: { cursor: page.nextCursor },
+        }),
         nextTripPage,
       );
       assert.deepEqual(
-        yield* client.submitGenie({
+        yield* client.genie.submit({
           headers: {},
           payload: { content: "Count trips", conversationId: "previous-1" },
         }),
         operation,
       );
       assert.deepEqual(
-        yield* client.pollGenie({ headers: {}, params: operation, query: {} }),
+        yield* client.genie.poll({ headers: {}, params: operation, query: {} }),
         {
           ...operation,
           state: "completed",
@@ -289,7 +317,7 @@ test("generated client round-trips every endpoint through the real HTTP contract
         responseId: operation.messageId,
       };
       assert.deepEqual(
-        yield* client.cancelGenieAgent({ headers: {}, params: cancelTarget }),
+        yield* client.genie.cancel({ headers: {}, params: cancelTarget }),
         {
           ...operation,
           mode: "agent",
@@ -298,7 +326,7 @@ test("generated client round-trips every endpoint through the real HTTP contract
         },
       );
       assert.deepEqual(
-        yield* client.genieResult({
+        yield* client.genie.result({
           headers: {},
           params: operation,
           query: {},
@@ -309,7 +337,7 @@ test("generated client round-trips every endpoint through the real HTTP contract
           queries: [],
         },
       );
-      const saved = yield* client.saveSavedView({ payload: savedView });
+      const saved = yield* client.savedViews.save({ payload: savedView });
       assert.deepEqual(saved, {
         ...savedView,
         version: 1,
@@ -317,18 +345,18 @@ test("generated client round-trips every endpoint through the real HTTP contract
         created_at: "2026-11-13",
         updated_at: "2026-11-13",
       });
-      assert.deepEqual(yield* client.savedViews({ query: {} }), {
+      assert.deepEqual(yield* client.savedViews.list({ query: {} }), {
         rows: [saved],
         nextCursor: null,
       });
-      const pinned = yield* client.pinSavedView({
+      const pinned = yield* client.savedViews.pin({
         params: { id: savedView.id },
         payload: { version: saved.version, pinned: true },
       });
       assert.equal(pinned.pinned, true);
       assert.equal(pinned.version, 2);
       assert.deepEqual(
-        yield* client.removeSavedView({
+        yield* client.savedViews.remove({
           params: { id: savedView.id },
           query: { version: pinned.version },
         }),
@@ -336,7 +364,7 @@ test("generated client round-trips every endpoint through the real HTTP contract
           deleted: true,
         },
       );
-      assert.deepEqual(yield* client.savedViews({ query: {} }), {
+      assert.deepEqual(yield* client.savedViews.list({ query: {} }), {
         rows: [],
         nextCursor: null,
       });
@@ -365,6 +393,28 @@ test("generated client round-trips every endpoint through the real HTTP contract
   ]);
 });
 
+test("generated CSV endpoint decodes attachment headers and streams bytes", async (t) => {
+  const { app, client, calls } = fixture();
+  t.after(app.dispose);
+  const params = { ...operation, attachmentId: "query" };
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const result = yield* client.genie.downloadCsv({
+        params,
+        payload: undefined,
+      });
+      assert.equal(
+        result.headers["content-disposition"],
+        'attachment; filename="genie-results.csv"',
+      );
+      assert.equal(result.headers["x-content-type-options"], "nosniff");
+      const chunks = yield* Stream.runCollect(result.body);
+      assert.equal(Buffer.concat(chunks).toString(), "count\r\n10\r\n");
+    }).pipe(Effect.scoped),
+  );
+  assert.deepEqual(calls, [["downloadCsv", params]]);
+});
+
 test("missing trip details return a typed 404", async (t) => {
   const { app, client } = fixture();
   t.after(app.dispose);
@@ -374,7 +424,9 @@ test("missing trip details return a typed 404", async (t) => {
   assert.equal(response.status, 404);
   assert.deepEqual(
     await Effect.runPromise(
-      Effect.flip(client.tripDetails({ query: { tripId: "missing" } })),
+      Effect.flip(
+        client.analytics.tripDetails({ query: { tripId: "missing" } }),
+      ),
     ),
     { error: { code: "trip_not_found", message: "Trip not found" } },
   );
@@ -549,7 +601,7 @@ test("generated client round-trips a microsecond saved-view cursor through the H
     updatedAt: "2026-11-13T10:00:00.000123Z",
   };
   assert.deepEqual(
-    await Effect.runPromise(client.savedViews({ query: { cursor } })),
+    await Effect.runPromise(client.savedViews.list({ query: { cursor } })),
     {
       rows: [],
       nextCursor: null,
@@ -578,10 +630,13 @@ test("saved-view query round-trips bounded global search and recent IDs through 
     { ids: [] },
   ];
   for (const query of queries) {
-    assert.deepEqual(await Effect.runPromise(client.savedViews({ query })), {
-      rows: [],
-      nextCursor: null,
-    });
+    assert.deepEqual(
+      await Effect.runPromise(client.savedViews.list({ query })),
+      {
+        rows: [],
+        nextCursor: null,
+      },
+    );
   }
   assert.deepEqual(
     calls,
@@ -598,7 +653,7 @@ test("generated saved-view client rejects search or IDs outside their bounds bef
     { ids: ["bad-id"] },
   ]) {
     const result = await Effect.runPromise(
-      Effect.result(client.savedViews({ query })),
+      Effect.result(client.savedViews.list({ query })),
     );
     assert.ok(
       result._tag === "Failure" && Schema.isSchemaError(result.failure),
@@ -612,7 +667,7 @@ test("generated client rejects reversed dates before sending a request", async (
   t.after(app.dispose);
   const result = await Effect.runPromise(
     Effect.result(
-      client.overview({
+      client.analytics.overview({
         query: { from: "2016-02-01", to: "2016-01-01" },
       }),
     ),
@@ -635,8 +690,8 @@ test("generated client preserves validation codes and messages at the UI boundar
         response.clone(),
       ),
     ),
-  ).app;
-  const request = client.overview({ query: {} });
+  );
+  const request = client.analytics.overview({ query: {} });
   const result = await Effect.runPromise(Effect.result(request));
   assert.equal(result._tag, "Failure");
   if (result._tag === "Failure")
@@ -684,15 +739,15 @@ for (const { status, error } of [
           Response.json({ error }, { status }),
         ),
       ),
-    ).app;
+    );
     const failure =
       error.code === "saved_view_conflict"
         ? await Effect.runPromise(
-            Effect.flip(client.saveSavedView({ payload: savedView })),
+            Effect.flip(client.savedViews.save({ payload: savedView })),
           )
         : await Effect.runPromise(
             Effect.flip(
-              client.submitGenie({
+              client.genie.submit({
                 headers: {},
                 payload: { content: "Count trips" },
               }),
@@ -718,8 +773,10 @@ test("generated client rejects an unexpected success response", async () => {
         Response.json({ trips: "wrong" }),
       ),
     ),
-  ).app;
-  const result = await Effect.runPromise(Effect.result(client.metadata()));
+  );
+  const result = await Effect.runPromise(
+    Effect.result(client.analytics.metadata()),
+  );
   assert.equal(result._tag, "Failure");
   if (result._tag === "Failure")
     assert.ok(Schema.isSchemaError(result.failure));
@@ -762,11 +819,14 @@ test(
         Effect.provide(FetchHttpClient.layer),
         Effect.provideService(FetchHttpClient.Fetch, fetch),
       ),
-    ).app;
+    );
     const controller = new AbortController();
-    const pending = Effect.runPromise(client.metadata().pipe(Effect.scoped), {
-      signal: controller.signal,
-    });
+    const pending = Effect.runPromise(
+      client.analytics.metadata().pipe(Effect.scoped),
+      {
+        signal: controller.signal,
+      },
+    );
     const rejected = assert.rejects(pending);
     await reading;
     controller.abort();
@@ -791,7 +851,7 @@ test("trip comment contract round-trips snapshots and attributes the request vie
   const cursor = { id: savedView.id, createdAt: "2026-11-14T10:00:00.123456Z" };
   assert.deepEqual(
     await Effect.runPromise(
-      client.tripComments({ query: { tripId: trip.trip_id, cursor } }),
+      client.tripComments.list({ query: { tripId: trip.trip_id, cursor } }),
     ),
     { rows: [], nextCursor: null },
   );

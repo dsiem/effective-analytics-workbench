@@ -65,14 +65,16 @@ const fixtureClient = (body: unknown) =>
         Response.json(body),
       ),
     ),
-  ).app;
+  );
 
 for (const enriched of [false, true]) {
   test(`trip detail HTTP responses ${enriched ? "accept" : "reject missing"} enrichment`, async () => {
     const trip = enriched ? current : historical;
     const client = fixtureClient(trip);
     const result = await Effect.runPromise(
-      Effect.result(client.tripDetails({ query: { tripId: trip.trip_id } })),
+      Effect.result(
+        client.analytics.tripDetails({ query: { tripId: trip.trip_id } }),
+      ),
     );
     assert.equal(result._tag, enriched ? "Success" : "Failure");
     if (result._tag === "Failure")

@@ -51,7 +51,7 @@ export const SubmitQuestion = Command.define("SubmitQuestion", {
   messages: [M.ChangedTurn],
   execute: ({ turn, conversation }) =>
     request((client) =>
-      client.submitGenie({
+      client.genie.submit({
         headers: genieAccessHeaders(conversation?.grant),
         payload: {
           content: turn.question,
@@ -114,7 +114,7 @@ export const StopQuestion = Command.define("StopQuestion", {
     const { operation } = turn;
     const accepted = { ...turnBase(turn), operation };
     return request((client) =>
-      client.cancelGenieAgent({
+      client.genie.cancel({
         headers: genieAccessHeaders(operation.grant),
         params: {
           conversationId: operation.conversationId,
@@ -172,7 +172,7 @@ export const RetrieveQuestion = Command.define("RetrieveQuestion", {
     const operation = turn.operation;
     return request(
       (client) =>
-        client.genieResult({
+        client.genie.result({
           headers: genieAccessHeaders(operation.grant),
           params: operation,
           query: operation.mode ? { mode: operation.mode } : {},

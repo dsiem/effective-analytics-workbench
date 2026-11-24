@@ -5,6 +5,7 @@ import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { Cause, Effect, Exit, Layer, Runtime } from "effect";
 import { HttpRouter, HttpServer } from "effect/http";
 import { NetAddress } from "effect/net";
+import { AnalysisRuns } from "./analysis-runs.js";
 import { Analytics } from "./analytics.js";
 import { ServerConfig } from "./config.js";
 import { Genie } from "./genie.js";
@@ -13,6 +14,7 @@ import { Routes } from "./routes.js";
 import { SavedViews } from "./saved-views.js";
 import { Settings } from "./settings.js";
 import { TripComments } from "./trip-comments.js";
+import { Warehouse } from "./warehouse.js";
 import { Workspace } from "./workspace.js";
 
 const sendToDev =
@@ -39,11 +41,13 @@ const ServerLive = Layer.unwrap(
 
 const Services = Layer.mergeAll(
   Analytics.layer,
+  AnalysisRuns.layer,
   Genie.layer,
   SavedViews.layer,
   TripComments.layer,
 ).pipe(
   Layer.provideMerge(Lakebase.layer),
+  Layer.provideMerge(Warehouse.layer),
   Layer.provideMerge(Workspace.layer),
   Layer.provideMerge(Settings.layer),
 );

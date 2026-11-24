@@ -8,7 +8,7 @@ export const LoadOverview = Command.define("LoadOverview", {
   args: { generation: Schema.Int, filters: Filters },
   messages: [M.LoadedOverview],
   execute: ({ generation, filters }) =>
-    result(request((client) => client.overview({ query: filters }))).pipe(
-      Effect.map((value) => M.LoadedOverview({ generation, ...value })),
-    ),
+    result(
+      request((client) => client.analytics.overview({ query: filters })),
+    ).pipe(Effect.map((value) => M.LoadedOverview({ generation, ...value }))),
 });

@@ -8,6 +8,7 @@ import { Lakebase } from "../src/lakebase.js";
 import { SavedViews } from "../src/saved-views.js";
 import { Settings } from "../src/settings.js";
 import { TripComments } from "../src/trip-comments.js";
+import { Warehouse } from "../src/warehouse.js";
 import { Workspace } from "../src/workspace.js";
 import { warehouseFetch } from "./warehouse-fixture.js";
 
@@ -31,7 +32,7 @@ test("Lakebase discovery failures leave other services running and can be retrie
   let discoveries = 0;
   const diagnostic = new Error("Temporary discovery outage");
   const services = Layer.mergeAll(
-    Analytics.layer,
+    Analytics.layer.pipe(Layer.provide(Warehouse.layer)),
     Genie.layer,
     SavedViews.layer,
     TripComments.layer,

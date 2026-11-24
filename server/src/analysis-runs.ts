@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Effect, Option, Schema } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 import {
   AnalysisInput,
   AnalysisRun,
@@ -7,8 +7,8 @@ import {
   type AnalysisRunState,
   type AnalysisRunSummary,
   type AnalysisSubmission,
+  RouteReliabilityReport,
 } from "../../shared/analysis-runs.js";
-import { Analytics } from "./analytics.js";
 import {
   AnalysisReportPending,
   AnalysisRunNotFound,
@@ -17,6 +17,7 @@ import {
   unavailable,
 } from "./errors.js";
 import { Settings } from "./settings.js";
+import { Warehouse } from "./warehouse.js";
 import { Workspace } from "./workspace.js";
 
 const Run = Schema.Struct({
@@ -135,7 +136,7 @@ const summary = (run: Run): AnalysisRunSummary => ({
 const notFound = () =>
   new AnalysisRunNotFound({ message: "This analysis run could not be found." });
 
-export const makeAnalysisRuns = Effect.gen(function* () {
+const makeAnalysisRuns = Effect.gen(function* () {
   const {
     analysisJobId,
     analysisResultsTable,
@@ -144,7 +145,7 @@ export const makeAnalysisRuns = Effect.gen(function* () {
     tripSnapshotTable,
   } = yield* Settings;
   const workspace = yield* Workspace;
-  const analytics = yield* Analytics;
+  const { sql, read } = yield* Warehouse;
   const configured =
     host &&
     analysisJobId &&
@@ -262,6 +263,42 @@ export const makeAnalysisRuns = Effect.gen(function* () {
       }),
     );
 
+  const readReport = (id: AnalysisRunId) => {
+    const [catalog, schema, table] = analysisResultsTable.split(".");
+    if (!catalog || !schema || !table)
+      return Effect.fail(
+        unavailable("analysis", "Configure the analysis results table."),
+      );
+    return read(
+      Schema.Struct({
+        report_json: Schema.fromJsonString(RouteReliabilityReport),
+      }),
+      sql`SELECT report_json FROM ${sql(catalog)}.${sql(schema)}.${sql(table)}
+          WHERE run_id = CAST(${String(id)} AS BIGINT) LIMIT 1`,
+      "This report is under lock. You need permission to read it.",
+    ).pipe(
+      Effect.mapError((cause) =>
+        cause._tag === "ServiceUnavailable"
+          ? unavailable(
+              "analysis",
+              "The report could not be read. Check SELECT access to the results table.",
+              cause,
+            )
+          : cause,
+      ),
+      Effect.flatMap(([row]) =>
+        row
+          ? Effect.succeed(row.report_json)
+          : Effect.fail(
+              unavailable(
+                "analysis",
+                "The completed report is missing. Check the job's results table.",
+              ),
+            ),
+      ),
+    );
+  };
+
   const result = (id: AnalysisRunId) =>
     lookup(id).pipe(
       Effect.filterOrFail(
@@ -271,8 +308,15 @@ export const makeAnalysisRuns = Effect.gen(function* () {
             message: "The report is available after the run succeeds.",
           }),
       ),
-      Effect.andThen(analytics.analysisReport(id)),
+      Effect.andThen(readReport(id)),
     );
 
   return { submit, list, get, result };
 });
+
+export class AnalysisRuns extends Context.Service<
+  AnalysisRuns,
+  Effect.Success<typeof makeAnalysisRuns>
+>()("app/AnalysisRuns") {
+  static readonly layer = Layer.effect(this, makeAnalysisRuns);
+}

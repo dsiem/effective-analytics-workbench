@@ -82,11 +82,12 @@ from a listed row can use its summary while details load.
    even when the user has returned to the same filters.
    [Overview update](../client/src/features/overview/update.ts) · [Feature tests](../client/test/features.test.ts)
 
-Map service errors to stable HTTP error codes in the handler. Use them in the
-command when the next action depends on the failure. The Overview command only
-needs a display message. The Genie submit command uses the code and upstream
-status to distinguish rejection from uncertain acceptance.
-[Server error mapping](../server/src/routes.ts) · [Genie commands](../client/src/features/genie/commands.ts)
+The API groups endpoints by feature. The HTTP boundary maps service failures to
+stable codes. Use those codes in a command when the next action depends on the
+failure. The Overview command only needs a display message. The Genie submit
+command uses the code and upstream status to distinguish rejection from
+uncertain acceptance.
+[Server error mapping](../server/src/api-boundary.ts) · [Genie commands](../client/src/features/genie/commands.ts)
 
 ## Submit, poll, and retrieve long-running work
 
@@ -129,8 +130,9 @@ The taxi app requires Genie. The server fails startup if `DATABRICKS_HOST` or
 In Databricks Apps, Genie binds each conversation to the authenticated viewer
 from the Databricks proxy. The browser keeps the signed grant with the
 conversation IDs. Follow-ups, polling, result retrieval, Stop, and CSV export
-require that viewer's grant. Databricks still runs the queries with the app
-service principal. Local development uses the configured workspace identity.
+require that viewer's grant. The viewer-bound Genie service verifies grants before
+calling Databricks. Databricks runs the queries with the app service principal.
+Local development uses the configured workspace identity.
 [Viewer authorization](../server/src/genie-access.ts) ·
 [Forwarded Databricks headers](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/http-headers)
 

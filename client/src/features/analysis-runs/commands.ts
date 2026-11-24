@@ -20,7 +20,7 @@ export const Submit = Command.define("SubmitAnalysisRun", {
         retryId ?? (yield* Effect.sync(() => crypto.randomUUID()));
       const submitted = yield* result(
         request((client) =>
-          client.submitAnalysisRun({ payload: { input, requestId } }),
+          client.analysisRuns.submit({ payload: { input, requestId } }),
         ),
       );
       return M.AnalysisSubmitted({ ...submitted, requestId, generation });
@@ -31,7 +31,7 @@ export const LoadHistory = Command.define("LoadAnalysisHistory", {
   args: { generation: Schema.Int },
   messages: [M.LoadedAnalysisHistory],
   execute: ({ generation }) =>
-    request((client) => client.analysisRuns()).pipe(
+    request((client) => client.analysisRuns.list()).pipe(
       Effect.scoped,
       Effect.mapError(failure),
       Effect.result,
@@ -42,7 +42,7 @@ export const LoadHistory = Command.define("LoadAnalysisHistory", {
 export const loadStatus = (selection: typeof Selection.Type) =>
   Effect.gen(function* () {
     const status = yield* request((client) =>
-      client.analysisRun({ params: { id: selection.id } }),
+      client.analysisRuns.get({ params: { id: selection.id } }),
     ).pipe(Effect.scoped, Effect.mapError(failure), Effect.result);
     const observedAt = yield* Clock.currentTimeMillis;
     return M.LoadedAnalysisStatus({
@@ -58,7 +58,7 @@ export const LoadReport = Command.define("LoadAnalysisReport", {
   execute: (selection) =>
     result(
       request((client) =>
-        client.analysisResult({ params: { id: selection.id } }),
+        client.analysisRuns.result({ params: { id: selection.id } }),
       ),
     ).pipe(
       Effect.map((loaded) =>

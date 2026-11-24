@@ -49,7 +49,7 @@ for (const phase of ["headers", "body"] as const) {
     await Effect.runPromise(
       Effect.gen(function* () {
         const call = () =>
-          request((client) => client.metadata()).pipe(Effect.scoped);
+          request((client) => client.analytics.metadata()).pipe(Effect.scoped);
         const pending = yield* call().pipe(Effect.forkChild);
         yield* started.await;
         yield* TestClock.adjust("119 seconds");
@@ -69,10 +69,10 @@ for (const phase of ["headers", "body"] as const) {
             const httpClient = HttpClient.withScope(
               yield* HttpClient.HttpClient,
             );
-            return (yield* HttpApiClient.makeWith(AppApi, {
+            return yield* HttpApiClient.makeWith(AppApi, {
               httpClient,
               baseUrl: "http://fixture.test",
-            })).app;
+            });
           }).pipe(Effect.provide(FetchHttpClient.layer)),
         ),
         Effect.provideService(FetchHttpClient.Fetch, fetch),
@@ -121,7 +121,7 @@ test("Genie retrieval receives a slow answer and the server's own timeout", asyn
           HttpApiClient.makeWith(AppApi, {
             httpClient,
             baseUrl: "http://fixture.test",
-          }).pipe(Effect.map(({ app }) => app)),
+          }),
         ),
         Effect.provide(TestClock.layer()),
       ),

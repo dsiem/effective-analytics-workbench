@@ -9,9 +9,9 @@ import {
 } from "./errors.js";
 import { Settings } from "./settings.js";
 
-type Conversation = Pick<GenieOperation, "conversationId" | "mode">;
+export type Conversation = Pick<GenieOperation, "conversationId" | "mode">;
 
-export type GenieViewerAccess = {
+type GenieViewerAccess = {
   readonly grantFor: (conversation: Conversation) => string | undefined;
   readonly requireGrant: (
     conversation: Conversation,
@@ -29,13 +29,13 @@ export const makeGenieAccess = Effect.gen(function* () {
   const app = settings.appName.trim();
   const secret = Redacted.value(settings.clientSecret);
   return (
-    headers: Readonly<Record<string, string | undefined>>,
+    viewerId: string | undefined,
   ): Effect.Effect<
     GenieViewerAccess,
     PermissionDenied | ServiceUnavailable
   > => {
     if (!app) return Effect.succeed(localAccess);
-    const viewer = headers["x-forwarded-user"]?.trim();
+    const viewer = viewerId?.trim();
     if (!viewer)
       return Effect.fail(permissionDenied("Sign in to use Genie in this app."));
     if (!secret)

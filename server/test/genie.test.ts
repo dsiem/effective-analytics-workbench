@@ -18,6 +18,8 @@ import { Genie } from "../src/genie.js";
 import { Settings } from "../src/settings.js";
 import { Workspace } from "../src/workspace.js";
 
+const localGenie = Genie.use(({ forViewer }) => forViewer(undefined));
+
 test("Genie accepts ID-less text and visualization attachments and retains follow-up context", async () => {
   const calls: { path: string; method: string }[] = [];
   const message = {
@@ -62,7 +64,7 @@ test("Genie accepts ID-less text and visualization attachments and retains follo
   });
   const result = await Effect.runPromise(
     Effect.gen(function* () {
-      const genie = yield* Genie;
+      const genie = yield* localGenie;
       const operation = yield* genie.submit({ content: "Count trips" });
       assert.deepEqual(operation, {
         conversationId: "conversation",
@@ -162,7 +164,7 @@ test("Genie reports missing permissions during submission, polling and result re
   });
   const failures = await Effect.runPromise(
     Effect.gen(function* () {
-      const genie = yield* Genie;
+      const genie = yield* localGenie;
       return [
         yield* Effect.flip(genie.submit({ content: "Count trips" })),
         yield* Effect.flip(
@@ -194,7 +196,7 @@ test("a Genie warehouse access failure stops both polling and direct retrieval",
   };
   const failures = await Effect.runPromise(
     Effect.gen(function* () {
-      const genie = yield* Genie;
+      const genie = yield* localGenie;
       return [
         yield* Effect.flip(genie.poll(operation)),
         yield* Effect.flip(genie.result(operation)),
@@ -220,7 +222,7 @@ test("Genie reports denied attachment queries instead of displaying an empty res
     { state: "FAILED", sql_state: "42501" },
   ]) {
     const failure = await Effect.runPromise(
-      Effect.flatMap(Genie, (genie) =>
+      Effect.flatMap(localGenie, (genie) =>
         Effect.flip(genie.result(operation)),
       ).pipe(
         Effect.provide(
@@ -267,7 +269,7 @@ test("a failed result download can be retried with the same IDs without another 
   });
   const reply = await Effect.runPromise(
     Effect.gen(function* () {
-      const genie = yield* Genie;
+      const genie = yield* localGenie;
       const submitted = yield* genie.submit({ content: "One" });
       const failed = yield* genie.result(submitted).pipe(Effect.exit);
       assert.ok(Exit.isFailure(failed));
@@ -296,7 +298,7 @@ for (const status of [
     const calls: string[] = [];
     const result = await Effect.runPromise(
       Effect.gen(function* () {
-        const genie = yield* Genie;
+        const genie = yield* localGenie;
         const progress = yield* genie.poll(operation);
         const reply = yield* genie.result(operation).pipe(Effect.exit);
         return { progress, reply };
@@ -326,7 +328,7 @@ for (const status of [
 
 test("Genie preserves invalid upstream response diagnostics", async () => {
   const exit = await Effect.runPromiseExit(
-    Effect.flatMap(Genie, (genie) => genie.poll(operation)).pipe(
+    Effect.flatMap(localGenie, (genie) => genie.poll(operation)).pipe(
       Effect.provide(provideGenie(() => Effect.succeed({ unexpected: true }))),
     ),
   );
@@ -344,7 +346,7 @@ test("interrupted Genie reads remain interrupted and the same operation can be r
   );
   const progress = await Effect.runPromise(
     Effect.gen(function* () {
-      const genie = yield* Genie;
+      const genie = yield* localGenie;
       const interrupted = yield* genie.poll(operation).pipe(Effect.exit);
       assert.ok(Exit.isFailure(interrupted));
       assert.ok(Cause.hasInterruptsOnly(interrupted.cause));
@@ -365,7 +367,7 @@ test("accepted submission IDs and status polling do not depend on result attachm
   };
   const result = await Effect.runPromise(
     Effect.gen(function* () {
-      const genie = yield* Genie;
+      const genie = yield* localGenie;
       const accepted = yield* genie.submit({ content: "Question" });
       const followup = yield* genie.submit({
         content: "Follow-up",
@@ -396,7 +398,7 @@ test("accepted submission IDs and status polling do not depend on result attachm
 
 test("Chat counts all undisplayed attachments in its warning", async () => {
   const reply = await Effect.runPromise(
-    Effect.flatMap(Genie, (genie) => genie.result(operation)).pipe(
+    Effect.flatMap(localGenie, (genie) => genie.result(operation)).pipe(
       Effect.provide(
         provideGenie((path) =>
           Effect.succeed(
@@ -433,7 +435,7 @@ test("Chat counts all undisplayed attachments in its warning", async () => {
 
 test("Chat marks inline results as a preview when another chunk is available", async () => {
   const reply = await Effect.runPromise(
-    Effect.flatMap(Genie, (genie) => genie.result(operation)).pipe(
+    Effect.flatMap(localGenie, (genie) => genie.result(operation)).pipe(
       Effect.provide(
         provideGenie((path) =>
           Effect.succeed(
@@ -464,7 +466,7 @@ test("Genie builds structured filter context server-side for initial and follow-
   };
   await Effect.runPromise(
     Effect.gen(function* () {
-      const genie = yield* Genie;
+      const genie = yield* localGenie;
       yield* genie.submit({ content: "Count trips", filters, context });
       yield* genie.submit({
         content: "Count all trips",
@@ -571,14 +573,14 @@ test(
     );
     const result = await Effect.runPromise(
       Effect.gen(function* () {
-        const genie = yield* Genie;
+        const genie = yield* localGenie;
         const accepted = yield* genie.submit({
           mode: "agent",
           content: "Compare trip counts",
           conversationId: "conversation",
         });
         assert.deepEqual(accepted, {
-          mode: "agent",
+          mode: "agent" as const,
           conversationId: "conversation",
           messageId: "response",
         });
@@ -756,7 +758,7 @@ test("Agent mode reports workspace feature gating separately from a missing agen
     ["NOT_FOUND", "UpstreamError"],
   ] as const) {
     const error = await Effect.runPromise(
-      Effect.flatMap(Genie, (genie) =>
+      Effect.flatMap(localGenie, (genie) =>
         Effect.flip(genie.submit({ content: "Count trips", mode: "agent" })),
       ).pipe(
         Effect.provide(layer),
@@ -787,7 +789,7 @@ test("Agent submission without an acceptance event fails as an invalid response"
   );
   let submissions = 0;
   const error = await Effect.runPromise(
-    Effect.flatMap(Genie, (genie) =>
+    Effect.flatMap(localGenie, (genie) =>
       Effect.flip(genie.submit({ content: "Count trips", mode: "agent" })),
     ).pipe(
       Effect.provide(layer),
@@ -819,7 +821,7 @@ test("Agent cancellation uses the accepted response IDs and returns Databricks' 
   ]) {
     const calls: Array<{ path: string; method: string }> = [];
     const progress = await Effect.runPromise(
-      Effect.flatMap(Genie, (genie) =>
+      Effect.flatMap(localGenie, (genie) =>
         genie.cancel({
           conversationId: "agent-conversation",
           responseId: "agent-response",
@@ -875,7 +877,7 @@ test("Genie holds CSV transfer capacity until the body is interrupted", async ()
   );
   await Effect.runPromise(
     Effect.gen(function* () {
-      const genie = yield* Genie;
+      const genie = yield* localGenie;
       const first = yield* genie.downloadCsv({
         ...operation,
         attachmentId: "query",

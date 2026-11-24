@@ -77,11 +77,11 @@ export const LoadSavedViewShortcuts = Command.define("LoadSavedViewShortcuts", {
       });
       const loaded = yield* result(
         Effect.all({
-          page: request((client) => client.savedViews({ query: {} })),
+          page: request((client) => client.savedViews.list({ query: {} })),
           recents: ids.length
-            ? request((client) => client.savedViews({ query: { ids } })).pipe(
-                Effect.map((page) => page.rows),
-              )
+            ? request((client) =>
+                client.savedViews.list({ query: { ids } }),
+              ).pipe(Effect.map((page) => page.rows))
             : Effect.succeed([]),
         }),
       );
@@ -110,7 +110,7 @@ export const SaveSavedView = Command.define("SaveSavedView", {
   execute: ({ draft }) =>
     result(
       request((client) =>
-        client.saveSavedView({
+        client.savedViews.save({
           payload: { ...draft, title: draft.title.trim() },
         }),
       ),
@@ -139,7 +139,7 @@ export const LoadSavedViews = Command.define("LoadSavedViews", {
         const rows: SavedView[] = [];
         for (let page = 0; page < pages; page++) {
           const response = yield* request((client) =>
-            client.savedViews({
+            client.savedViews.list({
               query: {
                 ...(query ? { q: query } : {}),
                 ...(next ? { cursor: next } : {}),
@@ -164,7 +164,7 @@ export const PinSavedView = Command.define("PinSavedView", {
   execute: ({ savedView }) =>
     result(
       request((client) =>
-        client.pinSavedView({
+        client.savedViews.pin({
           params: { id: savedView.id },
           payload: { pinned: !savedView.pinned, version: savedView.version },
         }),
@@ -179,7 +179,7 @@ export const DeleteSavedView = Command.define("DeleteSavedView", {
   execute: ({ savedView }) =>
     result(
       request((client) =>
-        client.removeSavedView({
+        client.savedViews.remove({
           params: { id: savedView.id },
           query: { version: savedView.version },
         }),

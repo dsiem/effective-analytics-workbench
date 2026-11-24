@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
 import type { CurrentUser } from "../../shared/current-user.js";
 import { Settings } from "./settings.js";
 import { Workspace } from "./workspace.js";
@@ -8,7 +8,7 @@ const WorkspaceUser = Schema.Struct({
   userName: Schema.NonEmptyString,
 });
 
-export const makeCurrentUser = Effect.gen(function* () {
+const makeCurrentUser = Effect.gen(function* () {
   const settings = yield* Settings;
   const workspace = yield* Workspace;
   const localUser = yield* Effect.suspend(() =>
@@ -37,3 +37,10 @@ export const makeCurrentUser = Effect.gen(function* () {
     return localUser;
   };
 });
+
+export class CurrentViewer extends Context.Service<
+  CurrentViewer,
+  Effect.Success<typeof makeCurrentUser>
+>()("app/CurrentViewer") {
+  static readonly layer = Layer.effect(this, makeCurrentUser);
+}

@@ -11,7 +11,7 @@ export async function loadGps(
     Effect.gen(function* () {
       const search = { ...filters, endpoint };
       const response = yield* request((client) =>
-        client.tripMap({ query: search }),
+        client.analytics.tripMap({ query: search }),
       );
       if (response.endpoint !== endpoint)
         return yield* Effect.fail(new Error("Invalid map endpoint"));

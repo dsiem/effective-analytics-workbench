@@ -16,6 +16,7 @@ import { Analytics } from "../src/analytics.js";
 import { OperationTimeout, unavailable } from "../src/errors.js";
 import { Genie } from "../src/genie.js";
 import { Settings } from "../src/settings.js";
+import { Warehouse } from "../src/warehouse.js";
 import { Workspace } from "../src/workspace.js";
 import { warehouseFetch } from "./warehouse-fixture.js";
 
@@ -201,10 +202,12 @@ test(
         assert.equal(peak, 2);
       }).pipe(
         Effect.provide(
-          Analytics.layer.pipe(
-            Layer.provide(workspace()),
-            Layer.provide(settings({ WAREHOUSE_MAX_CONCURRENCY: "2" })),
-          ),
+          Analytics.layer
+            .pipe(Layer.provide(Warehouse.layer))
+            .pipe(
+              Layer.provide(workspace()),
+              Layer.provide(settings({ WAREHOUSE_MAX_CONCURRENCY: "2" })),
+            ),
         ),
         Effect.provide(TestClock.layer()),
       ),
@@ -257,10 +260,12 @@ test(
         );
       }).pipe(
         Effect.provide(
-          Analytics.layer.pipe(
-            Layer.provide(workspace()),
-            Layer.provide(settings({ WAREHOUSE_MAX_CONCURRENCY: "1" })),
-          ),
+          Analytics.layer
+            .pipe(Layer.provide(Warehouse.layer))
+            .pipe(
+              Layer.provide(workspace()),
+              Layer.provide(settings({ WAREHOUSE_MAX_CONCURRENCY: "1" })),
+            ),
         ),
         Effect.provide(TestClock.layer()),
       ),
@@ -291,7 +296,10 @@ test(
     let submissions = 0;
     let active = 0;
     let peak = 0;
-    const services = Layer.mergeAll(Genie.layer, Analytics.layer).pipe(
+    const services = Layer.mergeAll(
+      Genie.layer,
+      Analytics.layer.pipe(Layer.provide(Warehouse.layer)),
+    ).pipe(
       Layer.provide(
         workspace((_path, method) =>
           method === "POST"
@@ -325,7 +333,8 @@ test(
     );
     await Effect.runPromise(
       Effect.gen(function* () {
-        const genie = yield* Genie;
+        const { forViewer } = yield* Genie;
+        const genie = yield* forViewer(undefined);
         const requests = yield* Effect.all(
           Array.from({ length: 6 }, (_, index) =>
             genie.submit({
@@ -374,7 +383,8 @@ test(
     );
     await Effect.runPromise(
       Effect.gen(function* () {
-        const genie = yield* Genie;
+        const { forViewer } = yield* Genie;
+        const genie = yield* forViewer(undefined);
         const running = yield* genie
           .submit({ content: "First" })
           .pipe(Effect.forkChild);
@@ -418,7 +428,8 @@ test(
     );
     await Effect.runPromise(
       Effect.gen(function* () {
-        const genie = yield* Genie;
+        const { forViewer } = yield* Genie;
+        const genie = yield* forViewer(undefined);
         const running = yield* genie
           .submit({ content: "First" })
           .pipe(Effect.forkChild);
@@ -426,7 +437,8 @@ test(
         const cancelled = yield* genie.submit({ content: "Abandoned" }).pipe(
           Effect.timeoutOrElse({
             duration: "10 seconds",
-            orElse: () => Effect.fail(unavailable("test", "caller deadline")),
+            orElse: () =>
+              Effect.fail(unavailable("warehouse", "caller deadline")),
           }),
           Effect.forkChild,
         );

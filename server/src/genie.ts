@@ -35,6 +35,7 @@ import {
   UpstreamError,
   unavailable,
 } from "./errors.js";
+import { makeGenieAccess, type Conversation } from "./genie-access.js";
 import { Settings } from "./settings.js";
 import { Workspace } from "./workspace.js";
 
@@ -104,9 +105,12 @@ const genieReply = (
   };
 };
 
-const mapProtocolError = (
-  error: WorkspaceRequestError | GenieResponseError | GeniePermissionDenied,
-) => {
+type GenieProtocolError =
+  | WorkspaceRequestError
+  | GenieResponseError
+  | GeniePermissionDenied;
+
+const mapProtocolError = (error: GenieProtocolError) => {
   if (error instanceof GenieResponseError) {
     return new UpstreamError({
       service: "genie",
@@ -125,260 +129,288 @@ const mapProtocolError = (
   return error;
 };
 
-export class Genie extends Context.Service<
-  Genie,
-  {
-    readonly submit: (
-      input: typeof GenieInput.Type,
-    ) => Effect.Effect<GenieOperation, WorkspaceRequestError>;
-    readonly poll: (
-      operation: GenieOperation,
-    ) => Effect.Effect<GeniePollProgress, WorkspaceRequestError>;
-    readonly cancel: (
-      operation: GenieAgentOperation,
-    ) => Effect.Effect<GenieProgress, WorkspaceRequestError>;
-    readonly downloadCsv: (
-      reference: GenieQueryPath,
-    ) => Effect.Effect<
-      Stream.Stream<Uint8Array, WorkspaceRequestError | GenieDownloadError>,
-      WorkspaceRequestError
-    >;
-    readonly result: (
-      operation: GenieOperation,
-    ) => Effect.Effect<GenieReply, WorkspaceRequestError | GenieFailed>;
-  }
->()("app/Genie") {
-  static readonly layer = Layer.effect(
-    Genie,
-    Effect.gen(function* () {
-      const settings = yield* Settings;
-      const spaceId = settings.genieSpaceId.trim();
-      if (!settings.host || !spaceId)
-        return yield* Effect.fail(
-          unavailable(
-            "genie",
-            "Genie is required. Set DATABRICKS_HOST and GENIE_SPACE_ID.",
-          ),
-        );
-      const workspace = yield* Workspace;
-      const admitSubmission = makeAdmission({
-        service: "genie",
-        concurrency: settings.genieConcurrency,
-        timeout: "30 seconds",
-      });
-      const client = makeGenieClient({
-        spaceId,
-        request: ({ kind, path, method, body }: GenieRequest) =>
-          workspace
-            .request(path, method, body)
-            .pipe(
-              Effect.mapError(mapWorkspacePermission(permissionCopy[kind])),
-            ),
-      });
+const makeGenie = Effect.gen(function* () {
+  const settings = yield* Settings;
+  const spaceId = settings.genieSpaceId.trim();
+  if (!settings.host || !spaceId)
+    return yield* Effect.fail(
+      unavailable(
+        "genie",
+        "Genie is required. Set DATABRICKS_HOST and GENIE_SPACE_ID.",
+      ),
+    );
+  const workspace = yield* Workspace;
+  const admitSubmission = makeAdmission({
+    service: "genie",
+    concurrency: settings.genieConcurrency,
+    timeout: "30 seconds",
+  });
+  const client = makeGenieClient({
+    spaceId,
+    request: ({ kind, path, method, body }: GenieRequest) =>
+      workspace
+        .request(path, method, body)
+        .pipe(Effect.mapError(mapWorkspacePermission(permissionCopy[kind]))),
+  });
 
-      const downloads = makeGenieDownloadClient({
-        spaceId,
-        allowDatabricksStorageProxy: !!settings.appName,
-        request: ({ path, method }) =>
-          workspace.request(path, method).pipe(
-            Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
-            Effect.mapError((error) =>
-              error instanceof ServiceUnavailable
-                ? unavailable(error.service, error.message)
-                : mapWorkspacePermission(permissionCopy["query-result"])(error),
-            ),
-          ),
-      });
-      const admitDownload = makeAdmission({
-        service: "genie_csv",
-        concurrency: settings.genieConcurrency,
-        timeout: genieResultTimeoutMs,
-      });
-      const transferSlots = Semaphore.makeUnsafe(settings.genieConcurrency);
-      const downloadCsv = (reference: GenieQueryPath) =>
-        downloads.download(reference).pipe(
-          Effect.mapError((error) =>
-            error instanceof GenieDownloadError
-              ? new UpstreamError({
-                  service: "genie_csv",
-                  message: error.message,
-                })
-              : error,
-          ),
-          admitDownload.effect,
-          Effect.map((csv) =>
-            Stream.unwrap(
-              transferSlots.takeScoped(1).pipe(
-                Effect.timeoutOrElse({
-                  duration: genieResultTimeoutMs,
-                  orElse: () =>
-                    Effect.fail(
-                      new OperationTimeout({
-                        service: "genie_csv",
-                        message:
-                          "Genie CSV transfer timed out while waiting. Try again.",
-                      }),
-                    ),
-                }),
-                Effect.as(csv),
-              ),
-            ),
-          ),
-        );
-
-      const agent = makeGenieAgentClient({
-        agentId: spaceId,
-        requestJson: ({ kind, path, method }) =>
-          workspace
-            .request(path, method)
-            .pipe(
-              Effect.mapError(
-                mapWorkspacePermission(
-                  kind === "agent-cancel"
-                    ? permissionCopy.cancel
-                    : permissionCopy.message,
+  const downloads = makeGenieDownloadClient({
+    spaceId,
+    allowDatabricksStorageProxy: !!settings.appName,
+    request: ({ path, method }) =>
+      workspace.request(path, method).pipe(
+        Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
+        Effect.mapError((error) =>
+          error instanceof ServiceUnavailable
+            ? unavailable(error.service, error.message)
+            : mapWorkspacePermission(permissionCopy["query-result"])(error),
+        ),
+      ),
+  });
+  const admitDownload = makeAdmission({
+    service: "genie_csv",
+    concurrency: settings.genieConcurrency,
+    timeout: genieResultTimeoutMs,
+  });
+  const transferSlots = Semaphore.makeUnsafe(settings.genieConcurrency);
+  const downloadCsv = (reference: GenieQueryPath) =>
+    downloads.download(reference).pipe(
+      Effect.mapError((error) =>
+        error instanceof GenieDownloadError
+          ? new UpstreamError({
+              service: "genie_csv",
+              message: error.message,
+            })
+          : error,
+      ),
+      admitDownload.effect,
+      Effect.map((csv) =>
+        Stream.unwrap(
+          transferSlots.takeScoped(1).pipe(
+            Effect.timeoutOrElse({
+              duration: genieResultTimeoutMs,
+              orElse: () =>
+                Effect.fail(
+                  new OperationTimeout({
+                    service: "genie_csv",
+                    message:
+                      "Genie CSV transfer timed out while waiting. Try again.",
+                  }),
                 ),
-              ),
-            ),
-        requestEvents: ({ path, body }, read) =>
-          workspace.requestEvents(path, body, read).pipe(
-            Effect.mapError((error) => {
-              if (error instanceof GenieResponseError) return error;
-              if (
-                error instanceof UpstreamError &&
-                error.upstreamCode === "FEATURE_DISABLED"
-              )
-                return unavailable(
-                  "genie_agent_mode",
-                  "Agent mode is disabled in this Databricks workspace. Select Chat, or ask a workspace admin about Agent mode access.",
-                );
-              return mapWorkspacePermission(permissionCopy.submit)(error);
             }),
+            Effect.as(csv),
           ),
-      });
-      const agentReference = ({
-        conversationId,
-        messageId,
-      }: GenieOperation) => ({ conversationId, responseId: messageId });
+        ),
+      ),
+    );
 
-      const submit = (input: typeof GenieInput.Type) => {
-        const question = {
-          ...(input.conversationId
-            ? { conversationId: input.conversationId }
-            : {}),
-          content: prompt(
-            input,
-            settings.tripSnapshotTable || "the configured trip table",
+  const agent = makeGenieAgentClient({
+    agentId: spaceId,
+    requestJson: ({ kind, path, method }) =>
+      workspace
+        .request(path, method)
+        .pipe(
+          Effect.mapError(
+            mapWorkspacePermission(
+              kind === "agent-cancel"
+                ? permissionCopy.cancel
+                : permissionCopy.message,
+            ),
           ),
-        };
-        const submitted =
-          input.mode === "agent"
-            ? agent.submit(question).pipe(
-                Effect.map(({ conversationId, responseId }) => ({
-                  conversationId,
-                  messageId: responseId,
-                  mode: "agent" as const,
-                })),
-              )
-            : client.submit(question);
-        return submitted.pipe(
-          Effect.mapError(mapProtocolError),
-          admitSubmission.effect,
-        );
-      };
+        ),
+    requestEvents: ({ path, body }, read) =>
+      workspace.requestEvents(path, body, read).pipe(
+        Effect.mapError((error) => {
+          if (error instanceof GenieResponseError) return error;
+          if (
+            error instanceof UpstreamError &&
+            error.upstreamCode === "FEATURE_DISABLED"
+          )
+            return unavailable(
+              "genie_agent_mode",
+              "Agent mode is disabled in this Databricks workspace. Select Chat, or ask a workspace admin about Agent mode access.",
+            );
+          return mapWorkspacePermission(permissionCopy.submit)(error);
+        }),
+      ),
+  });
+  const agentReference = ({ conversationId, messageId }: GenieOperation) => ({
+    conversationId,
+    responseId: messageId,
+  });
 
-      const poll = (operation: GenieOperation) =>
-        Effect.gen(function* () {
-          if (operation.mode !== "agent") return yield* client.poll(operation);
-          const progress = yield* agent.poll(agentReference(operation));
-          const { state, status } = progress;
-          if (state === "unresolved")
-            return { ...operation, mode: "agent" as const, state, status };
-          return {
-            ...operation,
-            state,
-            status,
-            ...(progress.phase === undefined ? {} : { phase: progress.phase }),
-          };
-        }).pipe(Effect.mapError(mapProtocolError));
-
-      const cancel = (operation: GenieAgentOperation) =>
-        agent.cancel(operation).pipe(
-          Effect.map(
-            ({ conversationId, responseId, state, status }): GenieProgress => ({
+  const submit = (input: typeof GenieInput.Type) => {
+    const question = {
+      ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+      content: prompt(
+        input,
+        settings.tripSnapshotTable || "the configured trip table",
+      ),
+    };
+    const submitted =
+      input.mode === "agent"
+        ? agent.submit(question).pipe(
+            Effect.map(({ conversationId, responseId }): GenieOperation => ({
               conversationId,
               messageId: responseId,
               mode: "agent",
-              state,
+            })),
+          )
+        : client.submit(question);
+    return submitted.pipe(
+      Effect.mapError(mapProtocolError),
+      admitSubmission.effect,
+    );
+  };
+
+  const poll = (operation: GenieOperation) => {
+    const progress: Effect.Effect<GeniePollProgress, GenieProtocolError> =
+      operation.mode !== "agent"
+        ? client.poll(operation)
+        : agent.poll(agentReference(operation)).pipe(
+            Effect.map((progress): GeniePollProgress => {
+              const { state, status } = progress;
+              if (state === "unresolved")
+                return { ...operation, mode: "agent", state, status };
+              return {
+                ...operation,
+                state,
+                status,
+                ...(progress.phase === undefined
+                  ? {}
+                  : { phase: progress.phase }),
+              };
+            }),
+          );
+    return progress.pipe(Effect.mapError(mapProtocolError));
+  };
+
+  const cancel = (operation: GenieAgentOperation) =>
+    agent.cancel(operation).pipe(
+      Effect.map(
+        ({ conversationId, responseId, state, status }): GenieProgress => ({
+          conversationId,
+          messageId: responseId,
+          mode: "agent",
+          state,
+          status,
+        }),
+      ),
+      Effect.mapError(mapProtocolError),
+    );
+
+  const result = (operation: GenieOperation) => {
+    const response: Effect.Effect<
+      GenieAnswer,
+      | GenieProtocolError
+      | GenieMessageUnavailable
+      | GenieQueryFailed
+      | GenieQueryUnavailable
+    > =
+      operation.mode === "agent"
+        ? agent.result(agentReference(operation))
+        : client.result(operation);
+    return response.pipe(
+      Effect.catchTags({
+        GenieMessageUnavailable: ({ state, status }) =>
+          Effect.fail(
+            new GenieFailed({
               status,
+              message:
+                state === "failed"
+                  ? `Genie could not complete this question (${status}).`
+                  : state === "unresolved"
+                    ? "Genie has not made this response visible yet. Resume to check it again."
+                    : "This answer is still processing. Resume waiting for it.",
             }),
           ),
-          Effect.mapError(mapProtocolError),
-        );
-
-      const result = (operation: GenieOperation) => {
-        const response: Effect.Effect<
-          GenieAnswer,
-          | WorkspaceRequestError
-          | GenieResponseError
-          | GeniePermissionDenied
-          | GenieMessageUnavailable
-          | GenieQueryFailed
-          | GenieQueryUnavailable
-        > =
-          operation.mode === "agent"
-            ? agent.result(agentReference(operation))
-            : client.result(operation);
-        return response.pipe(
-          Effect.catchTags({
-            GenieMessageUnavailable: ({ state, status }) =>
-              Effect.fail(
-                new GenieFailed({
-                  status,
-                  message:
-                    state === "failed"
-                      ? `Genie could not complete this question (${status}).`
-                      : state === "unresolved"
-                        ? "Genie has not made this response visible yet. Resume to check it again."
-                        : "This answer is still processing. Resume waiting for it.",
-                }),
-              ),
-            GenieQueryFailed: () =>
-              Effect.fail(
-                new GenieFailed({
-                  status: "FAILED",
-                  message: "Genie could not execute the query for this answer.",
-                }),
-              ),
-            GenieQueryUnavailable: ({ state, status }) =>
-              Effect.fail(
-                new GenieFailed({
-                  status,
-                  message:
-                    state === "pending"
-                      ? "The query is still running. Retry retrieving this answer."
-                      : `The query result is no longer available (${status}).`,
-                }),
-              ),
-          }),
-          Effect.mapError((error) =>
-            error instanceof GenieFailed ? error : mapProtocolError(error),
+        GenieQueryFailed: () =>
+          Effect.fail(
+            new GenieFailed({
+              status: "FAILED",
+              message: "Genie could not execute the query for this answer.",
+            }),
           ),
-          Effect.map((answer) => genieReply(operation, answer)),
-          Effect.timeoutOrElse({
-            duration: genieResultTimeoutMs,
-            orElse: () =>
-              Effect.fail(
-                new OperationTimeout({
-                  service: "genie",
-                  message:
-                    "Downloading the answer timed out. Retry retrieving this answer.",
-                }),
-              ),
-          }),
-        );
+        GenieQueryUnavailable: ({ state, status }) =>
+          Effect.fail(
+            new GenieFailed({
+              status,
+              message:
+                state === "pending"
+                  ? "The query is still running. Retry retrieving this answer."
+                  : `The query result is no longer available (${status}).`,
+            }),
+          ),
+      }),
+      Effect.mapError((error) =>
+        error instanceof GenieFailed ? error : mapProtocolError(error),
+      ),
+      Effect.map((answer) => genieReply(operation, answer)),
+      Effect.timeoutOrElse({
+        duration: genieResultTimeoutMs,
+        orElse: () =>
+          Effect.fail(
+            new OperationTimeout({
+              service: "genie",
+              message:
+                "Downloading the answer timed out. Retry retrieving this answer.",
+            }),
+          ),
+      }),
+    );
+  };
+  const accessFor = yield* makeGenieAccess;
+  const forViewer = (viewerId: string | undefined) =>
+    Effect.map(accessFor(viewerId), ({ requireGrant, grantFor }) => {
+      const authorized = <A, E, R>(
+        conversation: Conversation,
+        grant: string | undefined,
+        run: () => Effect.Effect<A, E, R>,
+      ) => requireGrant(conversation, grant).pipe(Effect.flatMap(run));
+
+      const withGrant = <A extends Conversation>(value: A) => {
+        const grant = grantFor(value);
+        return grant === undefined ? value : { ...value, grant };
       };
-      return { submit, poll, cancel, result, downloadCsv };
-    }),
-  );
+
+      return {
+        submit: (input: typeof GenieInput.Type, grant?: string) =>
+          Effect.gen(function* () {
+            if (input.conversationId !== undefined)
+              yield* requireGrant(
+                {
+                  conversationId: input.conversationId,
+                  ...(input.mode === undefined ? {} : { mode: input.mode }),
+                },
+                grant,
+              );
+            return withGrant<GenieOperation>(yield* submit(input));
+          }),
+        poll: (operation: GenieOperation, grant?: string) =>
+          authorized(operation, grant, () => poll(operation)),
+        cancel: (operation: GenieAgentOperation, grant?: string) =>
+          authorized(
+            { conversationId: operation.conversationId, mode: "agent" },
+            grant,
+            () => cancel(operation),
+          ),
+        result: (operation: GenieOperation, grant?: string) =>
+          authorized(operation, grant, () => result(operation)).pipe(
+            Effect.map(withGrant),
+          ),
+        downloadCsv: (reference: GenieQueryPath, grant?: string) =>
+          authorized(reference, grant, () => downloadCsv(reference)),
+      };
+    });
+  return { forViewer };
+});
+
+export class Genie extends Context.Service<
+  Genie,
+  Effect.Success<typeof makeGenie>
+>()("app/Genie") {
+  static readonly layer = Layer.effect(this, makeGenie);
 }
+
+export type GenieViewer = Effect.Success<
+  ReturnType<(typeof Genie.Service)["forViewer"]>
+>;

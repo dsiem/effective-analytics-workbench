@@ -95,7 +95,7 @@ test("finishing one restored Genie wait preserves the others' polling cadence", 
         HttpApiClient.makeWith(AppApi, {
           httpClient,
           baseUrl: "http://fixture.test",
-        }).pipe(Effect.map(({ app }) => app)),
+        }),
       ),
       Effect.provide(TestClock.layer()),
     ),
@@ -194,7 +194,7 @@ for (const becomesVisible of [true, false]) {
             HttpApiClient.makeWith(AppApi, {
               httpClient,
               baseUrl: "http://fixture.test",
-            }).pipe(Effect.map(({ app }) => app)),
+            }),
           ),
           Effect.provide(TestClock.layer()),
         ),

@@ -1,4 +1,6 @@
+import { HttpApiClient } from "effect/http-api";
 import { Lexer } from "marked";
+import { AppApi } from "../../../../shared/api";
 import type { GenieReply } from "../../../../shared/genie";
 import { filterSummary } from "../../domain/filter-summary";
 import { icon } from "../../ui/icons";
@@ -7,6 +9,8 @@ import { markdown } from "./markdown-view";
 import { stoppableOperation, type Turn } from "./model";
 import { type H, Message as M } from "./view-messages";
 import type { ViewModel as Model } from "./view-model";
+
+const csvUrl = HttpApiClient.urlBuilder(AppApi).genie.downloadCsv;
 
 const questions = {
   overview: [
@@ -97,7 +101,13 @@ function answer(h: H, clipboard: string, reply: GenieReply): Child[] {
                     h.Class("border-t p-3"),
                     h.Method("post"),
                     h.Action(
-                      `/api/genie/${encodeURIComponent(reply.conversationId)}/messages/${encodeURIComponent(reply.messageId)}/attachments/${encodeURIComponent(result.attachmentId)}/csv`,
+                      csvUrl({
+                        params: {
+                          conversationId: reply.conversationId,
+                          messageId: reply.messageId,
+                          attachmentId: result.attachmentId,
+                        },
+                      }),
                     ),
                     h.Target("_blank"),
                     h.Rel("noopener"),

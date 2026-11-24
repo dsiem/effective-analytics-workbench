@@ -52,10 +52,10 @@ function runRequest(
         ApiClient,
         Effect.gen(function* () {
           const httpClient = HttpClient.withScope(yield* HttpClient.HttpClient);
-          return (yield* HttpApiClient.makeWith(AppApi, {
+          return yield* HttpApiClient.makeWith(AppApi, {
             httpClient,
             baseUrl: "http://fixture.test",
-          })).app;
+          });
         }).pipe(Effect.provide(FetchHttpClient.layer)),
       ),
       Effect.provideService(FetchHttpClient.Fetch, fetch),
@@ -72,7 +72,7 @@ const respond = (
 const originalTimeout = () =>
   Response.json(
     {
-      error: { code: "workspace_timeout", message: "Original load timed out" },
+      error: { code: "warehouse_timeout", message: "Original load timed out" },
     },
     { status: 504 },
   );
@@ -163,7 +163,7 @@ test("Records completes an empty trip page", async () => {
         HttpApiClient.makeWith(AppApi, {
           httpClient,
           baseUrl: "http://fixture.test",
-        }).pipe(Effect.map((client) => client.app)),
+        }),
       ),
     ),
   );

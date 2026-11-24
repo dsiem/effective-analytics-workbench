@@ -73,7 +73,7 @@ export const FocusAnalysisHeading = Command.define("FocusAnalysisHeading", {
 export const LoadMetadata = Command.define("LoadMetadata", {
   messages: [M.LoadedMetadata],
   execute: Effect.all({
-    result: result(request((client) => client.metadata())),
+    result: result(request((client) => client.analytics.metadata())),
     today: Calendar.today.local,
   }).pipe(
     Effect.map(({ result, today }) => M.LoadedMetadata({ ...result, today })),
@@ -81,7 +81,7 @@ export const LoadMetadata = Command.define("LoadMetadata", {
 });
 export const LoadUser = Command.define("LoadUser", {
   messages: [M.LoadedUser],
-  execute: result(request((client) => client.currentUser())).pipe(
+  execute: result(request((client) => client.viewer.current())).pipe(
     Effect.map(({ data }) => M.LoadedUser({ user: data })),
   ),
 });

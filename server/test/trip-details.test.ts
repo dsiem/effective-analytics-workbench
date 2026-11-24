@@ -24,6 +24,7 @@ import {
 } from "../src/errors.js";
 import { Settings } from "../src/settings.js";
 import { makeTripPages } from "../src/trip-pages.js";
+import { Warehouse } from "../src/warehouse.js";
 import { Workspace } from "../src/workspace.js";
 import { inlineResult, warehouseFetch } from "./warehouse-fixture.js";
 
@@ -89,6 +90,7 @@ function runTrips<A, E>(program: Effect.Effect<A, E, Analytics>) {
     program.pipe(
       Effect.provide(
         Analytics.layer.pipe(
+          Layer.provide(Warehouse.layer),
           Layer.provide(
             Layer.succeed(Workspace, {
               requestEvents: () =>

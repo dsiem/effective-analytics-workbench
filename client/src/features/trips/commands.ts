@@ -13,7 +13,7 @@ export const LoadCommentCounts = Command.define("LoadCommentCounts", {
   messages: [M.LoadedCommentCounts],
   execute: ({ tripIds, version }) =>
     result(
-      request((client) => client.tripCommentCounts({ query: { tripIds } })),
+      request((client) => client.tripComments.counts({ query: { tripIds } })),
     ).pipe(
       Effect.map(({ data, error }) =>
         M.LoadedCommentCounts({
@@ -39,7 +39,7 @@ export const PostComment = Command.define("PostComment", {
     Effect.gen(function* () {
       const input = { trip, body, id: retryId ?? crypto.randomUUID() };
       const { error } = yield* result(
-        request((client) => client.addTripComment({ payload: input })),
+        request((client) => client.tripComments.add({ payload: input })),
       );
       return M.PostedComment({ input, error });
     }),

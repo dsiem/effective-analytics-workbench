@@ -36,8 +36,8 @@ function loadPreview({
       Effect.fnUntraced(function* (cursor: string | null) {
         const { rows, nextCursor, hasMoreMatches } = yield* request((client) =>
           cursor === null
-            ? client.trips({ query: { ...filters, sort } })
-            : client.tripPage({ params: { cursor } }),
+            ? client.analytics.trips({ query: { ...filters, sort } })
+            : client.analytics.tripPage({ params: { cursor } }),
         ).pipe(Effect.scoped);
         const messages: Message[] = rows.length
           ? [M.TripBatchReceived({ generation, rows })]
@@ -76,7 +76,9 @@ function loadPreview({
 
 function loadDetails({ tripId, generation }: typeof DetailRequest.Type) {
   return Stream.fromEffect(
-    result(request((client) => client.tripDetails({ query: { tripId } }))).pipe(
+    result(
+      request((client) => client.analytics.tripDetails({ query: { tripId } })),
+    ).pipe(
       Effect.map(({ data, error }) =>
         M.LoadedTripDetails({
           tripId,
@@ -101,7 +103,7 @@ function loadComments({
   return Stream.fromEffect(
     result(
       request((client) =>
-        client.tripComments({
+        client.tripComments.list({
           query: cursor ? { tripId, cursor } : { tripId },
         }),
       ),

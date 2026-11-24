@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { ConfigProvider, Layer, Schema } from "effect";
 import { HttpRouter, HttpServer } from "effect/http";
 import { Overview } from "../../shared/overview.js";
+import { AnalysisRuns } from "../src/analysis-runs.js";
 import { Analytics } from "../src/analytics.js";
 import { Genie } from "../src/genie.js";
 import { Lakebase } from "../src/lakebase.js";
@@ -10,6 +11,7 @@ import { Routes } from "../src/routes.js";
 import { SavedViews } from "../src/saved-views.js";
 import { Settings } from "../src/settings.js";
 import { TripComments } from "../src/trip-comments.js";
+import { Warehouse } from "../src/warehouse.js";
 import { Workspace } from "../src/workspace.js";
 import { warehouseFetch } from "./warehouse-fixture.js";
 
@@ -37,11 +39,13 @@ test("the overview API returns numeric aggregates and preserves ZIP strings from
   );
   const services = Layer.mergeAll(
     Analytics.layer,
+    AnalysisRuns.layer,
     Genie.layer,
     SavedViews.layer,
     TripComments.layer,
   ).pipe(
     Layer.provideMerge(Lakebase.layer),
+    Layer.provideMerge(Warehouse.layer),
     Layer.provideMerge(Workspace.layer),
     Layer.provideMerge(Settings.layer),
     Layer.provide(

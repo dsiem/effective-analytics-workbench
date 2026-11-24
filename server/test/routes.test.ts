@@ -13,6 +13,7 @@ import { HttpRouter, HttpServer } from "effect/http";
 import { OpenApi } from "effect/http-api";
 import { ApiError, AppApi } from "../../shared/api.js";
 import { GenieOperation } from "../../shared/genie.js";
+import { AnalysisRuns } from "../src/analysis-runs.js";
 import { Analytics } from "../src/analytics.js";
 import {
   GenieFailed,
@@ -21,10 +22,9 @@ import {
   PermissionDenied,
   SavedViewConflict,
   SavedViewNotFound,
-  type ServiceUnavailable,
   unavailable,
 } from "../src/errors.js";
-import { Genie } from "../src/genie.js";
+import { Genie, type GenieViewer } from "../src/genie.js";
 import { Routes } from "../src/routes.js";
 import { SavedViews } from "../src/saved-views.js";
 import { Settings } from "../src/settings.js";
@@ -32,62 +32,53 @@ import { TripComments } from "../src/trip-comments.js";
 import { Workspace } from "../src/workspace.js";
 
 type Services = {
-  genie?: Partial<typeof Genie.Service>;
+  genie?: Partial<GenieViewer> | "live";
+  workspace?: Partial<typeof Workspace.Service>;
   analytics?: Partial<typeof Analytics.Service>;
   savedViews?: Partial<typeof SavedViews.Service>;
 };
 const appFor = (
-  effect: Effect.Effect<never, ServiceUnavailable> = Effect.die(
-    "Unexpected service call",
-  ),
   overrides: Services = {},
   env: Readonly<Record<string, string>> = {},
-) =>
-  HttpRouter.toWebHandler(
+) => {
+  const unexpected = Effect.die("Unexpected service call");
+  return HttpRouter.toWebHandler(
     Routes.pipe(
       Layer.provide(
         Layer.mergeAll(
-          Layer.succeed(Workspace, {
-            requestEvents: () =>
-              Effect.die("Unexpected workspace event request"),
-            accessToken: Effect.succeed(Redacted.make("unused")),
-            request: () => Effect.die("Unexpected workspace request"),
-          }),
-          Layer.succeed(Analytics, {
-            metadata: effect,
-            overview: () => effect,
-            trips: () => effect,
-            tripPage: () => effect,
-            tripDetails: () => effect,
-            tripMap: () => effect,
-            analysisReport: () => effect,
-            ...overrides.analytics,
-          }),
-          Layer.succeed(Genie, {
-            submit: () => effect,
-            poll: () => effect,
-            result: () => effect,
-            cancel: () => effect,
-            downloadCsv: () => effect,
-            ...overrides.genie,
-          }),
-          Layer.succeed(TripComments, {
-            counts: () => effect,
-            list: () => effect,
-            add: () => effect,
-          }),
-          Layer.succeed(SavedViews, {
-            list: () => effect,
-            save: () => effect,
-            pin: () => effect,
-            remove: () => effect,
-            ...overrides.savedViews,
-          }),
-          Settings.layer.pipe(
-            Layer.provide(
-              Layer.succeed(
-                ConfigProvider.ConfigProvider,
-                ConfigProvider.fromEnvRecord(env),
+          Layer.mock(AnalysisRuns, {}),
+          Layer.mock(Analytics, overrides.analytics ?? {}),
+          overrides.genie === "live"
+            ? Genie.layer
+            : Layer.succeed(Genie, {
+                forViewer: () =>
+                  Effect.succeed({
+                    submit: () => unexpected,
+                    poll: () => unexpected,
+                    result: () => unexpected,
+                    cancel: () => unexpected,
+                    downloadCsv: () => unexpected,
+                    ...(typeof overrides.genie === "object"
+                      ? overrides.genie
+                      : {}),
+                  }),
+              }),
+          Layer.mock(TripComments, {}),
+          Layer.mock(SavedViews, overrides.savedViews ?? {}),
+        ).pipe(
+          Layer.provideMerge(
+            Layer.mock(Workspace, {
+              accessToken: Effect.succeed(Redacted.make("unused")),
+              ...overrides.workspace,
+            }),
+          ),
+          Layer.provideMerge(
+            Settings.layer.pipe(
+              Layer.provide(
+                Layer.succeed(
+                  ConfigProvider.ConfigProvider,
+                  ConfigProvider.fromEnvRecord(env),
+                ),
               ),
             ),
           ),
@@ -97,6 +88,7 @@ const appFor = (
     ),
     { disableLogger: true },
   );
+};
 
 test("trip page responses negotiate gzip and return typed rows with a cursor", async (t) => {
   const cursor = "00000000-0000-4000-8000-000000000000.1";
@@ -114,7 +106,7 @@ test("trip page responses negotiate gzip and return typed rows with a cursor", a
   const last = { rows, nextCursor: null, hasMoreMatches: true };
   const encode = (page: typeof first | typeof last) =>
     new TextEncoder().encode(JSON.stringify(page));
-  const app = appFor(undefined, {
+  const app = appFor({
     analytics: {
       trips: () => Effect.succeed(encode(first)),
       tripPage: (requested) =>
@@ -246,7 +238,7 @@ for (const { request, services, status, error } of [
   },
 ] as const) {
   test(`HTTP maps ${error.code} on the operation that can produce it`, async (t) => {
-    const app = appFor(undefined, services);
+    const app = appFor(services);
     t.after(app.dispose);
     const response = await app.handler(request);
     assert.equal(response.status, status);
@@ -276,12 +268,14 @@ test("endpoints advertise their applicable failures", () => {
 
 test("Genie recovery endpoints validate operation IDs before calling the service", async () => {
   let calls = 0;
-  const app = appFor(
+  const unavailableGenie = () =>
     Effect.suspend(() => {
       calls++;
-      return Effect.fail(unavailable("genie", "Unavailable"));
-    }),
-  );
+      return Effect.fail(unavailable("workspace", "Unavailable"));
+    });
+  const app = appFor({
+    genie: { poll: unavailableGenie, result: unavailableGenie },
+  });
   try {
     for (const path of [
       "/api/genie/bad%20id/messages/message",
@@ -315,7 +309,11 @@ test("Genie recovery endpoints validate operation IDs before calling the service
 });
 
 test("unexpected defects are HTTP 500 instead of dependency failures", async () => {
-  const app = appFor(Effect.die(new Error("private programming error")));
+  const app = appFor({
+    savedViews: {
+      list: () => Effect.die(new Error("private programming error")),
+    },
+  });
   try {
     const response = await app.handler(
       new Request("http://localhost/api/saved-views"),
@@ -333,7 +331,7 @@ test("unexpected defects are HTTP 500 instead of dependency failures", async () 
 test("HTTP separates submission IDs from polling and result retrieval", async () => {
   const operation = { conversationId: "conversation", messageId: "message" };
   const calls: unknown[] = [];
-  const app = appFor(undefined, {
+  const app = appFor({
     genie: {
       submit: (input) =>
         Effect.sync(() => {
@@ -416,7 +414,7 @@ test("current-user endpoint returns only each viewer's name/email and prevents c
 test("Genie CSV exports use a same-origin POST and stream a downloadable attachment", async () => {
   const path = "/api/genie/conv/messages/msg/attachments/query/csv";
   let exports = 0;
-  const { handler, dispose } = appFor(undefined, {
+  const { handler, dispose } = appFor({
     genie: {
       downloadCsv: (reference) =>
         Effect.sync(() => {
@@ -474,41 +472,75 @@ test("hosted Genie grants bind followups, reads, cancellation, and CSV to the su
       calls.push(name);
       return value;
     });
+  const chatMessage = {
+    conversation_id: chat.conversationId,
+    message_id: chat.messageId,
+    status: "COMPLETED",
+    attachments: [{ text: { content: "Query ready" } }],
+  };
   const { handler, dispose } = appFor(
-    undefined,
     {
-      genie: {
-        submit: ({ mode, conversationId }) =>
+      genie: "live",
+      workspace: {
+        requestEvents: (_path, _body, read) =>
           record(
-            conversationId ? "follow-up" : "submit",
-            mode === "agent" ? agent : chat,
-          ),
-        poll: (operation) =>
-          record("poll", {
-            ...operation,
-            state: "completed" as const,
-            status: "COMPLETED",
-          }),
-        result: (operation) =>
-          record("result", { ...operation, text: "Query ready", queries: [] }),
-        cancel: ({ conversationId, responseId }) =>
-          record("cancel", {
-            conversationId,
-            messageId: responseId,
-            mode: "agent" as const,
-            state: "cancelled" as const,
-            status: "CANCELLED",
-          }),
-        downloadCsv: () =>
-          record(
-            "download",
-            Stream.make(new TextEncoder().encode("total\r\n1\r\n")),
-          ),
+            "agent-submit",
+            Stream.make(
+              new TextEncoder().encode(
+                `event: response.created\ndata: ${JSON.stringify({
+                  type: "response.created",
+                  response: {
+                    id: agent.messageId,
+                    conversation_id: agent.conversationId,
+                  },
+                })}\n\n`,
+              ),
+            ),
+          ).pipe(Effect.flatMap(read)),
+        request: (path, method) => {
+          if (path.endsWith("/start-conversation"))
+            return record("submit", {
+              conversation_id: chat.conversationId,
+              message: chatMessage,
+            });
+          if (method === "POST" && path.endsWith("/messages"))
+            return record("follow-up", chatMessage);
+          if (path.includes("/items?"))
+            return record("poll", {
+              status: "completed",
+              data: [],
+              has_more: false,
+            });
+          if (path.endsWith("/cancel"))
+            return record("cancel", { status: "CANCELLED" });
+          if (path.endsWith("/downloads"))
+            return record("download", {
+              download_id: "export",
+              download_id_signature: "fixture",
+            });
+          if (path.includes("/downloads/export?"))
+            return record("download-poll", {
+              statement_response: {
+                statement_id: "statement",
+                status: { state: "SUCCEEDED" },
+                manifest: {
+                  format: "CSV",
+                  truncated: false,
+                  total_chunk_count: 0,
+                  schema: { columns: [{ name: "total" }] },
+                },
+              },
+            });
+          if (path.endsWith(`/messages/${chat.messageId}`))
+            return record("result", chatMessage);
+          return Effect.die(`Unexpected workspace path: ${path}`);
+        },
       },
     },
     {
       DATABRICKS_APP_NAME: "test-app",
       DATABRICKS_CLIENT_SECRET: "fixture-only-secret",
+      DATABRICKS_HOST: "https://workspace.invalid",
       GENIE_SPACE_ID: "space",
     },
   );
@@ -605,7 +637,7 @@ test("hosted Genie grants bind followups, reads, cancellation, and CSV to the su
         .status,
       403,
     );
-    assert.deepEqual(calls, ["submit", "submit"]);
+    assert.deepEqual(calls, ["submit", "agent-submit"]);
 
     assert.equal(
       (await request("/api/genie", owner, chatGrant, followUp)).status,
@@ -631,15 +663,16 @@ test("hosted Genie grants bind followups, reads, cancellation, and CSV to the su
       csv(chatGrant),
     );
     assert.equal(download.status, 200);
-    assert.equal(await download.text(), "total\r\n1\r\n");
+    assert.equal(await download.text(), '"total"\r\n');
     assert.deepEqual(calls, [
       "submit",
-      "submit",
+      "agent-submit",
       "follow-up",
       "poll",
       "result",
       "cancel",
       "download",
+      "download-poll",
     ]);
   } finally {
     await dispose();

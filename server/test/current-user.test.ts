@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ConfigProvider, Effect, Layer, Redacted } from "effect";
-import { makeCurrentUser } from "../src/current-user.js";
+import { CurrentViewer } from "../src/current-user.js";
 import { unavailable } from "../src/errors.js";
 import { Settings } from "../src/settings.js";
 import { Workspace } from "../src/workspace.js";
@@ -16,7 +16,8 @@ const resolver = (
 ) => {
   const paths: string[] = [];
   const user = Effect.runPromise(
-    makeCurrentUser.pipe(
+    CurrentViewer.pipe(
+      Effect.provide(CurrentViewer.layer),
       Effect.provideService(Workspace, {
         accessToken: Effect.succeed(Redacted.make("unused")),
         requestEvents: () => Effect.die("Unexpected workspace event request"),

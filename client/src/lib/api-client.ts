@@ -5,7 +5,7 @@ import { AppApi } from "../../../shared/api.js";
 
 const makeClient = Effect.gen(function* () {
   const httpClient = HttpClient.withScope(yield* HttpClient.HttpClient);
-  return (yield* HttpApiClient.makeWith(AppApi, { httpClient })).app;
+  return yield* HttpApiClient.makeWith(AppApi, { httpClient });
 }).pipe(Effect.provide(FetchHttpClient.layer));
 
 // One typed transport per runtime; each command scopes its response body.

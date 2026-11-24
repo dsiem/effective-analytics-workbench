@@ -123,7 +123,6 @@ export const invalidRequestBody = (): typeof InvalidRequestBody.Type => ({
   },
 });
 
-// Server-only middleware implementation lives at the HTTP boundary in routes.ts.
 export class ApiBoundary extends HttpApiMiddleware.Service<ApiBoundary>()(
   "app/ApiBoundary",
   {},
@@ -163,12 +162,31 @@ const GenieCsvForm = Schema.Struct({
   grant: Schema.optionalKey(Schema.String),
 }).pipe(HttpApiSchema.asFormUrlEncoded());
 
-export const AppApi = HttpApi.make("taxi").add(
-  HttpApiGroup.make("app")
-    .add(
-      HttpApiEndpoint.get("currentUser", "/api/me", {
+export const genieCsvHeaders = {
+  "content-disposition": 'attachment; filename="genie-results.csv"',
+  "x-content-type-options": "nosniff",
+} as const;
+
+const GenieCsv = HttpApiSchema.WithHeaders(
+  HttpApiSchema.StreamUint8Array({ contentType: "text/csv; charset=utf-8" }),
+  Schema.Struct({
+    "content-disposition": Schema.Literal(
+      genieCsvHeaders["content-disposition"],
+    ),
+    "x-content-type-options": Schema.Literal(
+      genieCsvHeaders["x-content-type-options"],
+    ),
+  }),
+);
+
+export const AppApi = HttpApi.make("taxi")
+  .add(
+    HttpApiGroup.make("viewer").add(
+      HttpApiEndpoint.get("current", "/api/me", {
         success: Schema.NullOr(CurrentUser),
       }),
+    ),
+    HttpApiGroup.make("analytics").add(
       HttpApiEndpoint.get("metadata", "/api/metadata", {
         success: DatasetMetadata,
         error: warehouseErrors,
@@ -198,16 +216,18 @@ export const AppApi = HttpApi.make("taxi").add(
         success: TripMap,
         error: [InvalidRequestBody, ...warehouseErrors],
       }),
-      HttpApiEndpoint.post("submitAnalysisRun", "/api/analysis-runs", {
+    ),
+    HttpApiGroup.make("analysisRuns").add(
+      HttpApiEndpoint.post("submit", "/api/analysis-runs", {
         payload: AnalysisSubmission,
         success: AnalysisRunReference.pipe(HttpApiSchema.status(202)),
         error: [InvalidRequestBody, ...workspaceErrors],
       }),
-      HttpApiEndpoint.get("analysisRuns", "/api/analysis-runs", {
+      HttpApiEndpoint.get("list", "/api/analysis-runs", {
         success: Schema.Array(AnalysisRunSummary),
         error: workspaceErrors,
       }),
-      HttpApiEndpoint.get("analysisRun", "/api/analysis-runs/:id", {
+      HttpApiEndpoint.get("get", "/api/analysis-runs/:id", {
         params: { id: AnalysisRunIdFromString },
         success: AnalysisRun,
         error: [
@@ -216,7 +236,7 @@ export const AppApi = HttpApi.make("taxi").add(
           ...workspaceErrors,
         ],
       }),
-      HttpApiEndpoint.get("analysisResult", "/api/analysis-runs/:id/result", {
+      HttpApiEndpoint.get("result", "/api/analysis-runs/:id/result", {
         params: { id: AnalysisRunIdFromString },
         success: RouteReliabilityReport,
         error: [
@@ -226,86 +246,77 @@ export const AppApi = HttpApi.make("taxi").add(
           ...workspaceErrors,
         ],
       }),
-      HttpApiEndpoint.post("submitGenie", "/api/genie", {
-        payload: GenieInput,
-        headers: GenieAccessHeaders,
-        success: GenieOperation,
-        error: [InvalidRequestBody, ...workspaceErrors],
-      }),
-      HttpApiEndpoint.get(
-        "pollGenie",
-        "/api/genie/:conversationId/messages/:messageId",
-        {
-          params: GeniePath,
+    ),
+    HttpApiGroup.make("genie")
+      .add(
+        HttpApiEndpoint.post("submit", "/api/genie", {
+          payload: GenieInput,
           headers: GenieAccessHeaders,
-          query: GenieModeQuery,
-          success: GeniePollProgress,
+          success: GenieOperation,
           error: [InvalidRequestBody, ...workspaceErrors],
-        },
-      ),
-      HttpApiEndpoint.post(
-        "cancelGenieAgent",
-        "/api/genie/:conversationId/responses/:responseId/cancel",
-        {
-          params: GenieAgentPath,
-          headers: GenieAccessHeaders,
-          success: GenieProgress,
-          error: [InvalidRequestBody, ...workspaceErrors],
-        },
-      ),
-      HttpApiEndpoint.get(
-        "genieResult",
-        "/api/genie/:conversationId/messages/:messageId/result",
-        {
-          params: GeniePath,
-          headers: GenieAccessHeaders,
-          query: GenieModeQuery,
-          success: GenieReply,
-          error: [InvalidRequestBody, GenieFailedBody, ...workspaceErrors],
-        },
-      ),
-      HttpApiEndpoint.post(
-        "downloadGenieCsv",
-        "/api/genie/:conversationId/messages/:messageId/attachments/:attachmentId/csv",
-        {
-          params: GenieQueryPath,
-          payload: [GenieCsvForm, Schema.Undefined],
-          success: HttpApiSchema.StreamUint8Array({ contentType: "text/csv" }),
-          error: [InvalidRequestBody, ...workspaceErrors],
-        },
-      ),
-      HttpApiEndpoint.get("savedViews", "/api/saved-views", {
+        }),
+        HttpApiEndpoint.get(
+          "poll",
+          "/api/genie/:conversationId/messages/:messageId",
+          {
+            params: GeniePath,
+            headers: GenieAccessHeaders,
+            query: GenieModeQuery,
+            success: GeniePollProgress,
+            error: [InvalidRequestBody, ...workspaceErrors],
+          },
+        ),
+        HttpApiEndpoint.post(
+          "cancel",
+          "/api/genie/:conversationId/responses/:responseId/cancel",
+          {
+            params: GenieAgentPath,
+            headers: GenieAccessHeaders,
+            success: GenieProgress,
+            error: [InvalidRequestBody, ...workspaceErrors],
+          },
+        ),
+        HttpApiEndpoint.get(
+          "result",
+          "/api/genie/:conversationId/messages/:messageId/result",
+          {
+            params: GeniePath,
+            headers: GenieAccessHeaders,
+            query: GenieModeQuery,
+            success: GenieReply,
+            error: [InvalidRequestBody, GenieFailedBody, ...workspaceErrors],
+          },
+        ),
+        HttpApiEndpoint.post(
+          "downloadCsv",
+          "/api/genie/:conversationId/messages/:messageId/attachments/:attachmentId/csv",
+          {
+            params: GenieQueryPath,
+            payload: [GenieCsvForm, Schema.Undefined],
+            success: GenieCsv,
+            error: [InvalidRequestBody, ...workspaceErrors],
+          },
+        ),
+      )
+      .annotate(HttpApi.RedactedNames, { headers: ["x-genie-access"] }),
+    HttpApiGroup.make("savedViews").add(
+      HttpApiEndpoint.get("list", "/api/saved-views", {
         query: SavedViewSearch,
         success: SavedViewsPage,
         error: lakebaseErrors,
       }),
-      HttpApiEndpoint.get("tripComments", "/api/trip-comments", {
-        query: TripCommentSearch,
-        success: TripComments,
-        error: lakebaseErrors,
-      }).annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
-      HttpApiEndpoint.get("tripCommentCounts", "/api/trip-comment-counts", {
-        query: TripCommentCountSearch,
-        success: TripCommentCounts,
-        error: lakebaseErrors,
-      }),
-      HttpApiEndpoint.post("addTripComment", "/api/trip-comments", {
-        payload: TripCommentInput,
-        success: TripComment,
-        error: lakebaseErrors,
-      }),
-      HttpApiEndpoint.put("saveSavedView", "/api/saved-views", {
+      HttpApiEndpoint.put("save", "/api/saved-views", {
         payload: SavedViewInput,
         success: SavedView,
         error: savedViewWriteErrors,
       }),
-      HttpApiEndpoint.patch("pinSavedView", "/api/saved-views/:id/pin", {
+      HttpApiEndpoint.patch("pin", "/api/saved-views/:id/pin", {
         params: { id: SavedViewInput.fields.id },
         payload: SavedViewPin,
         success: SavedView,
         error: savedViewWriteErrors,
       }),
-      HttpApiEndpoint.delete("removeSavedView", "/api/saved-views/:id", {
+      HttpApiEndpoint.delete("remove", "/api/saved-views/:id", {
         params: { id: SavedViewInput.fields.id },
         query: {
           version: Schema.NumberFromString.check(
@@ -316,6 +327,23 @@ export const AppApi = HttpApi.make("taxi").add(
         success: Schema.Struct({ deleted: Schema.Literal(true) }),
         error: savedViewWriteErrors,
       }),
-    )
-    .middleware(ApiBoundary),
-);
+    ),
+    HttpApiGroup.make("tripComments").add(
+      HttpApiEndpoint.get("list", "/api/trip-comments", {
+        query: TripCommentSearch,
+        success: TripComments,
+        error: lakebaseErrors,
+      }).annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
+      HttpApiEndpoint.get("counts", "/api/trip-comment-counts", {
+        query: TripCommentCountSearch,
+        success: TripCommentCounts,
+        error: lakebaseErrors,
+      }),
+      HttpApiEndpoint.post("add", "/api/trip-comments", {
+        payload: TripCommentInput,
+        success: TripComment,
+        error: lakebaseErrors,
+      }),
+    ),
+  )
+  .middleware(ApiBoundary);

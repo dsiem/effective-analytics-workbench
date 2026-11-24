@@ -1,5 +1,6 @@
-import { Effect, Schema } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
 import { AuthenticationError, isSqlError, SqlError } from "effect/sql/SqlError";
+import * as Reactivity from "effect/reactivity/Reactivity";
 import * as SqlSchema from "effect/sql/SqlSchema";
 import { DatabricksClient } from "@dsiem/sql-warehouse";
 import { makeAdmission } from "./admission.js";
@@ -7,7 +8,7 @@ import { OperationTimeout, permissionDenied, unavailable } from "./errors.js";
 import { Settings } from "./settings.js";
 import { Workspace } from "./workspace.js";
 
-export const makeWarehouse = Effect.gen(function* () {
+const makeWarehouse = Effect.gen(function* () {
   const settings = yield* Settings;
   const workspace = yield* Workspace;
   const configured = !!(
@@ -96,3 +97,12 @@ export const makeWarehouse = Effect.gen(function* () {
     );
   return { sql, snapshot, read, run, error };
 });
+
+export class Warehouse extends Context.Service<
+  Warehouse,
+  Effect.Success<typeof makeWarehouse>
+>()("app/Warehouse") {
+  static readonly layer = Layer.effect(this, makeWarehouse).pipe(
+    Layer.provide(Reactivity.layer),
+  );
+}

@@ -19,7 +19,7 @@ function poll(target: typeof PollTarget.Type, generation: number) {
   const pause = (error: string) =>
     complete({ state: "paused", stage: "waiting", error });
   const read = request((client) =>
-    client.pollGenie({
+    client.genie.poll({
       headers: genieAccessHeaders(target.operation.grant),
       params: target.operation,
       query: target.operation.mode ? { mode: target.operation.mode } : {},

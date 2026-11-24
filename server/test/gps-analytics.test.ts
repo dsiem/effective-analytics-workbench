@@ -6,10 +6,12 @@ import { gpsFixture } from "../../client/test/gps-fixture.js";
 import { mapCellLimit } from "../../shared/map-dataset.js";
 import { Analytics } from "../src/analytics.js";
 import { Settings } from "../src/settings.js";
+import { Warehouse } from "../src/warehouse.js";
 import { Workspace } from "../src/workspace.js";
 import { warehouseFetch } from "./warehouse-fixture.js";
 
 const services = Analytics.layer.pipe(
+  Layer.provide(Warehouse.layer),
   Layer.provide(Settings.layer),
   Layer.provide(
     Layer.succeed(Workspace, {
