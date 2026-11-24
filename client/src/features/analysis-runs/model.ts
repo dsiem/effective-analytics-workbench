@@ -9,6 +9,7 @@ import {
   AnalysisRunSummary,
   RouteReliabilityReport,
 } from "../../../../shared/analysis-runs";
+import { pagePaths } from "../../../../shared/page-paths";
 import { Id } from "../../../../shared/schema";
 import { href } from "../../domain/filters";
 import { Notice, request } from "../../lib/request-state";
@@ -97,7 +98,6 @@ export const init = (): Model => ({
   selected: null,
 });
 
-export const analysisPath = "/analysis";
 export function parseRunLink(run: string | null): AnalysisRunLink {
   if (run === null) return { _tag: "NoRun" };
   const id = Schema.decodeUnknownOption(AnalysisRunIdFromString)(run);
@@ -112,11 +112,11 @@ export const withoutRun = (query: string) => {
   return params.toString();
 };
 export const historyHref = (query: string) =>
-  href(analysisPath, withoutRun(query));
+  href(pagePaths.AnalysisRuns, withoutRun(query));
 export const runHref = (id: AnalysisRunId, query: string) => {
   const params = new URLSearchParams(query);
   params.set("run", String(id));
-  return `${analysisPath}?${params}`;
+  return `${pagePaths.AnalysisRuns}?${params}`;
 };
 export const isActive = (state: AnalysisRunState) =>
   state === "queued" || state === "running";

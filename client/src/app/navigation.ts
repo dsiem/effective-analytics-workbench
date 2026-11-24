@@ -1,4 +1,5 @@
 import type { Update } from "foldkit";
+import { pagePaths } from "../../../shared/page-paths";
 import type { TripSort } from "../../../shared/trips";
 import { href, withSort } from "../domain/filters";
 import { openAnalysisRuns } from "../features/analysis-runs/update";
@@ -10,7 +11,7 @@ import { Navigate } from "./commands";
 import * as Features from "./features";
 import type { Message } from "./message";
 import type { Model } from "./model";
-import { AppRoute, paths } from "./route";
+import { AppRoute } from "./route";
 
 export function loadPage(
   model: Model,
@@ -62,7 +63,7 @@ export function sortTrips(
     ...loaded,
     commands: [
       ...(loaded.commands ?? []),
-      Navigate({ href: href(paths.Trips, query), external: false }),
+      Navigate({ href: href(pagePaths.Trips, query), external: false }),
     ],
   };
 }

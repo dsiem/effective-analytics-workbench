@@ -1,21 +1,10 @@
 import { Option, Schema } from "effect";
 import { defineRouteUnion } from "foldkit/route";
 import { Filters } from "../../../shared/filters";
+import { pagePaths } from "../../../shared/page-paths";
 import { TripSort } from "../../../shared/trips";
 import { filtersFromQuery } from "../domain/filters";
-import {
-  analysisPath,
-  AnalysisRunLink,
-  parseRunLink,
-} from "../features/analysis-runs/model";
-
-export const paths = {
-  Overview: "/",
-  Trips: "/trips",
-  TripMap: "/trip-map",
-  AnalysisRuns: analysisPath,
-  Genie: "/genie",
-} as const;
+import { AnalysisRunLink, parseRunLink } from "../features/analysis-runs/model";
 
 export const AppRoute = defineRouteUnion({
   Overview: {},
@@ -35,27 +24,27 @@ export const Location = Schema.Struct({
 export type Location = typeof Location.Type;
 
 export const routePath = (route: AppRoute) =>
-  route._tag === "NotFound" ? route.path : paths[route._tag];
+  route._tag === "NotFound" ? route.path : pagePaths[route._tag];
 
 export const showsExplore = (route: AppRoute) =>
   route._tag !== "Genie" && route._tag !== "AnalysisRuns";
 
 function parseRoute(path: string, params: URLSearchParams): AppRoute {
   switch (path) {
-    case paths.Overview:
+    case pagePaths.Overview:
       return AppRoute.Overview();
-    case paths.Trips:
+    case pagePaths.Trips:
       return AppRoute.Trips({
         sort:
           Option.getOrUndefined(
             Schema.decodeUnknownOption(TripSort)(params.get("sort")),
           ) ?? "newest",
       });
-    case paths.TripMap:
+    case pagePaths.TripMap:
       return AppRoute.TripMap();
-    case paths.AnalysisRuns:
+    case pagePaths.AnalysisRuns:
       return AppRoute.AnalysisRuns({ run: parseRunLink(params.get("run")) });
-    case paths.Genie:
+    case pagePaths.Genie:
       return AppRoute.Genie();
     default:
       return AppRoute.NotFound({ path });

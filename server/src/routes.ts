@@ -1,9 +1,7 @@
-import { resolve, sep } from "node:path";
 import { Effect, Layer } from "effect";
 import {
   HttpEffect,
   HttpMiddleware,
-  HttpRouter,
   HttpServerRequest,
   HttpServerResponse,
 } from "effect/http";
@@ -22,6 +20,7 @@ import { Genie } from "./genie.js";
 import { makeGenieAccess, type GenieViewerAccess } from "./genie-access.js";
 import { SavedViews } from "./saved-views.js";
 import { TripComments } from "./trip-comments.js";
+import { WebRoutes } from "./web-routes.js";
 
 type ErrorByTag = { [E in ServiceError as E["_tag"]]: E };
 type ErrorTag = keyof ErrorByTag;
@@ -280,46 +279,7 @@ const ApiLive = HttpApiBuilder.group(AppApi, "app", (handlers) =>
   }),
 ).pipe(Layer.provide(BoundaryLive));
 
-const StaticRoutes = HttpRouter.use((router) =>
-  Effect.gen(function* () {
-    const webRoot = resolve("client/dist");
-    const serveFile = (path: string) =>
-      HttpServerResponse.file(path).pipe(
-        Effect.catch(() =>
-          Effect.succeed(HttpServerResponse.empty({ status: 404 })),
-        ),
-      );
-    yield* router.add(
-      "GET",
-      "/assets/*",
-      Effect.flatMap(HttpServerRequest.HttpServerRequest, (request) => {
-        const path = resolve(
-          webRoot,
-          `.${new URL(request.url, "http://localhost").pathname}`,
-        );
-        return path.startsWith(`${webRoot}${sep}assets${sep}`)
-          ? serveFile(path)
-          : Effect.succeed(HttpServerResponse.empty({ status: 404 }));
-      }),
-    );
-    yield* router.add(
-      "GET",
-      "/theme-init.js",
-      serveFile(resolve(webRoot, "theme-init.js")),
-    );
-    for (const path of [
-      "/",
-      "/trips",
-      "/trip-map",
-      "/analysis",
-      "/genie",
-    ] as const) {
-      yield* router.add("GET", path, serveFile(resolve(webRoot, "index.html")));
-    }
-  }),
-);
-
 export const Routes = Layer.merge(
   HttpApiBuilder.layer(AppApi).pipe(Layer.provide(ApiLive)),
-  StaticRoutes,
+  WebRoutes,
 );
