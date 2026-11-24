@@ -14,7 +14,7 @@ import { OpenApi } from "effect/http-api";
 import { ApiError, AppApi } from "../../shared/api.js";
 import { GenieOperation } from "../../shared/genie.js";
 import { AnalysisRuns } from "../src/analysis-runs.js";
-import { Analytics } from "../src/analytics.js";
+import { Analytics } from "../src/taxi/analytics.js";
 import {
   GenieAgentModeUnavailable,
   GenieFailed,
@@ -26,7 +26,7 @@ import {
   unavailable,
   UpstreamError,
 } from "../src/errors.js";
-import { Genie, type GenieViewer } from "../src/genie.js";
+import { Genie, type GenieViewer } from "../src/genie/service.js";
 import { Routes } from "../src/routes.js";
 import { SavedViews } from "../src/saved-views.js";
 import { Settings } from "../src/settings.js";

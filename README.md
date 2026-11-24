@@ -39,14 +39,14 @@ seven-day windows and set the minimum trips per route in each window. Select
 Set up the example and run it locally with your Databricks CLI login.
 [Set up a target](DEPLOYMENT.md#set-up-a-target) · [Develop locally](DEPLOYMENT.md#develop-locally)
 
-| Replace                       | Start here                                                                               |
-| ----------------------------- | ---------------------------------------------------------------------------------------- |
-| Sample data and queries       | [Seed job](jobs/seed-trip-snapshot.sql) and [analytics service](server/src/analytics.ts) |
-| API and data types            | [Shared HTTP contract](shared/api.ts) and [schemas by feature](shared/)                  |
-| Filters and views             | [Foldkit features](client/src/features)                                                  |
-| Genie tables and instructions | [Genie resource](resources/genie.yml)                                                    |
-| Route analysis                | [Route reliability SQL](jobs/route-reliability.sql)                                      |
-| Workspace resources           | [Databricks bundle](databricks.yml)                                                      |
+| Replace                       | Start here                                                                                    |
+| ----------------------------- | --------------------------------------------------------------------------------------------- |
+| Sample data and queries       | [Seed job](jobs/seed-trip-snapshot.sql) and [analytics service](server/src/taxi/analytics.ts) |
+| API and data types            | [Shared HTTP contract](shared/api.ts) and [schemas by feature](shared/)                       |
+| Filters and views             | [Foldkit features](client/src/features)                                                       |
+| Genie tables and instructions | [Genie resource](resources/genie.yml)                                                         |
+| Route analysis                | [Route reliability SQL](jobs/route-reliability.sql)                                           |
+| Workspace resources           | [Databricks bundle](databricks.yml)                                                           |
 
 The deployed app uses its service principal for data access. Saved views and
 comments are shared across viewers. If your users have different permissions,

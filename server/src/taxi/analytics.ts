@@ -1,22 +1,22 @@
 import { Context, Effect, Layer } from "effect";
-import type { DatasetMetadata } from "../../shared/dataset.js";
-import type { Filters } from "../../shared/filters.js";
-import type { GpsSearch, TripMap } from "../../shared/map-dataset.js";
-import type { Overview } from "../../shared/overview.js";
-import type { Trip, TripSearch } from "../../shared/trips.js";
+import type { DatasetMetadata } from "../../../shared/dataset.js";
+import type { Filters } from "../../../shared/filters.js";
+import type { GpsSearch, TripMap } from "../../../shared/map-dataset.js";
+import type { Overview } from "../../../shared/overview.js";
+import type { Trip, TripSearch } from "../../../shared/trips.js";
 import type {
   InvalidRequest,
   ServiceUnavailable,
   OperationTimeout,
   PermissionDenied,
   TripNotFound,
-} from "./errors.js";
-import { Settings } from "./settings.js";
-import { makeOverview } from "./taxi/overview.js";
-import { makeTaxiSnapshot } from "./taxi/snapshot.js";
-import { makeTripMap } from "./taxi/trip-map.js";
-import { makeTrips } from "./taxi/trips.js";
-import { Warehouse } from "./warehouse.js";
+} from "../errors.js";
+import { Settings } from "../settings.js";
+import { Warehouse } from "../warehouse.js";
+import { makeOverview } from "./overview.js";
+import { makeTaxiSnapshot } from "./snapshot.js";
+import { makeTripMap } from "./trip-map.js";
+import { makeTrips } from "./trips.js";
 
 type WarehouseError =
   | ServiceUnavailable<"warehouse">

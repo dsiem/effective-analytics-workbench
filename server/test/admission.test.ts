@@ -12,9 +12,9 @@ import {
 } from "effect";
 import * as TestClock from "effect/testing/TestClock";
 import { makeAdmission } from "../src/admission.js";
-import { Analytics } from "../src/analytics.js";
+import { Analytics } from "../src/taxi/analytics.js";
 import { OperationTimeout, unavailable } from "../src/errors.js";
-import { Genie } from "../src/genie.js";
+import { Genie } from "../src/genie/service.js";
 import { Settings } from "../src/settings.js";
 import { Warehouse } from "../src/warehouse.js";
 import { Workspace } from "../src/workspace.js";

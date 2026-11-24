@@ -4,7 +4,7 @@ import { tableFromArrays } from "apache-arrow";
 import { ConfigProvider, Effect, Layer, Redacted } from "effect";
 import { gpsFixture } from "../../client/test/gps-fixture.js";
 import { mapCellLimit } from "../../shared/map-dataset.js";
-import { Analytics } from "../src/analytics.js";
+import { Analytics } from "../src/taxi/analytics.js";
 import { Settings } from "../src/settings.js";
 import { Warehouse } from "../src/warehouse.js";
 import { Workspace } from "../src/workspace.js";
