@@ -380,23 +380,15 @@ test("virtual rows keep their place at large text sizes and preserve keyboard ac
     }, scrollTop);
 
   const scrollTop = () => scroller.evaluate((element) => element.scrollTop);
+  await firstVisibleRowAt(374);
   await scroller.focus();
-  await page.keyboard.press("PageDown");
-  await expect.poll(scrollTop).toBeGreaterThan(200);
-  await expect
-    .poll(async () => {
-      const before = await scrollTop();
-      await page.waitForTimeout(50);
-      return (await scrollTop()) - before;
-    })
-    .toBe(0);
-  const afterPageDown = await scrollTop();
+  const beforeTab = await scrollTop();
   await page.keyboard.press("Tab");
   await expect(scroller.locator("tr button:focus")).toHaveCount(1);
-  expect(await scrollTop()).toBe(afterPageDown);
+  expect(await scrollTop()).toBe(beforeTab);
   await page.keyboard.press("Shift+Tab");
   await expect(scroller).toBeFocused();
-  expect(await scrollTop()).toBe(afterPageDown);
+  expect(await scrollTop()).toBe(beforeTab);
 
   await page.evaluate(() => {
     document.documentElement.style.fontSize = "32px";
@@ -415,6 +407,11 @@ test("virtual rows keep their place at large text sizes and preserve keyboard ac
   await expect(scroller).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(scroller.locator("tr button:focus")).toHaveCount(1);
+
+  await scroller.focus();
+  const beforePageDown = await scrollTop();
+  await page.keyboard.press("PageDown");
+  await expect.poll(scrollTop).toBeGreaterThan(beforePageDown + 200);
 });
 
 for (const { name, width, height, count, fontSize } of [

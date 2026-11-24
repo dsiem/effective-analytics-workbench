@@ -191,10 +191,21 @@ test("explains a selected chart in place with its actual data, filters, SQL, and
   await openHelper(page);
   await expect(scope).toContainText("Trips by pickup date");
   await helper.getByRole("button", { name: "Close Genie" }).click();
-  await page
-    .getByRole("textbox", { name: "Pickup ZIP code", exact: true })
-    .fill("10002");
+  await expect(helper).toBeHidden();
+  await expect(
+    page
+      .locator("header")
+      .getByRole("button", { name: "Ask Genie", exact: true }),
+  ).toBeFocused();
+  const pickupZip = page.getByRole("textbox", {
+    name: "Pickup ZIP code",
+    exact: true,
+  });
+  await pickupZip.fill("10002");
+  await expect(pickupZip).toHaveValue("10002");
   await page.getByRole("button", { name: "Apply", exact: true }).click();
+  const updatedFilters = { ...filters, zip: "10002" };
+  await expect(page).toHaveURL(`/?${new URLSearchParams(updatedFilters)}`);
   await openHelper(page);
   await expect(scope).toContainText("Trip overview");
   await expect(scope).toContainText("Pickup ZIP 10002");
@@ -210,7 +221,7 @@ test("explains a selected chart in place with its actual data, filters, SQL, and
     .click();
   await expect.poll(() => submissions.length).toBe(2);
   expect(submissions[1]).toMatchObject({
-    filters: { ...filters, zip: "10002" },
+    filters: updatedFilters,
     conversationId: "conversation",
     context: { title: "Trip overview" },
   });
