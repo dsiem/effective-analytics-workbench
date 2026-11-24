@@ -1,10 +1,11 @@
 import { Effect, Layer, Schema } from "effect";
 import { HttpEffect, HttpServerResponse } from "effect/http";
-import { HttpApiError } from "effect/http-api";
+import { HttpApiMiddleware } from "effect/http-api";
 import {
-  ApiBoundary,
   apiErrorCodes,
+  ApiNoStore,
   invalidRequestBody,
+  RequestValidationErrors,
   serviceErrorSuffixes,
   UpstreamFailureStatus,
 } from "../../shared/api.js";
@@ -60,30 +61,19 @@ export const withApiErrors = <A, E extends ServiceError, R>(
     Effect.mapError(encodeError<E>),
   );
 
-export const ApiBoundaryLive = Layer.succeed(ApiBoundary, (effect) =>
-  effect.pipe(
-    Effect.catch((error) => {
-      if (!HttpApiError.HttpApiSchemaError.is(error)) return Effect.fail(error);
+export const RequestValidationErrorsLive =
+  HttpApiMiddleware.layerSchemaErrorTransform(
+    RequestValidationErrors,
+    (error) =>
+      error.kind === "Body" || error.kind === "ResponseHeaders"
+        ? Effect.fail(error)
+        : Effect.fail(invalidRequestBody()),
+  );
 
-      switch (error.kind) {
-        case "Params":
-        case "Query":
-        case "Headers":
-        case "Payload":
-          return Effect.succeed(
-            HttpServerResponse.jsonUnsafe(invalidRequestBody(), {
-              status: 400,
-            }),
-          );
-        case "Body":
-        case "ResponseHeaders":
-          return Effect.die(error);
-      }
-    }),
-    HttpEffect.withPreResponseHandler((_request, response) =>
-      Effect.succeed(
-        HttpServerResponse.setHeader(response, "Cache-Control", "no-store"),
-      ),
+export const ApiNoStoreLive = Layer.succeed(ApiNoStore, (effect) =>
+  HttpEffect.withPreResponseHandler(effect, (_request, response) =>
+    Effect.succeed(
+      HttpServerResponse.setHeader(response, "Cache-Control", "no-store"),
     ),
   ),
 );

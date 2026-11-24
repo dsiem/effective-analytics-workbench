@@ -4,7 +4,11 @@ import { HttpApiBuilder } from "effect/http-api";
 import { AppApi } from "../../shared/api.js";
 import { AnalysisRuns } from "./analysis-runs.js";
 import { Analytics } from "./analytics.js";
-import { ApiBoundaryLive, withApiErrors } from "./api-boundary.js";
+import {
+  ApiNoStoreLive,
+  RequestValidationErrorsLive,
+  withApiErrors,
+} from "./api-boundary.js";
 import { CurrentViewer } from "./current-user.js";
 import { GenieRoutes } from "./genie-routes.js";
 import { SavedViews } from "./saved-views.js";
@@ -111,7 +115,13 @@ const ApiRoutes = Layer.mergeAll(
   GenieRoutes,
   SavedViewRoutes,
   TripCommentRoutes,
-).pipe(Layer.provide([ApiBoundaryLive, CurrentViewer.layer]));
+).pipe(
+  Layer.provide([
+    ApiNoStoreLive,
+    RequestValidationErrorsLive,
+    CurrentViewer.layer,
+  ]),
+);
 
 export const Routes = Layer.merge(
   HttpApiBuilder.layer(AppApi).pipe(Layer.provide(ApiRoutes)),
