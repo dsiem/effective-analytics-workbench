@@ -53,7 +53,7 @@ Request fewer rows or narrow the filters to retry. [Databricks Statement Executi
 
 Open a row to load the full record through `/api/trip-details`. Comments
 from a listed row can use its summary while details load.
-[Trip ordering and limit](../server/src/trip-sql.ts) ·
+[Trip ordering and limit](../server/src/taxi/trips.ts) ·
 [Trip records view](../client/src/features/trips/view.ts)
 
 ## Carry a query through one HTTP contract
@@ -66,7 +66,7 @@ from a listed row can use its summary while details load.
    adapter. Ordinary warehouse queries return inline JSON. Overview uses
    `SqlSchema.findAll` to decode numeric text into numbers for the browser.
    The map requests Arrow explicitly for its query of up to 100,000 cell
-   polygons. [Overview and map queries](../server/src/analytics.ts) ·
+   polygons. [Overview queries](../server/src/taxi/overview.ts) · [Map queries](../server/src/taxi/trip-map.ts) ·
    [Warehouse service](../server/src/warehouse.ts) · [SQL adapter](../packages/sql-warehouse/README.md)
 3. Provide `ApiClient.layer` once in Foldkit's `Runtime.makeApplication`.
    `LoadOverview` calls the generated client and returns a `LoadedOverview`
@@ -166,7 +166,7 @@ per-viewer Unity Catalog permissions, use Databricks user authorization and
 provide the proxy's user token to the server-side query for that request. Require
 that credential on the route. Disable shared caching there or key it by the
 authorization context. Test identical filters for two viewers with different
-grants. [Viewer lookup](../server/src/current-user.ts) · [Analytics cache](../server/src/analytics.ts) ·
+grants. [Viewer lookup](../server/src/current-user.ts) · [Overview cache](../server/src/taxi/overview.ts) ·
 [Databricks user authorization](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/auth)
 
 Keep the Lakebase connection pool scoped to the server runtime. The sample

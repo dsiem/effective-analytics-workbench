@@ -23,7 +23,7 @@ import {
   TripNotFound,
 } from "../src/errors.js";
 import { Settings } from "../src/settings.js";
-import { makeTripPages } from "../src/trip-pages.js";
+import { makeTripPages } from "../src/taxi/trip-pages.js";
 import { Warehouse } from "../src/warehouse.js";
 import { Workspace } from "../src/workspace.js";
 import { inlineResult, warehouseFetch } from "./warehouse-fixture.js";
