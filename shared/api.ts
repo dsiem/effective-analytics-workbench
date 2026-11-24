@@ -203,9 +203,14 @@ export const invalidRequestBody = (): typeof InvalidRequestBody.Type => ({
   },
 });
 
-export class ApiBoundary extends HttpApiMiddleware.Service<ApiBoundary>()(
-  "app/ApiBoundary",
+export class ApiNoStore extends HttpApiMiddleware.Service<ApiNoStore>()(
+  "app/ApiNoStore",
   {},
+) {}
+
+export class RequestValidationErrors extends HttpApiMiddleware.Service<RequestValidationErrors>()(
+  "app/RequestValidationErrors",
+  { error: InvalidRequestBody },
 ) {}
 
 const warehouseErrors = [
@@ -229,7 +234,6 @@ const genieErrors = [
 ] as const;
 const genieTimeouts = timeoutBody("genie", "workspace");
 const lakebaseErrors = [
-  InvalidRequestBody,
   PermissionDeniedBody,
   unavailableBody("lakebase"),
 ] as const;
@@ -283,35 +287,41 @@ export const AppApi = HttpApi.make("taxi")
       HttpApiEndpoint.get("overview", "/api/overview", {
         query: Filters,
         success: Overview,
-        error: [InvalidRequestBody, ...warehouseErrors],
-      }),
+        error: warehouseErrors,
+      }).middleware(RequestValidationErrors),
       HttpApiEndpoint.get("trips", "/api/trips", {
         query: TripSearch,
         success: TripPage,
-        error: [InvalidRequestBody, ...warehouseErrors],
-      }).annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
+        error: warehouseErrors,
+      })
+        .middleware(RequestValidationErrors)
+        .annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
       HttpApiEndpoint.get("tripPage", "/api/trips/pages/:cursor", {
         params: Schema.Struct({ cursor: TripPageCursor }),
         success: TripPage,
-        error: [InvalidRequestBody, ...warehouseErrors],
-      }).annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
+        error: warehouseErrors,
+      })
+        .middleware(RequestValidationErrors)
+        .annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
       HttpApiEndpoint.get("tripDetails", "/api/trip-details", {
         query: Schema.Struct({ tripId: TripSummary.fields.trip_id }),
         success: Trip,
-        error: [InvalidRequestBody, TripNotFoundBody, ...warehouseErrors],
-      }).annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
+        error: [TripNotFoundBody, ...warehouseErrors],
+      })
+        .middleware(RequestValidationErrors)
+        .annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
       HttpApiEndpoint.get("tripMap", "/api/trip-map", {
         query: GpsSearch,
         success: TripMap,
-        error: [InvalidRequestBody, ...warehouseErrors],
-      }),
+        error: warehouseErrors,
+      }).middleware(RequestValidationErrors),
     ),
     HttpApiGroup.make("analysisRuns").add(
       HttpApiEndpoint.post("submit", "/api/analysis-runs", {
         payload: AnalysisSubmission,
         success: AnalysisRunReference.pipe(HttpApiSchema.status(202)),
-        error: [InvalidRequestBody, ...analysisErrors, workspaceTimeout],
-      }),
+        error: [...analysisErrors, workspaceTimeout],
+      }).middleware(RequestValidationErrors),
       HttpApiEndpoint.get("list", "/api/analysis-runs", {
         success: Schema.Array(AnalysisRunSummary),
         error: [...analysisErrors, workspaceTimeout],
@@ -319,24 +329,18 @@ export const AppApi = HttpApi.make("taxi")
       HttpApiEndpoint.get("get", "/api/analysis-runs/:id", {
         params: { id: AnalysisRunIdFromString },
         success: AnalysisRun,
-        error: [
-          InvalidRequestBody,
-          AnalysisRunNotFoundBody,
-          ...analysisErrors,
-          workspaceTimeout,
-        ],
-      }),
+        error: [AnalysisRunNotFoundBody, ...analysisErrors, workspaceTimeout],
+      }).middleware(RequestValidationErrors),
       HttpApiEndpoint.get("result", "/api/analysis-runs/:id/result", {
         params: { id: AnalysisRunIdFromString },
         success: RouteReliabilityReport,
         error: [
-          InvalidRequestBody,
           AnalysisRunNotFoundBody,
           AnalysisReportPendingBody,
           ...analysisErrors,
           timeoutBody("warehouse", "workspace"),
         ],
-      }),
+      }).middleware(RequestValidationErrors),
     ),
     HttpApiGroup.make("genie")
       .add(
@@ -344,12 +348,7 @@ export const AppApi = HttpApi.make("taxi")
           payload: GenieInput,
           headers: GenieAccessHeaders,
           success: GenieOperation,
-          error: [
-            InvalidRequestBody,
-            AgentModeUnavailableBody,
-            ...genieErrors,
-            genieTimeouts,
-          ],
+          error: [AgentModeUnavailableBody, ...genieErrors, genieTimeouts],
         }),
         HttpApiEndpoint.get(
           "poll",
@@ -359,7 +358,7 @@ export const AppApi = HttpApi.make("taxi")
             headers: GenieAccessHeaders,
             query: GenieModeQuery,
             success: GeniePollProgress,
-            error: [InvalidRequestBody, ...genieErrors, workspaceTimeout],
+            error: [...genieErrors, workspaceTimeout],
           },
         ),
         HttpApiEndpoint.post(
@@ -369,7 +368,7 @@ export const AppApi = HttpApi.make("taxi")
             params: GenieAgentPath,
             headers: GenieAccessHeaders,
             success: GenieProgress,
-            error: [InvalidRequestBody, ...genieErrors, workspaceTimeout],
+            error: [...genieErrors, workspaceTimeout],
           },
         ),
         HttpApiEndpoint.get(
@@ -380,12 +379,7 @@ export const AppApi = HttpApi.make("taxi")
             headers: GenieAccessHeaders,
             query: GenieModeQuery,
             success: GenieReply,
-            error: [
-              InvalidRequestBody,
-              GenieFailedBody,
-              ...genieErrors,
-              genieTimeouts,
-            ],
+            error: [GenieFailedBody, ...genieErrors, genieTimeouts],
           },
         ),
         HttpApiEndpoint.post(
@@ -396,7 +390,6 @@ export const AppApi = HttpApi.make("taxi")
             payload: [GenieCsvForm, Schema.Undefined],
             success: GenieCsv,
             error: [
-              InvalidRequestBody,
               ...genieAccessErrors,
               upstreamBody("genie_csv", "workspace"),
               timeoutBody("genie_csv", "workspace"),
@@ -404,52 +397,57 @@ export const AppApi = HttpApi.make("taxi")
           },
         ),
       )
+      .middleware(RequestValidationErrors)
       .annotate(HttpApi.RedactedNames, { headers: ["x-genie-access"] }),
-    HttpApiGroup.make("savedViews").add(
-      HttpApiEndpoint.get("list", "/api/saved-views", {
-        query: SavedViewSearch,
-        success: SavedViewsPage,
-        error: lakebaseErrors,
-      }),
-      HttpApiEndpoint.put("save", "/api/saved-views", {
-        payload: SavedViewInput,
-        success: SavedView,
-        error: savedViewWriteErrors,
-      }),
-      HttpApiEndpoint.patch("pin", "/api/saved-views/:id/pin", {
-        params: { id: SavedViewInput.fields.id },
-        payload: SavedViewPin,
-        success: SavedView,
-        error: savedViewWriteErrors,
-      }),
-      HttpApiEndpoint.delete("remove", "/api/saved-views/:id", {
-        params: { id: SavedViewInput.fields.id },
-        query: {
-          version: Schema.NumberFromString.check(
-            Schema.isInt(),
-            Schema.isGreaterThan(0),
-          ),
-        },
-        success: Schema.Struct({ deleted: Schema.Literal(true) }),
-        error: savedViewWriteErrors,
-      }),
-    ),
-    HttpApiGroup.make("tripComments").add(
-      HttpApiEndpoint.get("list", "/api/trip-comments", {
-        query: TripCommentSearch,
-        success: TripComments,
-        error: lakebaseErrors,
-      }).annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
-      HttpApiEndpoint.get("counts", "/api/trip-comment-counts", {
-        query: TripCommentCountSearch,
-        success: TripCommentCounts,
-        error: lakebaseErrors,
-      }),
-      HttpApiEndpoint.post("add", "/api/trip-comments", {
-        payload: TripCommentInput,
-        success: TripComment,
-        error: lakebaseErrors,
-      }),
-    ),
+    HttpApiGroup.make("savedViews")
+      .add(
+        HttpApiEndpoint.get("list", "/api/saved-views", {
+          query: SavedViewSearch,
+          success: SavedViewsPage,
+          error: lakebaseErrors,
+        }),
+        HttpApiEndpoint.put("save", "/api/saved-views", {
+          payload: SavedViewInput,
+          success: SavedView,
+          error: savedViewWriteErrors,
+        }),
+        HttpApiEndpoint.patch("pin", "/api/saved-views/:id/pin", {
+          params: { id: SavedViewInput.fields.id },
+          payload: SavedViewPin,
+          success: SavedView,
+          error: savedViewWriteErrors,
+        }),
+        HttpApiEndpoint.delete("remove", "/api/saved-views/:id", {
+          params: { id: SavedViewInput.fields.id },
+          query: {
+            version: Schema.NumberFromString.check(
+              Schema.isInt(),
+              Schema.isGreaterThan(0),
+            ),
+          },
+          success: Schema.Struct({ deleted: Schema.Literal(true) }),
+          error: savedViewWriteErrors,
+        }),
+      )
+      .middleware(RequestValidationErrors),
+    HttpApiGroup.make("tripComments")
+      .add(
+        HttpApiEndpoint.get("list", "/api/trip-comments", {
+          query: TripCommentSearch,
+          success: TripComments,
+          error: lakebaseErrors,
+        }).annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
+        HttpApiEndpoint.get("counts", "/api/trip-comment-counts", {
+          query: TripCommentCountSearch,
+          success: TripCommentCounts,
+          error: lakebaseErrors,
+        }),
+        HttpApiEndpoint.post("add", "/api/trip-comments", {
+          payload: TripCommentInput,
+          success: TripComment,
+          error: lakebaseErrors,
+        }),
+      )
+      .middleware(RequestValidationErrors),
   )
-  .middleware(ApiBoundary);
+  .middleware(ApiNoStore);

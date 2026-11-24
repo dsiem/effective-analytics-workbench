@@ -310,6 +310,15 @@ test("endpoints advertise their applicable failures", () => {
     Object.keys(paths["/api/saved-views"]?.put?.responses ?? {}),
     ["200", "400", "403", "404", "409", "503"],
   );
+  for (const path of ["/api/me", "/api/metadata", "/api/analysis-runs"]) {
+    const responses = paths[path]?.get?.responses;
+    assert.ok(responses, `${path} has a GET contract`);
+    assert.equal(
+      responses["400"],
+      undefined,
+      `${path} has no validation response`,
+    );
+  }
   const { analytics, analysisRuns, genie, savedViews } = AppApi.groups;
   for (const [endpoint, allowed, unrelated] of [
     [analytics.endpoints.metadata, "warehouse_timeout", "genie_csv_timeout"],
