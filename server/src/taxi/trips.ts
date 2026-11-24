@@ -1,15 +1,23 @@
-import { Schema, SchemaTransformation } from "effect";
+import { Effect, Schema, SchemaTransformation } from "effect";
 import type { DatabricksClient } from "@dsiem/sql-warehouse";
-import { TripDetails, type TripSort, TripSummary } from "../../shared/trips.js";
-
-import { Day } from "../../shared/schema.js";
+import { Day } from "../../../shared/schema.js";
+import {
+  type Trip,
+  TripDetails,
+  type TripSort,
+  TripSummary,
+} from "../../../shared/trips.js";
+import { TripNotFound } from "../errors.js";
+import type { Warehouse } from "../warehouse.js";
+import { makeTripPages } from "./trip-pages.js";
+import { tripWhere } from "./trip-where.js";
 
 type Sql = DatabricksClient.DatabricksClient;
 
-export const tripZip = (sql: Sql, key: "pickup_zip" | "dropoff_zip") =>
+const tripZip = (sql: Sql, key: "pickup_zip" | "dropoff_zip") =>
   sql`COALESCE(CAST(${sql(key)} AS STRING), 'Unknown')`;
 
-export const tripSummaryProjection = (sql: Sql) => sql`
+const tripSummaryProjection = (sql: Sql) => sql`
           CAST(trip_id AS STRING) AS trip_id,
           CAST(tpep_pickup_datetime AS STRING) AS pickup_at,
           CAST(tpep_dropoff_datetime AS STRING) AS dropoff_at,
@@ -19,7 +27,7 @@ export const tripSummaryProjection = (sql: Sql) => sql`
           CAST(fare_amount AS DOUBLE) AS fare,
           CAST(COALESCE(timestampdiff(SECOND,tpep_pickup_datetime,tpep_dropoff_datetime)/60.0,0) AS DOUBLE) AS duration`;
 
-export function tripPreviewWindow(
+function tripPreviewWindow(
   sql: Sql,
   sort: typeof TripSort.Type,
   limit: number,
@@ -54,7 +62,7 @@ const NullableMeasure = Schema.NullOr(Schema.FiniteFromString).pipe(
     }),
   ),
 );
-export const WarehouseTripSummary = Schema.Struct({
+const WarehouseTripSummary = Schema.Struct({
   ...TripSummary.fields,
   pickup_at: TripTimestamp,
   dropoff_at: TripTimestamp,
@@ -63,12 +71,12 @@ export const WarehouseTripSummary = Schema.Struct({
   duration: Schema.FiniteFromString,
 });
 
-export const WarehouseTrip = Schema.Struct({
+const WarehouseTrip = Schema.Struct({
   ...WarehouseTripSummary.fields,
   details: Schema.fromJsonString(TripDetails),
 });
 
-export const tripDetailsProjection = (sql: Sql) =>
+const tripDetailsProjection = (sql: Sql) =>
   sql`to_json(named_struct(
             'source_file', source_file, 'vendor_id', VendorID,
             'passenger_count', passenger_count, 'rate_code_id', RatecodeID,
@@ -82,3 +90,61 @@ export const tripDetailsProjection = (sql: Sql) =>
             'improvement_surcharge', CASE WHEN abs(improvement_surcharge) < double('Infinity') THEN improvement_surcharge END,
             'total_amount', CASE WHEN abs(total_amount) < double('Infinity') THEN total_amount END
           ), map('ignoreNullFields', 'false')) AS details`;
+
+const decodeTripRows = Schema.decodeUnknownEffect(
+  Schema.Array(WarehouseTripSummary),
+);
+
+export const makeTrips = ({
+  sql,
+  snapshot,
+  read,
+  run,
+}: typeof Warehouse.Service) =>
+  Effect.gen(function* () {
+    const { trips, tripPage } = yield* makeTripPages(
+      ({ limit, sort, ...filters }) =>
+        run(
+          sql
+            .jsonPage(
+              sql`SELECT ${tripSummaryProjection(sql)}
+              FROM ${snapshot} ${tripWhere(sql, filters)}
+              ${tripPreviewWindow(sql, sort, limit)}`,
+              { rowLimit: limit },
+            )
+            .pipe(
+              Effect.flatMap(({ rows, pageCount, truncated, readChunk }) =>
+                Effect.map(decodeTripRows(rows), (rows) => ({
+                  rows,
+                  pageCount,
+                  truncated,
+                  readChunk: (index: number, offset: number) =>
+                    run(
+                      readChunk(index, offset).pipe(
+                        Effect.flatMap(decodeTripRows),
+                      ),
+                    ),
+                })),
+              ),
+            ),
+        ),
+    );
+    const tripDetails = (tripId: Trip["trip_id"]) =>
+      read(
+        WarehouseTrip,
+        sql`SELECT ${tripSummaryProjection(sql)}, ${tripDetailsProjection(sql)}
+            FROM ${snapshot} WHERE trip_id = ${tripId} LIMIT 1`,
+      ).pipe(
+        Effect.flatMap(([row]) =>
+          row
+            ? Effect.succeed(row)
+            : Effect.fail(
+                new TripNotFound({
+                  message: "This trip is no longer in the current snapshot.",
+                }),
+              ),
+        ),
+        Effect.withSpan("analytics.tripDetails"),
+      );
+    return { trips, tripPage, tripDetails };
+  });
