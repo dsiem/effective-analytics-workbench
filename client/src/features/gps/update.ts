@@ -1,12 +1,11 @@
 import { Command } from "foldkit";
 import type { FeatureUpdate } from "../../lib/feature-update";
-import type { MapQuery } from "./dataset-session";
 import { Message as M, type Message } from "./messages";
 import { dataKey, frameKey, type Model } from "./model";
-import { RefreshGps } from "./mount";
+import { RefreshGps, type MapData } from "./mount";
 import { EndpointTabs } from "./tabs";
 
-type MapLocation = Pick<MapQuery, "query" | "filters">;
+type MapLocation = Pick<MapData, "query" | "filters">;
 type Out = { readonly _tag: "SelectionInvalidated" };
 
 const refresh = (model: Model, { query, filters }: MapLocation) => [

@@ -2,6 +2,7 @@ import { Effect, Queue, Schema, Stream, SubscriptionRef } from "effect";
 import { Command, Mount } from "foldkit";
 import { GpsEndpoint } from "../../../../shared/map-dataset";
 import { Filters } from "../../../../shared/filters";
+import { ApiClient } from "../../lib/api-client";
 import { done } from "../../lib/command-result";
 import { Message as M } from "./messages";
 
@@ -56,7 +57,9 @@ export const GpsMount = Mount.defineStream("GpsMap", {
             try: () => import("./renderer"),
             catch: () => "Unable to load the GPS map. Try again.",
           });
-          yield* renderer.mountGpsMap(element, inputs, viewStateChanges, queue);
+          yield* renderer
+            .mountGpsMap(element, inputs, viewStateChanges, queue)
+            .pipe(Effect.provide(ApiClient.layer));
         }).pipe(
           Effect.catch((error) =>
             Effect.gen(function* () {
