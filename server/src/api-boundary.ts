@@ -3,22 +3,36 @@ import { HttpEffect, HttpServerResponse } from "effect/http";
 import { HttpApiError } from "effect/http-api";
 import {
   ApiBoundary,
+  apiErrorCodes,
   invalidRequestBody,
+  serviceErrorSuffixes,
   UpstreamFailureStatus,
 } from "../../shared/api.js";
 import type { ServiceError } from "./errors.js";
 
 const isUpstreamFailureStatus = Schema.is(UpstreamFailureStatus);
 
-type ApiErrorResponse<E extends ServiceError> = E extends ServiceError
-  ? { error: { code: E["code"]; message: string; upstreamStatus?: number } }
-  : never;
+type ErrorBody<Code extends string> = {
+  error: { code: Code; message: string; upstreamStatus?: number };
+};
+
+type ApiErrorResponse<E extends ServiceError> = E extends {
+  readonly _tag: infer Tag extends keyof typeof serviceErrorSuffixes;
+  readonly service: infer Service extends string;
+}
+  ? ErrorBody<`${Service}${(typeof serviceErrorSuffixes)[Tag]}`>
+  : E extends { readonly _tag: infer Tag extends keyof typeof apiErrorCodes }
+    ? ErrorBody<(typeof apiErrorCodes)[Tag]>
+    : never;
 
 function encodeError<E extends ServiceError>(error: E): ApiErrorResponse<E>;
 function encodeError(error: ServiceError) {
   return {
     error: {
-      code: error.code,
+      code:
+        "service" in error
+          ? `${error.service}${serviceErrorSuffixes[error._tag]}`
+          : apiErrorCodes[error._tag],
       message: error.message,
       ...(error._tag === "UpstreamError" &&
       isUpstreamFailureStatus(error.upstreamStatus)

@@ -53,35 +53,59 @@ import {
   TripSummary,
 } from "./trips.js";
 
+export const apiErrorCodes = {
+  InvalidRequest: "invalid_request",
+  PermissionDenied: "permission_denied",
+  SavedViewNotFound: "saved_view_not_found",
+  TripNotFound: "trip_not_found",
+  AnalysisRunNotFound: "analysis_run_not_found",
+  AnalysisReportPending: "analysis_report_pending",
+  SavedViewConflict: "saved_view_conflict",
+  GenieFailed: "genie_message_unavailable",
+  GenieAgentModeUnavailable: "genie_agent_mode_unavailable",
+} as const;
+
+export const serviceErrorSuffixes = {
+  ServiceUnavailable: "_unavailable",
+  UpstreamError: "_request_failed",
+  OperationTimeout: "_timeout",
+} as const;
+
 const errorBody = <S extends Schema.Top>(code: S, status: number) =>
   Schema.Struct({
     error: Schema.Struct({ code, message: Schema.String }),
   }).pipe(HttpApiSchema.status(status));
 
 export const InvalidRequestBody = errorBody(
-  Schema.Literal("invalid_request"),
+  Schema.Literal(apiErrorCodes.InvalidRequest),
   400,
 );
-const NotFoundBody = errorBody(Schema.Literal("saved_view_not_found"), 404);
-const TripNotFoundBody = errorBody(Schema.Literal("trip_not_found"), 404);
+const NotFoundBody = errorBody(
+  Schema.Literal(apiErrorCodes.SavedViewNotFound),
+  404,
+);
+const TripNotFoundBody = errorBody(
+  Schema.Literal(apiErrorCodes.TripNotFound),
+  404,
+);
 export const PermissionDeniedBody = errorBody(
-  Schema.Literal("permission_denied"),
+  Schema.Literal(apiErrorCodes.PermissionDenied),
   403,
 );
 const AnalysisRunNotFoundBody = errorBody(
-  Schema.Literal("analysis_run_not_found"),
+  Schema.Literal(apiErrorCodes.AnalysisRunNotFound),
   404,
 );
 const AnalysisReportPendingBody = errorBody(
-  Schema.Literal("analysis_report_pending"),
+  Schema.Literal(apiErrorCodes.AnalysisReportPending),
   409,
 );
 const SavedViewConflictBody = errorBody(
-  Schema.Literal("saved_view_conflict"),
+  Schema.Literal(apiErrorCodes.SavedViewConflict),
   409,
 );
 const GenieFailedBody = errorBody(
-  Schema.Literal("genie_message_unavailable"),
+  Schema.Literal(apiErrorCodes.GenieFailed),
   409,
 );
 const UnavailableService = Schema.Literals([
@@ -111,7 +135,7 @@ const UpstreamService = Schema.Literals([
 export type UpstreamService = typeof UpstreamService.Type;
 
 const AgentModeUnavailableBody = errorBody(
-  Schema.Literal("genie_agent_mode_unavailable"),
+  Schema.Literal(apiErrorCodes.GenieAgentModeUnavailable),
   503,
 );
 const unavailableBody = <
@@ -120,7 +144,10 @@ const unavailableBody = <
   ...services: S
 ) =>
   errorBody(
-    Schema.TemplateLiteral([Schema.Literals(services), "_unavailable"]),
+    Schema.TemplateLiteral([
+      Schema.Literals(services),
+      serviceErrorSuffixes.ServiceUnavailable,
+    ]),
     503,
   );
 export const UpstreamFailureStatus = Schema.Int.check(
@@ -135,7 +162,7 @@ const upstreamBody = <
     error: Schema.Struct({
       code: Schema.TemplateLiteral([
         Schema.Literals(services),
-        "_request_failed",
+        serviceErrorSuffixes.UpstreamError,
       ]),
       message: Schema.String,
       upstreamStatus: Schema.optionalKey(UpstreamFailureStatus),
@@ -147,7 +174,10 @@ const timeoutBody = <
   ...services: S
 ) =>
   errorBody(
-    Schema.TemplateLiteral([Schema.Literals(services), "_timeout"]),
+    Schema.TemplateLiteral([
+      Schema.Literals(services),
+      serviceErrorSuffixes.OperationTimeout,
+    ]),
     504,
   );
 const errors = [
@@ -168,7 +198,7 @@ export const ApiError = Schema.Union(errors);
 
 export const invalidRequestBody = (): typeof InvalidRequestBody.Type => ({
   error: {
-    code: "invalid_request",
+    code: apiErrorCodes.InvalidRequest,
     message: "Check the request fields, dates, and ZIP code.",
   },
 });
