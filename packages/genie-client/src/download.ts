@@ -1,4 +1,15 @@
-import { Clock, Data, Effect, Schema, Stream } from "effect";
+import {
+  Clock,
+  Data,
+  Effect,
+  Exit,
+  Option,
+  Schedule,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { chatPaths, GenieId, type GenieQueryReference } from "./protocol.js";
 
 export type GenieDownloadRequest =
@@ -119,31 +130,34 @@ export const makeGenieDownloadClient = <E, R>(options: {
           /^x-(?:amz|ms|goog)-/i.test(name),
         ),
       );
-      const controller = yield* Effect.acquireRelease(
-        Effect.sync(() => new AbortController()),
-        (controller) => Effect.sync(() => controller.abort()),
-      );
-      return yield* Effect.tryPromise({
-        try: (signal) =>
-          fetch(url, {
-            credentials: "omit",
-            redirect: "error",
-            signal: AbortSignal.any([signal, controller.signal]),
-            headers,
-          }),
-        catch: () => storageError(),
-      }).pipe(
+      const scope = yield* Scope.fork(yield* Scope.Scope);
+      const client = HttpClient.withScope(yield* HttpClient.HttpClient);
+      const response = yield* client.get(url, { headers }).pipe(
+        Scope.provide(scope),
+        Effect.mapError(() => storageError()),
         Effect.timeoutOrElse({
           duration: "30 seconds",
           orElse: () => Effect.fail(storageError()),
         }),
       );
-    });
-
-  const discardBody = (response: Response) =>
-    Effect.promise(async () => {
-      await response.body?.cancel().catch(() => undefined);
-    });
+      if (response.status !== 200) {
+        const body = Option.getOrUndefined(
+          HttpClientResponse.toWeb(response),
+        )?.body;
+        yield* Effect.promise(async () => {
+          await body?.cancel().catch(() => undefined);
+        }).pipe(Effect.ensuring(Scope.close(scope, Exit.void)));
+      }
+      return response;
+    }).pipe(
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(FetchHttpClient.Fetch, fetch),
+      Effect.provideService(FetchHttpClient.RequestInit, {
+        credentials: "omit",
+        redirect: "error",
+      }),
+      Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
+    );
 
   const download = (reference: GenieQueryReference) =>
     Effect.gen(function* () {
@@ -162,11 +176,13 @@ export const makeGenieDownloadClient = <E, R>(options: {
         Effect.flatMap((data) => decode(Statement, data)),
         Effect.map((data) => data.statement_response),
       );
-      let statement = yield* poll;
-      while (["PENDING", "RUNNING"].includes(statement.status.state)) {
-        yield* Effect.sleep("2 seconds");
-        statement = yield* poll;
-      }
+      const statement = yield* poll.pipe(
+        Effect.repeat({
+          while: ({ status }) =>
+            status.state === "PENDING" || status.state === "RUNNING",
+          schedule: Schedule.spaced("2 seconds"),
+        }),
+      );
 
       const manifest = statement.manifest;
       if (
@@ -218,19 +234,12 @@ export const makeGenieDownloadClient = <E, R>(options: {
               !cached || expired ? yield* refreshLink(index) : cached;
             let response = yield* openChunk(link);
             if (response.status === 401 || response.status === 403) {
-              yield* discardBody(response);
               response = yield* openChunk(yield* refreshLink(index));
             }
-            if (response.status !== 200) {
-              yield* discardBody(response);
+            if (response.status !== 200)
               return yield* storageError(response.status);
-            }
-            const body = response.body;
-            if (!body) return yield* storageError();
-            return Stream.fromReadableStream({
-              evaluate: () => body,
-              onError: () => storageError(),
-            }).pipe(
+            return response.stream.pipe(
+              Stream.mapError(() => storageError()),
               Stream.filter((bytes) => bytes.length > 0),
               Stream.timeoutOrElse({
                 duration: "30 seconds",
