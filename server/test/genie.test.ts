@@ -13,6 +13,7 @@ import {
   Stream,
 } from "effect";
 import { FetchHttpClient } from "effect/http";
+import { TestClock } from "effect/testing";
 import { unavailable, UpstreamError } from "../src/errors.js";
 import { Genie } from "../src/genie.js";
 import { Settings } from "../src/settings.js";
@@ -850,60 +851,93 @@ test("Agent cancellation uses the accepted response IDs and returns Databricks' 
   }
 });
 
-test("Genie holds CSV transfer capacity until the body is interrupted", async () => {
-  const layer = provideGenie(
-    (_, method) =>
-      Effect.succeed(
-        method === "POST"
-          ? {
+test(
+  "Genie CSV uses one deadline for admission and preparation and releases capacity on interruption",
+  { timeout: 5000 },
+  async () => {
+    let exportsStarted = 0;
+    const preparingSecond = Latch.makeUnsafe();
+    const layer = provideGenie(
+      (_, method) =>
+        Effect.gen(function* () {
+          if (method === "POST") {
+            exportsStarted++;
+            if (exportsStarted === 2) {
+              yield* preparingSecond.open;
+              return yield* Effect.never;
+            }
+            return {
               download_id: "download",
               download_id_signature: "fixture",
-            }
-          : {
-              statement_response: {
-                statement_id: "statement",
-                status: { state: "SUCCEEDED" },
-                manifest: {
-                  format: "CSV",
-                  truncated: false,
-                  total_chunk_count: 0,
-                  schema: { columns: [{ name: "trip" }] },
-                },
+            };
+          }
+          return {
+            statement_response: {
+              statement_id: "statement",
+              status: { state: "SUCCEEDED" },
+              manifest: {
+                format: "CSV",
+                truncated: false,
+                total_chunk_count: 0,
+                schema: { columns: [{ name: "trip" }] },
               },
             },
-      ),
-    { GENIE_MAX_CONCURRENCY: "1" },
-  );
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const genie = yield* localGenie;
-      const first = yield* genie.downloadCsv({
-        ...operation,
-        attachmentId: "query",
-      });
-      const second = yield* genie.downloadCsv({
-        ...operation,
-        attachmentId: "query",
-      });
-      const reading = Latch.makeUnsafe();
-      const firstTransfer = yield* Stream.runForEach(first, () =>
-        reading.open.pipe(Effect.andThen(Effect.never)),
-      ).pipe(Effect.forkChild);
-      yield* reading.await;
+          };
+        }),
+      { GENIE_MAX_CONCURRENCY: "1" },
+    );
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const genie = yield* localGenie;
+        const reference = { ...operation, attachmentId: "query" };
+        const reading = Latch.makeUnsafe();
+        const firstTransfer = yield* genie
+          .downloadCsv(reference)
+          .pipe(
+            Effect.flatMap(
+              Stream.runForEach(() =>
+                reading.open.pipe(Effect.andThen(Effect.never)),
+              ),
+            ),
+            Effect.scoped,
+            Effect.forkChild,
+          );
+        yield* reading.await;
 
-      const secondTransfer = yield* Stream.runCollect(second).pipe(
-        Effect.forkChild({ startImmediately: true }),
-      );
-      yield* Effect.yieldNow;
-      assert.equal(
-        secondTransfer.pollUnsafe(),
-        undefined,
-        "The second transfer must wait for the first body to close",
-      );
+        const secondTransfer = yield* genie
+          .downloadCsv(reference)
+          .pipe(
+            Effect.flatMap(Stream.runCollect),
+            Effect.forkChild({ startImmediately: true }),
+          );
+        yield* TestClock.adjust("179 seconds");
+        assert.equal(
+          exportsStarted,
+          1,
+          "A queued export must wait for the first body to close before preparing",
+        );
 
-      yield* Fiber.interrupt(firstTransfer);
-      const bytes = yield* Fiber.join(secondTransfer);
-      assert.equal(new TextDecoder().decode(bytes[0]), '"trip"\r\n');
-    }).pipe(Effect.provide(layer)),
-  );
-});
+        yield* Fiber.interrupt(firstTransfer);
+        yield* preparingSecond.await;
+        yield* TestClock.adjust("1 second");
+        const timeout = yield* Effect.flip(Fiber.join(secondTransfer));
+        assert.equal(timeout._tag, "OperationTimeout");
+        assert.equal(timeout.service, "genie_csv");
+
+        const retry = yield* genie
+          .downloadCsv(reference)
+          .pipe(
+            Effect.flatMap(Stream.runCollect),
+            Effect.forkChild({ startImmediately: true }),
+          );
+        yield* TestClock.adjust("0 millis");
+        const retried = retry.pollUnsafe();
+        assert.ok(
+          retried && Exit.isSuccess(retried),
+          "A failed preparation must release its permit before the next attempt",
+        );
+        assert.equal(new TextDecoder().decode(retried.value[0]), '"trip"\r\n');
+      }).pipe(Effect.scoped, Effect.provide([layer, TestClock.layer()])),
+    );
+  },
+);

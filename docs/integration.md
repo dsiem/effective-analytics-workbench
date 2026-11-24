@@ -131,8 +131,9 @@ In Databricks Apps, Genie binds each conversation to the authenticated viewer
 from the Databricks proxy. The browser keeps the signed grant with the
 conversation IDs. Follow-ups, polling, result retrieval, Stop, and CSV export
 require that viewer's grant. The viewer-bound Genie service verifies grants before
-calling Databricks. Databricks runs the queries with the app service principal.
-Local development uses the configured workspace identity.
+calling Databricks. CSV downloads wait for transfer capacity before sending
+headers and hold it until the body closes. Databricks runs the queries with the
+app service principal. Local development uses the configured workspace identity.
 [Viewer authorization](../server/src/genie-access.ts) ·
 [Forwarded Databricks headers](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/http-headers)
 
