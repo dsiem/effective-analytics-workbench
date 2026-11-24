@@ -254,7 +254,9 @@ test("a Records follow-up sends the applied filters after viewing a chart", asyn
   await page.getByRole("link", { name: "Trip explorer", exact: true }).click();
   await page.getByRole("combobox", { name: "Sort trips" }).selectOption("fare");
   await expect(page).toHaveURL(/sort=fare$/);
-  await expect(page.getByText("1 shown", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("1 shown · more match", { exact: true }),
+  ).toBeVisible();
   await openHelper(page);
   const context = helper.getByRole("region", {
     name: "Explore view for your next question",
