@@ -1,197 +1,148 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { jsonMap, type MapResource } from "../src/features/gps/dataset";
-import {
-  createMapSession,
-  type MapQuery,
-  type MapSessionEvent,
-} from "../src/features/gps/dataset-session";
-import { dataKey } from "../src/features/gps/model";
+import { Effect, Fiber, Queue, Result, Stream, SubscriptionRef } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
+import { HttpApiClient } from "effect/http-api";
+import { AppApi } from "../../shared/api";
+import { mapLoads } from "../src/features/gps/load";
+import { dataKey, frameKey } from "../src/features/gps/model";
+import type { MapData } from "../src/features/gps/mount";
+import { ApiClient } from "../src/lib/api-client";
 import { gpsFixture } from "./gps-fixture";
 
-const query: MapQuery = {
-  query: "zip=10001",
-  filters: { zip: "10001" },
-  endpoint: "pickup",
-  revision: 0,
-};
-const resource = () => jsonMap(gpsFixture());
-const deferred = <A>() => {
-  let resolve: ((value: A) => void) | undefined;
-  let reject: ((error: unknown) => void) | undefined;
-  const promise = new Promise<A>((yes, no) => {
-    resolve = yes;
-    reject = no;
-  });
-  return {
-    promise,
-    resolve(value: A) {
-      assert.ok(resolve);
-      resolve(value);
-    },
-    reject(error: unknown) {
-      assert.ok(reject);
-      reject(error);
-    },
-  };
-};
-const loader = () => {
-  const requests: Array<{
-    input: MapQuery;
-    signal: AbortSignal;
-    result: ReturnType<typeof deferred<MapResource>>;
-  }> = [];
-  return {
-    requests,
-    load: (input: MapQuery, signal: AbortSignal) => {
-      const result = deferred<MapResource>();
-      requests.push({ input, signal, result });
-      return result.promise;
-    },
-    at(index: number) {
-      const request = requests[index];
-      assert.ok(request);
-      return request;
-    },
-  };
+const mapData = ({
+  query = "zip=10001",
+  filters = { zip: "10001" },
+  endpoint = "pickup",
+  revision = 0,
+  selected = null,
+  loading = true,
+}: Partial<MapData> = {}): MapData => ({
+  query,
+  filters,
+  endpoint,
+  revision,
+  selected,
+  loading,
+  key: frameKey(query, endpoint, selected, revision),
+});
+
+type Load = Stream.Success<ReturnType<typeof mapLoads>>;
+type PendingRequest = {
+  readonly url: URL;
+  readonly signal: AbortSignal | null | undefined;
+  readonly respond: (response: Response) => void;
+  readonly reject: (error: Error) => void;
 };
 
-test("map session deduplicates requests and makes new data available before notifying", async () => {
-  const loads = loader();
-  const events: MapSessionEvent[] = [];
-  const first = resource();
-  const next = resource();
-  const session = createMapSession({
-    load: loads.load,
-    notify: (event) => {
-      events.push(event);
-      if (events.length === 2) assert.equal(session.current(), next);
-    },
-  });
-  const initial = session.replace(query);
-  await session.replace({ ...query });
-  assert.equal(loads.requests.length, 1);
-  loads.at(0).result.resolve(first);
-  await initial;
-  assert.equal(session.current(), first);
-  await session.replace(query);
-  assert.equal(loads.requests.length, 1);
+const withMapLoads = <A, E>(
+  run: (map: {
+    inputs: SubscriptionRef.SubscriptionRef<MapData>;
+    requests: Queue.Dequeue<PendingRequest>;
+    results: Queue.Dequeue<Load>;
+    stop: Effect.Effect<unknown>;
+  }) => Effect.Effect<A, E>,
+) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const inputs = yield* SubscriptionRef.make(mapData());
+      const requests = yield* Queue.unbounded<PendingRequest>();
+      const results = yield* Queue.unbounded<Load>();
+      const fetch: typeof globalThis.fetch = (url, init) =>
+        new Promise((respond, reject) => {
+          // Deliberately allow late settlement even after fetch is aborted.
+          Queue.offerUnsafe(requests, {
+            url: new URL(url instanceof Request ? url.url : url),
+            signal: init?.signal,
+            respond,
+            reject,
+          });
+        });
+      const fiber = yield* mapLoads(SubscriptionRef.changes(inputs)).pipe(
+        Stream.runForEach((load) => Queue.offer(results, load)),
+        Effect.provideServiceEffect(
+          ApiClient,
+          HttpApiClient.makeWith(AppApi, {
+            httpClient: HttpClient.withScope(yield* HttpClient.HttpClient),
+            baseUrl: "http://fixture.test",
+          }),
+        ),
+        Effect.provideService(FetchHttpClient.Fetch, fetch),
+        Effect.forkChild,
+      );
+      return yield* run({
+        inputs,
+        requests,
+        results,
+        stop: Fiber.interrupt(fiber),
+      });
+    }).pipe(Effect.provide(FetchHttpClient.layer), Effect.timeout("5 seconds")),
+  );
 
-  const replacement = session.replace({ ...query, revision: 1 });
-  assert.equal(loads.at(0).signal.aborted, true);
-  assert.equal(session.current(), first);
-  loads.at(1).result.resolve(next);
-  await replacement;
-  assert.deepEqual(events, [
-    {
-      _tag: "Loaded",
-      key: dataKey(query.query, query.endpoint, 0),
-      data: first.summary,
-    },
-    {
-      _tag: "Loaded",
-      key: dataKey(query.query, query.endpoint, 1),
-      data: next.summary,
-    },
-  ]);
-  session.dispose();
-});
+test("GPS loads only on query changes and ignores late results after switching or unmounting", () =>
+  withMapLoads(({ inputs, requests, results, stop }) =>
+    Effect.gen(function* () {
+      const initial = yield* Queue.take(requests);
+      assert.equal(initial.url.searchParams.get("endpoint"), "pickup");
+      yield* SubscriptionRef.set(inputs, mapData({ selected: "cell" }));
 
-test("map session ignores obsolete results even when the loader ignores abort", async () => {
-  const loads = loader();
-  const events: MapSessionEvent[] = [];
-  const session = createMapSession({
-    load: loads.load,
-    notify: (event) => events.push(event),
-  });
-  const original = session.replace(query);
-  const changed = session.replace({ ...query, endpoint: "dropoff" });
-  const retry = session.replace({ ...query, revision: 1 });
-  assert.equal(loads.at(0).signal.aborted, true);
-  assert.equal(loads.at(1).signal.aborted, true);
-  const current = resource();
-  loads.at(2).result.resolve(current);
-  await retry;
-  loads.at(0).result.resolve(resource());
-  loads.at(1).result.reject(new Error("obsolete failure"));
-  await Promise.all([original, changed]);
-  assert.equal(session.current(), current);
-  assert.equal(events.length, 1);
-  assert.equal(events[0]?.key, dataKey(query.query, query.endpoint, 1));
-  session.dispose();
-});
+      const dropoff = mapData({ endpoint: "dropoff", revision: 1 });
+      yield* SubscriptionRef.set(inputs, dropoff);
+      const replacement = yield* Queue.take(requests);
+      assert.equal(replacement.url.searchParams.get("endpoint"), "dropoff");
+      assert.equal(initial.signal?.aborted, true);
+      initial.respond(Response.json(gpsFixture()));
 
-test("a failed map replacement keeps the visible dataset until a revision retries", async () => {
-  const loads = loader();
-  const events: MapSessionEvent[] = [];
-  const session = createMapSession({
-    load: loads.load,
-    notify: (event) => events.push(event),
-  });
-  const initial = session.replace(query);
-  const first = resource();
-  loads.at(0).result.resolve(first);
-  await initial;
-  const input = { ...query, query: "zip=10019", filters: { zip: "10019" } };
-  const replacement = session.replace(input);
-  const error = new Error("offline");
-  loads.at(1).result.reject(error);
-  await replacement;
-  assert.equal(session.current(), first);
-  assert.deepEqual(events[1], {
-    _tag: "Failed",
-    key: dataKey(input.query, input.endpoint),
-    error,
-  });
-  const retried = session.replace({ ...input, revision: 1 });
-  const next = resource();
-  loads.at(2).result.resolve(next);
-  await retried;
-  assert.equal(session.current(), next);
-  session.dispose();
-});
+      replacement.respond(Response.json(gpsFixture("dropoff")));
+      const { key, result } = yield* Queue.take(results);
+      assert.equal(key, dataKey(dropoff.query, dropoff.endpoint, 1));
+      assert.ok(Result.isSuccess(result));
+      assert.equal(result.success.summary.loaded, 2);
 
-test("map disposal aborts loading and suppresses late publication", async () => {
-  const loads = loader();
-  const events: MapSessionEvent[] = [];
-  const session = createMapSession({
-    load: loads.load,
-    notify: (event) => events.push(event),
-  });
-  const initial = session.replace(query);
-  loads.at(0).result.resolve(resource());
-  await initial;
-  const pending = session.replace({ ...query, revision: 1 });
-  session.dispose();
-  session.dispose();
-  assert.equal(session.current(), undefined);
-  assert.equal(loads.at(1).signal.aborted, true);
-  loads.at(1).result.resolve(resource());
-  await pending;
-  assert.equal(events.length, 1);
-  await session.replace({ ...query, revision: 2 });
-  assert.equal(loads.requests.length, 2);
-});
+      yield* SubscriptionRef.set(inputs, { ...dropoff, loading: false });
+      yield* SubscriptionRef.set(inputs, { ...dropoff, revision: 2 });
+      const pending = yield* Queue.take(requests);
+      yield* stop;
+      assert.equal(pending.signal?.aborted, true);
+      pending.respond(Response.json(gpsFixture("dropoff")));
+      assert.equal(yield* Queue.size(results), 0);
+      assert.equal(yield* Queue.size(requests), 0);
+    }),
+  ));
 
-test("a drawing exception reaches the caller without reporting a load failure", async () => {
-  const loads = loader();
-  const events: MapSessionEvent[] = [];
-  const drawError = new Error("WebGL unavailable");
-  const session = createMapSession({
-    load: loads.load,
-    notify: (event) => {
-      events.push(event);
-      if (events.length === 2) throw drawError;
-    },
-  });
-  const initial = session.replace(query);
-  loads.at(0).result.resolve(resource());
-  await initial;
-  const replacement = session.replace({ ...query, revision: 1 });
-  const next = resource();
-  loads.at(1).result.resolve(next);
-  await assert.rejects(replacement, drawError);
-  assert.equal(session.current(), next);
-  assert.ok(events.every((event) => event._tag === "Loaded"));
-  session.dispose();
-});
+test("GPS reports the active failure and keeps listening for a retry", () =>
+  withMapLoads(({ inputs, requests, results }) =>
+    Effect.gen(function* () {
+      const initial = yield* Queue.take(requests);
+      initial.respond(Response.json(gpsFixture()));
+      assert.ok(Result.isSuccess((yield* Queue.take(results)).result));
+
+      const next = mapData({
+        query: "zip=10019",
+        filters: { zip: "10019" },
+        revision: 1,
+      });
+      yield* SubscriptionRef.set(inputs, next);
+      const replacement = yield* Queue.take(requests);
+      assert.equal(replacement.url.searchParams.get("zip"), "10019");
+      replacement.respond(
+        Response.json(
+          { error: { code: "warehouse_unavailable", message: "Offline" } },
+          { status: 503 },
+        ),
+      );
+      const failed = yield* Queue.take(results);
+      assert.equal(failed.key, dataKey(next.query, next.endpoint, 1));
+      assert.ok(Result.isFailure(failed.result));
+      assert.deepEqual(failed.result.failure, {
+        error: { code: "warehouse_unavailable", message: "Offline" },
+      });
+
+      yield* SubscriptionRef.set(inputs, { ...next, revision: 2 });
+      const retry = yield* Queue.take(requests);
+      retry.respond(Response.json(gpsFixture()));
+      const retried = yield* Queue.take(results);
+      assert.equal(retried.key, dataKey(next.query, next.endpoint, 2));
+      assert.ok(Result.isSuccess(retried.result));
+    }),
+  ));

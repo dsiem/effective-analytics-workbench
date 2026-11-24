@@ -1,24 +1,34 @@
-import { Effect } from "effect";
-import { ApiClient, request } from "../../lib/api-client";
+import { Effect, Stream } from "effect";
+import { request } from "../../lib/api-client";
 import { jsonMap } from "./dataset";
-import type { MapQuery } from "./dataset-session";
+import { dataKey } from "./model";
+import type { MapData } from "./mount";
 
-export async function loadGps(
-  { filters, endpoint }: MapQuery,
-  signal: AbortSignal,
-) {
-  const result = await Effect.runPromise(
-    Effect.gen(function* () {
-      const search = { ...filters, endpoint };
-      const response = yield* request((client) =>
-        client.analytics.tripMap({ query: search }),
-      );
-      if (response.endpoint !== endpoint)
-        return yield* Effect.fail(new Error("Invalid map endpoint"));
-      return yield* Effect.try(() => jsonMap(response));
-    }).pipe(Effect.provide(ApiClient.layer), Effect.scoped, Effect.result),
-    { signal },
+type MapQuery = Pick<MapData, "query" | "filters" | "endpoint" | "revision">;
+
+const loadGps = ({ filters, endpoint }: MapQuery) =>
+  Effect.gen(function* () {
+    const response = yield* request((client) =>
+      client.analytics.tripMap({ query: { ...filters, endpoint } }),
+    );
+    if (response.endpoint !== endpoint)
+      return yield* Effect.fail(new Error("Invalid map endpoint"));
+    return yield* Effect.try(() => jsonMap(response));
+  }).pipe(Effect.scoped);
+
+export const mapLoads = <E, R>(inputs: Stream.Stream<MapQuery, E, R>) =>
+  inputs.pipe(
+    Stream.map((input) => ({
+      key: dataKey(input.query, input.endpoint, input.revision),
+      input,
+    })),
+    Stream.changesWith((previous, next) => previous.key === next.key),
+    Stream.switchMap(({ key, input }) =>
+      Stream.fromEffect(
+        loadGps(input).pipe(
+          Effect.result,
+          Effect.map((result) => ({ key, result })),
+        ),
+      ),
+    ),
   );
-  if (result._tag === "Failure") throw result.failure;
-  return result.success;
-}
