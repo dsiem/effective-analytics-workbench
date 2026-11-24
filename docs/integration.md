@@ -25,7 +25,7 @@ with Effect services at startup. [HTTP contract](../shared/api.ts) ·
   chart. [Feature bindings](../client/src/app/features.ts) · [Shell update](../client/src/app/update.ts)
 - **A Genie answer** contains ordered attachments and an optional warning.
   Chat and Agent both return this shape. The server turns it into the text and
-  query tables the workbench displays. [Answer type](../packages/genie-client/src/answer.ts) · [Genie service](../server/src/genie.ts)
+  query tables the workbench displays. [Answer type](../packages/genie-client/src/answer.ts) · [Genie service](../server/src/genie/service.ts)
 
 `GET /api/trips` returns a JSON page with `rows`, `nextCursor`, and
 `hasMoreMatches`. Each row carries a trip summary with numeric distance, fare,
@@ -126,7 +126,7 @@ again. Capture the question's filters and context when the user sends it.
 
 The taxi app requires Genie. The server fails startup if `DATABRICKS_HOST` or
 `GENIE_SPACE_ID` is missing. Each Databricks request checks access to the space.
-[Genie service](../server/src/genie.ts) · [Startup smoke test](../server/test/built/smoke.test.mjs)
+[Genie service](../server/src/genie/service.ts) · [Startup smoke test](../server/test/built/smoke.test.mjs)
 
 In Databricks Apps, Genie binds each conversation to the authenticated viewer
 from the Databricks proxy. The browser keeps the signed grant with the
@@ -135,7 +135,7 @@ require that viewer's grant. The viewer-bound Genie service verifies grants befo
 calling Databricks. CSV downloads wait for transfer capacity before sending
 headers and hold it until the body closes. Databricks runs the queries with the
 app service principal. Local development uses the configured workspace identity.
-[Viewer authorization](../server/src/genie-access.ts) ·
+[Viewer authorization](../server/src/genie/access.ts) ·
 [Forwarded Databricks headers](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/http-headers)
 
 ## Assign permissions to the identity that uses them
@@ -185,7 +185,7 @@ submissions. Apply the deadline to permit acquisition and execution so an
 expired request cannot start work after waiting in the queue. Each app process
 has its own limits.
 [Admission control](../server/src/admission.ts) · [Warehouse service](../server/src/warehouse.ts) ·
-[Genie service](../server/src/genie.ts)
+[Genie service](../server/src/genie/service.ts)
 
 Put cancellation in the Effect that owns the upstream statement. When its
 scope closes, the SQL adapter attempts to cancel a known pending or running

@@ -16,7 +16,7 @@ import {
   TripPage,
   type TripSearch,
 } from "../../shared/trips.js";
-import { Analytics } from "../src/analytics.js";
+import { Analytics } from "../src/taxi/analytics.js";
 import {
   InvalidRequest,
   ServiceUnavailable,

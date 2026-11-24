@@ -10,9 +10,9 @@ import {
   Redacted,
   Schema,
 } from "effect";
-import { Analytics } from "../src/analytics.js";
+import { Analytics } from "../src/taxi/analytics.js";
 import { unavailable } from "../src/errors.js";
-import { Genie } from "../src/genie.js";
+import { Genie } from "../src/genie/service.js";
 import { Lakebase } from "../src/lakebase.js";
 import { SavedViews } from "../src/saved-views.js";
 import { Settings } from "../src/settings.js";
