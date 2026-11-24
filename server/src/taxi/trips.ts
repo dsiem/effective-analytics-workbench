@@ -8,9 +8,8 @@ import {
   TripSummary,
 } from "../../../shared/trips.js";
 import { TripNotFound } from "../errors.js";
-import type { Warehouse } from "../warehouse.js";
+import { type TaxiSnapshot, tripWhere } from "./snapshot.js";
 import { makeTripPages } from "./trip-pages.js";
-import { tripWhere } from "./trip-where.js";
 
 type Sql = DatabricksClient.DatabricksClient;
 
@@ -95,56 +94,52 @@ const decodeTripRows = Schema.decodeUnknownEffect(
   Schema.Array(WarehouseTripSummary),
 );
 
-export const makeTrips = ({
-  sql,
-  snapshot,
-  read,
-  run,
-}: typeof Warehouse.Service) =>
+export const makeTrips = (taxi: TaxiSnapshot) =>
   Effect.gen(function* () {
     const { trips, tripPage } = yield* makeTripPages(
       ({ limit, sort, ...filters }) =>
-        run(
-          sql
-            .jsonPage(
-              sql`SELECT ${tripSummaryProjection(sql)}
+        Effect.gen(function* () {
+          const { sql, snapshot, run } = yield* taxi;
+          return yield* run(
+            sql
+              .jsonPage(
+                sql`SELECT ${tripSummaryProjection(sql)}
               FROM ${snapshot} ${tripWhere(sql, filters)}
               ${tripPreviewWindow(sql, sort, limit)}`,
-              { rowLimit: limit },
-            )
-            .pipe(
-              Effect.flatMap(({ rows, pageCount, truncated, readChunk }) =>
-                Effect.map(decodeTripRows(rows), (rows) => ({
-                  rows,
-                  pageCount,
-                  truncated,
-                  readChunk: (index: number, offset: number) =>
-                    run(
-                      readChunk(index, offset).pipe(
-                        Effect.flatMap(decodeTripRows),
+                { rowLimit: limit },
+              )
+              .pipe(
+                Effect.flatMap(({ rows, pageCount, truncated, readChunk }) =>
+                  Effect.map(decodeTripRows(rows), (rows) => ({
+                    rows,
+                    pageCount,
+                    truncated,
+                    readChunk: (index: number, offset: number) =>
+                      run(
+                        readChunk(index, offset).pipe(
+                          Effect.flatMap(decodeTripRows),
+                        ),
                       ),
-                    ),
-                })),
+                  })),
+                ),
               ),
-            ),
-        ),
+          );
+        }),
     );
     const tripDetails = (tripId: Trip["trip_id"]) =>
-      read(
-        WarehouseTrip,
-        sql`SELECT ${tripSummaryProjection(sql)}, ${tripDetailsProjection(sql)}
+      Effect.gen(function* () {
+        const { sql, snapshot, read } = yield* taxi;
+        const [row] = yield* read(
+          WarehouseTrip,
+          sql`SELECT ${tripSummaryProjection(sql)}, ${tripDetailsProjection(sql)}
             FROM ${snapshot} WHERE trip_id = ${tripId} LIMIT 1`,
-      ).pipe(
-        Effect.flatMap(([row]) =>
-          row
-            ? Effect.succeed(row)
-            : Effect.fail(
-                new TripNotFound({
-                  message: "This trip is no longer in the current snapshot.",
-                }),
-              ),
-        ),
-        Effect.withSpan("analytics.tripDetails"),
-      );
+        );
+        return (
+          row ??
+          (yield* new TripNotFound({
+            message: "This trip is no longer in the current snapshot.",
+          }))
+        );
+      }).pipe(Effect.withSpan("analytics.tripDetails"));
     return { trips, tripPage, tripDetails };
   });

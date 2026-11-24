@@ -11,7 +11,9 @@ import type {
   PermissionDenied,
   TripNotFound,
 } from "./errors.js";
+import { Settings } from "./settings.js";
 import { makeOverview } from "./taxi/overview.js";
+import { makeTaxiSnapshot } from "./taxi/snapshot.js";
 import { makeTripMap } from "./taxi/trip-map.js";
 import { makeTrips } from "./taxi/trips.js";
 import { Warehouse } from "./warehouse.js";
@@ -49,9 +51,11 @@ export class Analytics extends Context.Service<
     Analytics,
     Effect.gen(function* () {
       const warehouse = yield* Warehouse;
-      const { metadata, overview } = yield* makeOverview(warehouse);
-      const { trips, tripPage, tripDetails } = yield* makeTrips(warehouse);
-      const tripMap = yield* makeTripMap(warehouse);
+      const { tripSnapshotTable } = yield* Settings;
+      const snapshot = makeTaxiSnapshot(warehouse, tripSnapshotTable);
+      const { metadata, overview } = yield* makeOverview(snapshot);
+      const { trips, tripPage, tripDetails } = yield* makeTrips(snapshot);
+      const tripMap = yield* makeTripMap(snapshot);
       return { metadata, overview, trips, tripPage, tripDetails, tripMap };
     }),
   );

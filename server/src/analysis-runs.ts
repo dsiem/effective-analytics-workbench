@@ -137,22 +137,16 @@ const notFound = () =>
   new AnalysisRunNotFound({ message: "This analysis run could not be found." });
 
 const makeAnalysisRuns = Effect.gen(function* () {
-  const {
-    analysisJobId,
-    analysisResultsTable,
-    host,
-    warehouseId,
-    tripSnapshotTable,
-  } = yield* Settings;
+  const { analysisJobId, analysisResultsTable, tripSnapshotTable } =
+    yield* Settings;
   const workspace = yield* Workspace;
-  const { sql, read } = yield* Warehouse;
+  const warehouse = yield* Warehouse;
   const configured =
-    host &&
     analysisJobId &&
     analysisResultsTable &&
-    warehouseId &&
-    tripSnapshotTable
-      ? Effect.void
+    tripSnapshotTable &&
+    Option.isSome(warehouse)
+      ? Effect.succeed(warehouse.value)
       : Effect.fail(
           unavailable(
             "analysis",
@@ -263,41 +257,40 @@ const makeAnalysisRuns = Effect.gen(function* () {
       }),
     );
 
-  const readReport = (id: AnalysisRunId) => {
-    const [catalog, schema, table] = analysisResultsTable.split(".");
-    if (!catalog || !schema || !table)
-      return Effect.fail(
-        unavailable("analysis", "Configure the analysis results table."),
-      );
-    return read(
-      Schema.Struct({
-        report_json: Schema.fromJsonString(RouteReliabilityReport),
-      }),
-      sql`SELECT report_json FROM ${sql(catalog)}.${sql(schema)}.${sql(table)}
+  const readReport = (id: AnalysisRunId) =>
+    Effect.gen(function* () {
+      const { sql, queries } = yield* configured;
+      const [catalog, schema, table] = analysisResultsTable.split(".");
+      if (!catalog || !schema || !table)
+        return yield* unavailable(
+          "analysis",
+          "Configure the analysis results table.",
+        );
+
+      const { read } = queries({
+        deniedMessage:
+          "This report is under lock. You need permission to read it.",
+        unavailable: (cause) =>
+          unavailable(
+            "analysis",
+            "The report could not be read. Check SELECT access to the results table.",
+            cause,
+          ),
+      });
+      const [row] = yield* read(
+        Schema.Struct({
+          report_json: Schema.fromJsonString(RouteReliabilityReport),
+        }),
+        sql`SELECT report_json FROM ${sql(catalog)}.${sql(schema)}.${sql(table)}
           WHERE run_id = CAST(${String(id)} AS BIGINT) LIMIT 1`,
-      "This report is under lock. You need permission to read it.",
-    ).pipe(
-      Effect.mapError((cause) =>
-        cause._tag === "ServiceUnavailable"
-          ? unavailable(
-              "analysis",
-              "The report could not be read. Check SELECT access to the results table.",
-              cause,
-            )
-          : cause,
-      ),
-      Effect.flatMap(([row]) =>
-        row
-          ? Effect.succeed(row.report_json)
-          : Effect.fail(
-              unavailable(
-                "analysis",
-                "The completed report is missing. Check the job's results table.",
-              ),
-            ),
-      ),
-    );
-  };
+      );
+      return row
+        ? row.report_json
+        : yield* unavailable(
+            "analysis",
+            "The completed report is missing. Check the job's results table.",
+          );
+    });
 
   const result = (id: AnalysisRunId) =>
     lookup(id).pipe(
