@@ -16,6 +16,7 @@ import { GenieOperation } from "../../shared/genie.js";
 import { AnalysisRuns } from "../src/analysis-runs.js";
 import { Analytics } from "../src/analytics.js";
 import {
+  GenieAgentModeUnavailable,
   GenieFailed,
   InvalidRequest,
   OperationTimeout,
@@ -23,6 +24,7 @@ import {
   SavedViewConflict,
   SavedViewNotFound,
   unavailable,
+  UpstreamError,
 } from "../src/errors.js";
 import { Genie, type GenieViewer } from "../src/genie.js";
 import { Routes } from "../src/routes.js";
@@ -193,6 +195,19 @@ const genieFailed = new GenieFailed({
   message: "Question failed",
 });
 
+const csvTimeout = new OperationTimeout({
+  service: "genie_csv",
+  message: "Transfer capacity timed out",
+});
+const agentDisabled = new GenieAgentModeUnavailable({
+  message: "Agent mode is disabled",
+});
+const upstreamNotModified = new UpstreamError({
+  service: "workspace",
+  upstreamStatus: 304,
+  message: "Unexpected upstream status",
+});
+
 for (const { request, services, status, error } of [
   {
     request: removeView,
@@ -231,6 +246,37 @@ for (const { request, services, status, error } of [
     error: { code: "genie_message_unavailable", message: genieFailed.message },
   },
   {
+    request: new Request("http://localhost/api/genie", {
+      method: "POST",
+      body: JSON.stringify({ content: "Count trips", mode: "agent" }),
+      headers: { "content-type": "application/json" },
+    }),
+    services: { genie: { submit: () => Effect.fail(agentDisabled) } },
+    status: 503,
+    error: {
+      code: "genie_agent_mode_unavailable",
+      message: agentDisabled.message,
+    },
+  },
+  {
+    request: getGenieResult,
+    services: { genie: { result: () => Effect.fail(upstreamNotModified) } },
+    status: 502,
+    error: {
+      code: "workspace_request_failed",
+      message: upstreamNotModified.message,
+    },
+  },
+  {
+    request: new Request(
+      "http://localhost/api/genie/conv/messages/msg/attachments/query/csv",
+      { method: "POST" },
+    ),
+    services: { genie: { downloadCsv: () => Effect.fail(csvTimeout) } },
+    status: 504,
+    error: { code: "genie_csv_timeout", message: csvTimeout.message },
+  },
+  {
     request: new Request("http://localhost/api/overview"),
     services: { analytics: { overview: () => Effect.fail(warehouseTimeout) } },
     status: 504,
@@ -264,6 +310,29 @@ test("endpoints advertise their applicable failures", () => {
     Object.keys(paths["/api/saved-views"]?.put?.responses ?? {}),
     ["200", "400", "403", "404", "409", "503"],
   );
+  const { analytics, analysisRuns, genie, savedViews } = AppApi.groups;
+  for (const [endpoint, allowed, unrelated] of [
+    [analytics.endpoints.metadata, "warehouse_timeout", "genie_csv_timeout"],
+    [savedViews.endpoints.list, "lakebase_unavailable", "analysis_unavailable"],
+    [
+      analysisRuns.endpoints.list,
+      "analysis_request_failed",
+      "genie_csv_request_failed",
+    ],
+    [analysisRuns.endpoints.result, "warehouse_timeout", "genie_timeout"],
+    [genie.endpoints.downloadCsv, "genie_csv_timeout", "genie_timeout"],
+  ] as const) {
+    const accepts = (code: string) =>
+      [...endpoint.error].some((schema) =>
+        Schema.is(schema)({ error: { code, message: "Dependency failed" } }),
+      );
+    assert.equal(accepts(allowed), true, `${endpoint.path} accepts ${allowed}`);
+    assert.equal(
+      accepts(unrelated),
+      false,
+      `${endpoint.path} rejects ${unrelated}`,
+    );
+  }
 });
 
 test("Genie recovery endpoints validate operation IDs before calling the service", async () => {

@@ -4,7 +4,7 @@ import * as Reactivity from "effect/reactivity/Reactivity";
 import * as SqlSchema from "effect/sql/SqlSchema";
 import { DatabricksClient } from "@dsiem/sql-warehouse";
 import { makeAdmission } from "./admission.js";
-import { OperationTimeout, permissionDenied, unavailable } from "./errors.js";
+import { permissionDenied, unavailable } from "./errors.js";
 import { Settings } from "./settings.js";
 import { Workspace } from "./workspace.js";
 
@@ -63,7 +63,6 @@ const makeWarehouse = Effect.gen(function* () {
   const denied =
     "These trips are under lock. You need permission to read trip data.";
   const warehouseError = (cause: unknown, deniedMessage: string) => {
-    if (cause instanceof OperationTimeout) return cause;
     if (
       isSqlError(cause) &&
       cause.reason._tag === "AuthorizationError" &&
@@ -76,12 +75,12 @@ const makeWarehouse = Effect.gen(function* () {
     operation: Effect.Effect<A, unknown>,
     deniedMessage = denied,
   ) =>
-    (configured ? operation.pipe(admit.effect) : Effect.fail(error)).pipe(
-      Effect.tapError((cause) =>
-        Effect.logError("Warehouse operation failed", cause),
-      ),
-      Effect.mapError((cause) => warehouseError(cause, deniedMessage)),
-    );
+    configured
+      ? operation.pipe(
+          Effect.mapError((cause) => warehouseError(cause, deniedMessage)),
+          admit.effect,
+        )
+      : Effect.fail(error);
   const read = <A>(
     schema: Schema.Decoder<A>,
     statement: Effect.Effect<ReadonlyArray<unknown>, unknown>,

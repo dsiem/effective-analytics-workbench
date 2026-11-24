@@ -33,7 +33,10 @@ import {
 import { makeTripPages } from "./trip-pages.js";
 import { Warehouse } from "./warehouse.js";
 
-type WarehouseError = ServiceUnavailable | OperationTimeout | PermissionDenied;
+type WarehouseError =
+  | ServiceUnavailable<"warehouse">
+  | OperationTimeout<"warehouse">
+  | PermissionDenied;
 const decodeTripRows = Schema.decodeUnknownEffect(
   Schema.Array(WarehouseTripSummary),
 );

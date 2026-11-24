@@ -1,63 +1,48 @@
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Schema } from "effect";
 import { HttpEffect, HttpServerResponse } from "effect/http";
 import { HttpApiError } from "effect/http-api";
 import {
   ApiBoundary,
   invalidRequestBody,
-  type ApiError,
+  UpstreamFailureStatus,
 } from "../../shared/api.js";
 import type { ServiceError } from "./errors.js";
 
-type ErrorByTag = { [E in ServiceError as E["_tag"]]: E };
-type ErrorTag = keyof ErrorByTag;
+const isUpstreamFailureStatus = Schema.is(UpstreamFailureStatus);
 
-const body = <const Code extends string>(code: Code, message: string) => ({
-  error: { code, message },
-});
+type ApiErrorResponse<E extends ServiceError> = E extends ServiceError
+  ? { error: { code: E["code"]; message: string; upstreamStatus?: number } }
+  : never;
 
-const errorResponses = {
-  InvalidRequest: ({ message }) => body("invalid_request", message),
-  PermissionDenied: ({ message }) => body("permission_denied", message),
-  SavedViewConflict: ({ message }) => body("saved_view_conflict", message),
-  SavedViewNotFound: ({ message }) => body("saved_view_not_found", message),
-  TripNotFound: ({ message }) => body("trip_not_found", message),
-  AnalysisRunNotFound: ({ message }) => body("analysis_run_not_found", message),
-  AnalysisReportPending: ({ message }) =>
-    body("analysis_report_pending", message),
-  ServiceUnavailable: ({ service, message }) =>
-    body(`${service}_unavailable`, message),
-  OperationTimeout: ({ service, message }) =>
-    body(`${service}_timeout`, message),
-  GenieFailed: ({ message }) => body("genie_message_unavailable", message),
-  UpstreamError: ({ service, message, upstreamStatus }) => ({
+function encodeError<E extends ServiceError>(error: E): ApiErrorResponse<E>;
+function encodeError(error: ServiceError) {
+  return {
     error: {
-      code: `${service}_request_failed` as const,
-      message,
-      ...(upstreamStatus === undefined ? {} : { upstreamStatus }),
+      code: error.code,
+      message: error.message,
+      ...(error._tag === "UpstreamError" &&
+      isUpstreamFailureStatus(error.upstreamStatus)
+        ? { upstreamStatus: error.upstreamStatus }
+        : {}),
     },
-  }),
-} satisfies { [K in ErrorTag]: (error: ErrorByTag[K]) => typeof ApiError.Type };
-
-const toResponse: {
-  [K in ErrorTag]: (
-    error: ErrorByTag[K],
-  ) => ReturnType<(typeof errorResponses)[K]>;
-} = errorResponses;
-
-function encodeError<E extends ServiceError>(
-  error: E,
-): ReturnType<(typeof errorResponses)[E["_tag"]]>;
-function encodeError<K extends ErrorTag>(
-  error: ErrorByTag[K] & { readonly _tag: K },
-) {
-  return toResponse[error._tag](error);
+  };
 }
 
 export const withApiErrors = <A, E extends ServiceError, R>(
   effect: Effect.Effect<A, E, R>,
 ) =>
   effect.pipe(
-    Effect.tapCause((cause) => Effect.logError("API operation failed", cause)),
+    Effect.tapError((error) => {
+      switch (error._tag) {
+        case "OperationTimeout":
+          return Effect.logWarning("API dependency timed out", error);
+        case "ServiceUnavailable":
+        case "UpstreamError":
+          return Effect.logError("API dependency failed", error);
+        default:
+          return Effect.void;
+      }
+    }),
     Effect.mapError(encodeError<E>),
   );
 

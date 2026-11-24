@@ -84,23 +84,72 @@ const GenieFailedBody = errorBody(
   Schema.Literal("genie_message_unavailable"),
   409,
 );
-const UnavailableBody = errorBody(
-  Schema.TemplateLiteral([Schema.String, "_unavailable"]),
+const UnavailableService = Schema.Literals([
+  "analysis",
+  "auth",
+  "genie",
+  "lakebase",
+  "warehouse",
+  "workspace",
+]);
+export type UnavailableService = typeof UnavailableService.Type;
+
+const TimeoutService = Schema.Literals([
+  "genie",
+  "genie_csv",
+  "warehouse",
+  "workspace",
+]);
+export type TimeoutService = typeof TimeoutService.Type;
+
+const UpstreamService = Schema.Literals([
+  "analysis",
+  "genie",
+  "genie_csv",
+  "workspace",
+]);
+export type UpstreamService = typeof UpstreamService.Type;
+
+const AgentModeUnavailableBody = errorBody(
+  Schema.Literal("genie_agent_mode_unavailable"),
   503,
 );
-const UpstreamBody = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.TemplateLiteral([Schema.String, "_request_failed"]),
-    message: Schema.String,
-    upstreamStatus: Schema.optionalKey(
-      Schema.Int.check(Schema.isBetween({ minimum: 400, maximum: 599 })),
-    ),
-  }),
-}).pipe(HttpApiSchema.status(502));
-const TimeoutBody = errorBody(
-  Schema.TemplateLiteral([Schema.String, "_timeout"]),
-  504,
+const unavailableBody = <
+  const S extends readonly [UnavailableService, ...UnavailableService[]],
+>(
+  ...services: S
+) =>
+  errorBody(
+    Schema.TemplateLiteral([Schema.Literals(services), "_unavailable"]),
+    503,
+  );
+export const UpstreamFailureStatus = Schema.Int.check(
+  Schema.isBetween({ minimum: 400, maximum: 599 }),
 );
+const upstreamBody = <
+  const S extends readonly [UpstreamService, ...UpstreamService[]],
+>(
+  ...services: S
+) =>
+  Schema.Struct({
+    error: Schema.Struct({
+      code: Schema.TemplateLiteral([
+        Schema.Literals(services),
+        "_request_failed",
+      ]),
+      message: Schema.String,
+      upstreamStatus: Schema.optionalKey(UpstreamFailureStatus),
+    }),
+  }).pipe(HttpApiSchema.status(502));
+const timeoutBody = <
+  const S extends readonly [TimeoutService, ...TimeoutService[]],
+>(
+  ...services: S
+) =>
+  errorBody(
+    Schema.TemplateLiteral([Schema.Literals(services), "_timeout"]),
+    504,
+  );
 const errors = [
   InvalidRequestBody,
   PermissionDeniedBody,
@@ -110,9 +159,10 @@ const errors = [
   AnalysisReportPendingBody,
   SavedViewConflictBody,
   GenieFailedBody,
-  UnavailableBody,
-  UpstreamBody,
-  TimeoutBody,
+  AgentModeUnavailableBody,
+  unavailableBody(...UnavailableService.literals),
+  upstreamBody(...UpstreamService.literals),
+  timeoutBody(...TimeoutService.literals),
 ] as const;
 export const ApiError = Schema.Union(errors);
 
@@ -130,19 +180,28 @@ export class ApiBoundary extends HttpApiMiddleware.Service<ApiBoundary>()(
 
 const warehouseErrors = [
   PermissionDeniedBody,
-  UnavailableBody,
-  TimeoutBody,
+  unavailableBody("warehouse"),
+  timeoutBody("warehouse"),
 ] as const;
-const workspaceErrors = [
+const analysisErrors = [
   PermissionDeniedBody,
-  UnavailableBody,
-  UpstreamBody,
-  TimeoutBody,
+  unavailableBody("analysis", "auth", "workspace"),
+  upstreamBody("analysis", "workspace"),
 ] as const;
+const workspaceTimeout = timeoutBody("workspace");
+const genieAccessErrors = [
+  PermissionDeniedBody,
+  unavailableBody("auth", "genie", "workspace"),
+] as const;
+const genieErrors = [
+  ...genieAccessErrors,
+  upstreamBody("genie", "workspace"),
+] as const;
+const genieTimeouts = timeoutBody("genie", "workspace");
 const lakebaseErrors = [
   InvalidRequestBody,
   PermissionDeniedBody,
-  UnavailableBody,
+  unavailableBody("lakebase"),
 ] as const;
 const savedViewWriteErrors = [
   ...lakebaseErrors,
@@ -221,11 +280,11 @@ export const AppApi = HttpApi.make("taxi")
       HttpApiEndpoint.post("submit", "/api/analysis-runs", {
         payload: AnalysisSubmission,
         success: AnalysisRunReference.pipe(HttpApiSchema.status(202)),
-        error: [InvalidRequestBody, ...workspaceErrors],
+        error: [InvalidRequestBody, ...analysisErrors, workspaceTimeout],
       }),
       HttpApiEndpoint.get("list", "/api/analysis-runs", {
         success: Schema.Array(AnalysisRunSummary),
-        error: workspaceErrors,
+        error: [...analysisErrors, workspaceTimeout],
       }),
       HttpApiEndpoint.get("get", "/api/analysis-runs/:id", {
         params: { id: AnalysisRunIdFromString },
@@ -233,7 +292,8 @@ export const AppApi = HttpApi.make("taxi")
         error: [
           InvalidRequestBody,
           AnalysisRunNotFoundBody,
-          ...workspaceErrors,
+          ...analysisErrors,
+          workspaceTimeout,
         ],
       }),
       HttpApiEndpoint.get("result", "/api/analysis-runs/:id/result", {
@@ -243,7 +303,8 @@ export const AppApi = HttpApi.make("taxi")
           InvalidRequestBody,
           AnalysisRunNotFoundBody,
           AnalysisReportPendingBody,
-          ...workspaceErrors,
+          ...analysisErrors,
+          timeoutBody("warehouse", "workspace"),
         ],
       }),
     ),
@@ -253,7 +314,12 @@ export const AppApi = HttpApi.make("taxi")
           payload: GenieInput,
           headers: GenieAccessHeaders,
           success: GenieOperation,
-          error: [InvalidRequestBody, ...workspaceErrors],
+          error: [
+            InvalidRequestBody,
+            AgentModeUnavailableBody,
+            ...genieErrors,
+            genieTimeouts,
+          ],
         }),
         HttpApiEndpoint.get(
           "poll",
@@ -263,7 +329,7 @@ export const AppApi = HttpApi.make("taxi")
             headers: GenieAccessHeaders,
             query: GenieModeQuery,
             success: GeniePollProgress,
-            error: [InvalidRequestBody, ...workspaceErrors],
+            error: [InvalidRequestBody, ...genieErrors, workspaceTimeout],
           },
         ),
         HttpApiEndpoint.post(
@@ -273,7 +339,7 @@ export const AppApi = HttpApi.make("taxi")
             params: GenieAgentPath,
             headers: GenieAccessHeaders,
             success: GenieProgress,
-            error: [InvalidRequestBody, ...workspaceErrors],
+            error: [InvalidRequestBody, ...genieErrors, workspaceTimeout],
           },
         ),
         HttpApiEndpoint.get(
@@ -284,7 +350,12 @@ export const AppApi = HttpApi.make("taxi")
             headers: GenieAccessHeaders,
             query: GenieModeQuery,
             success: GenieReply,
-            error: [InvalidRequestBody, GenieFailedBody, ...workspaceErrors],
+            error: [
+              InvalidRequestBody,
+              GenieFailedBody,
+              ...genieErrors,
+              genieTimeouts,
+            ],
           },
         ),
         HttpApiEndpoint.post(
@@ -294,7 +365,12 @@ export const AppApi = HttpApi.make("taxi")
             params: GenieQueryPath,
             payload: [GenieCsvForm, Schema.Undefined],
             success: GenieCsv,
-            error: [InvalidRequestBody, ...workspaceErrors],
+            error: [
+              InvalidRequestBody,
+              ...genieAccessErrors,
+              upstreamBody("genie_csv", "workspace"),
+              timeoutBody("genie_csv", "workspace"),
+            ],
           },
         ),
       )

@@ -99,7 +99,11 @@ export class Lakebase extends Context.Service<
     /** Run a feature operation on the shared client. */
     readonly use: <A, E extends ServiceError, R>(
       run: (sql: LakebaseSql) => Effect.Effect<A, E, R>,
-    ) => Effect.Effect<A, E | ServiceUnavailable | PermissionDenied, R>;
+    ) => Effect.Effect<
+      A,
+      E | ServiceUnavailable<"lakebase"> | PermissionDenied,
+      R
+    >;
   }
 >()("app/Lakebase") {
   static readonly layer = Layer.effect(

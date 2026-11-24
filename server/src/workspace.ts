@@ -32,7 +32,7 @@ export class Workspace extends Context.Service<
   {
     readonly accessToken: Effect.Effect<
       Redacted.Redacted<string>,
-      ServiceUnavailable
+      ServiceUnavailable<"auth">
     >;
     readonly request: (
       path: string,
@@ -90,13 +90,11 @@ export class Workspace extends Context.Service<
             }).pipe(Effect.mapError(authError))
           : cli;
       const requestFailure = (cause: unknown) =>
-        cause instanceof UpstreamError
-          ? cause
-          : unavailable(
-              "workspace",
-              "The Databricks request could not be completed.",
-              cause,
-            );
+        unavailable(
+          "workspace",
+          "The Databricks request could not be completed.",
+          cause,
+        );
       const withResponse = <A, E, R>(
         path: string,
         method: "GET" | "POST",
@@ -125,10 +123,15 @@ export class Workspace extends Context.Service<
             const request = accept
               ? HttpClientRequest.setHeader(jsonRequest, "Accept", accept)
               : jsonRequest;
-            const response = yield* HttpClient.withScope(client).execute(
+            const response = yield* (
               body === undefined
-                ? request
-                : yield* HttpClientRequest.bodyJson(request, body),
+                ? Effect.succeed(request)
+                : HttpClientRequest.bodyJson(request, body)
+            ).pipe(
+              Effect.flatMap((request) =>
+                HttpClient.withScope(client).execute(request),
+              ),
+              Effect.mapError(requestFailure),
             );
             if (response.status < 200 || response.status >= 300) {
               const disabled =
@@ -151,7 +154,6 @@ export class Workspace extends Context.Service<
             }
             return response;
           }).pipe(
-            Effect.mapError(requestFailure),
             Effect.flatMap(read),
             Effect.scoped,
             Effect.provideService(FetchHttpClient.RequestInit, {

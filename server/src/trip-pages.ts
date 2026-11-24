@@ -31,7 +31,7 @@ type Session<E> = {
   readonly offsets: ReadonlyMap<number, number>;
   readonly readPage: (
     position: ChunkPosition,
-  ) => Effect.Effect<Uint8Array, E | ServiceUnavailable>;
+  ) => Effect.Effect<Uint8Array, E | ServiceUnavailable<"warehouse">>;
 };
 const invalidCursor = () =>
   new InvalidRequest({

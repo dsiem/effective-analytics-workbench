@@ -754,7 +754,7 @@ test("Agent mode reports workspace feature gating separately from a missing agen
   );
 
   for (const [upstreamCode, expected] of [
-    ["FEATURE_DISABLED", "ServiceUnavailable"],
+    ["FEATURE_DISABLED", "GenieAgentModeUnavailable"],
     ["NOT_FOUND", "UpstreamError"],
   ] as const) {
     const error = await Effect.runPromise(
@@ -773,8 +773,7 @@ test("Agent mode reports workspace feature gating separately from a missing agen
     );
     assert.equal(error._tag, expected);
     assert.doesNotMatch(JSON.stringify(error), /private diagnostic/);
-    if (error._tag === "ServiceUnavailable") {
-      assert.equal(error.service, "genie_agent_mode");
+    if (error._tag === "GenieAgentModeUnavailable") {
       assert.match(error.message, /workspace/);
     } else if (error._tag === "UpstreamError") {
       assert.equal(error.upstreamStatus, 404);

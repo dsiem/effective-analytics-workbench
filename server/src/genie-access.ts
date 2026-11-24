@@ -32,7 +32,7 @@ export const makeGenieAccess = Effect.gen(function* () {
     viewerId: string | undefined,
   ): Effect.Effect<
     GenieViewerAccess,
-    PermissionDenied | ServiceUnavailable
+    PermissionDenied | ServiceUnavailable<"genie">
   > => {
     if (!app) return Effect.succeed(localAccess);
     const viewer = viewerId?.trim();

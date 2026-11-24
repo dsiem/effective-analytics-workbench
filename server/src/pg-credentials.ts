@@ -1,7 +1,7 @@
 import { Cause, Data, Effect, type Redacted } from "effect";
 import type { PermissionDenied, ServiceUnavailable } from "./errors.js";
 
-type CredentialError = ServiceUnavailable | PermissionDenied;
+type CredentialError = ServiceUnavailable<"lakebase"> | PermissionDenied;
 
 class CredentialFailure extends Data.TaggedError("CredentialFailure")<{
   readonly cause: CredentialError;

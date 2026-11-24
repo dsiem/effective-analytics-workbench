@@ -9,10 +9,10 @@ const operation = {
   genie_csv: "Genie CSV preparation",
 };
 
-export const makeAdmission = (options: {
+export const makeAdmission = <const S extends keyof typeof operation>(options: {
   readonly concurrency: number;
   readonly timeout: Duration.Input;
-  readonly service: keyof typeof operation;
+  readonly service: S;
 }) => {
   const semaphore = Semaphore.makeUnsafe(options.concurrency);
   const timeout = () =>
