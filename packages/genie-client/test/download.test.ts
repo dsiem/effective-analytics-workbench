@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Effect, Exit, Latch, Stream } from "effect";
+import { Clock, Effect, Exit, Fiber, Latch, Stream } from "effect";
 import * as TestClock from "effect/testing/TestClock";
 import {
   makeGenieDownloadClient,
@@ -51,6 +51,8 @@ const prepared = (
 test("downloads every CSV chunk in order using scoped, credentialless storage requests", async () => {
   const calls: GenieDownloadRequest[] = [];
   const fetched: string[] = [];
+  const signals: AbortSignal[] = [];
+  let firstClosedBeforeSecond = false;
   const client = makeGenieDownloadClient({
     spaceId: "space",
     request(request) {
@@ -80,11 +82,15 @@ test("downloads every CSV chunk in order using scoped, credentialless storage re
     },
     fetch: async (input, options) => {
       assert.ok(input instanceof URL);
+      assert.ok(options?.signal);
+      if (input.href === signedSecond)
+        firstClosedBeforeSecond = signals[0]?.aborted === true;
+      signals.push(options.signal);
       fetched.push(input.href);
       assert.equal(options?.credentials, "omit");
       assert.equal(options?.redirect, "error");
       assert.deepEqual(
-        options?.headers,
+        Object.fromEntries(new Headers(options?.headers)),
         input.href === signedFirst ? {} : { "x-goog-project-id": "fixture" },
       );
       return new Response(
@@ -94,13 +100,12 @@ test("downloads every CSV chunk in order using scoped, credentialless storage re
   });
 
   const csv = await Effect.runPromise(
-    client
-      .download(reference)
-      .pipe(
-        Effect.flatMap((bytes) =>
-          bytes.pipe(Stream.decodeText, Stream.runCollect),
-        ),
+    client.download(reference).pipe(
+      Effect.flatMap((bytes) =>
+        bytes.pipe(Stream.decodeText, Stream.runCollect),
       ),
+      Effect.withSpan("download CSV"),
+    ),
   );
 
   const base =
@@ -119,6 +124,11 @@ test("downloads every CSV chunk in order using scoped, credentialless storage re
     },
   ]);
   assert.deepEqual(fetched, [signedFirst, signedSecond]);
+  assert.equal(firstClosedBeforeSecond, true);
+  assert.deepEqual(
+    signals.map((signal) => signal.aborted),
+    [true, true],
+  );
   assert.equal(csv.join(""), "trip,count\r\nA,7\r\nB,8\r\n");
 });
 
@@ -149,6 +159,35 @@ test("streams signed downloads from Databricks regional storage", async () => {
       ),
   );
   assert.equal(csv.join(""), "trip,count\r\nA,7\r\n");
+});
+
+test("polls CSV preparation immediately and waits two seconds between pending responses", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const start = yield* Clock.currentTimeMillis;
+      const pollTimes: number[] = [];
+      const ready = prepared(signedFirst, { count: 0 });
+      const client = makeGenieDownloadClient({
+        spaceId: "space",
+        request: ({ kind }) =>
+          Effect.gen(function* () {
+            if (kind === "start") return accepted;
+            assert.equal(kind, "poll");
+            pollTimes.push((yield* Clock.currentTimeMillis) - start);
+            const state = ["PENDING", "RUNNING"][pollTimes.length - 1];
+            return state
+              ? { statement_response: { status: { state } } }
+              : ready;
+          }),
+      });
+      const transfer = yield* client.download(reference).pipe(Effect.forkChild);
+      yield* TestClock.adjust("4 seconds");
+      const csv = yield* Fiber.join(transfer);
+      const lines = yield* csv.pipe(Stream.decodeText, Stream.runCollect);
+      assert.deepEqual(pollTimes, [0, 2000, 4000]);
+      assert.equal(lines.join(""), '"trip","count"\r\n');
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
 });
 
 test("does not fetch an unrecognized URL or deliver a Databricks-truncated result", async () => {
@@ -226,6 +265,8 @@ for (const knownExpired of [true, false]) {
     async () => {
       const fetched: string[] = [];
       const calls: GenieDownloadRequest["kind"][] = [];
+      let rejectedBodyCancelled = false;
+      let rejectedSignal: AbortSignal | undefined;
       const client = makeGenieDownloadClient({
         spaceId: "space",
         request: ({ kind }) =>
@@ -242,6 +283,10 @@ for (const knownExpired of [true, false]) {
                     : {}),
                 });
               case "chunk":
+                if (!knownExpired) {
+                  assert.equal(rejectedBodyCancelled, true);
+                  assert.equal(rejectedSignal?.aborted, true);
+                }
                 return {
                   external_links: [
                     { chunk_index: 0, external_link: signedSecond },
@@ -249,12 +294,20 @@ for (const knownExpired of [true, false]) {
                 };
             }
           }),
-        fetch: async (url) => {
+        fetch: async (url, init) => {
           assert.ok(url instanceof URL);
           fetched.push(url.href);
-          return url.href === signedFirst
-            ? new Response(null, { status: 403 })
-            : new Response("trip,count\r\nA,7\r\n");
+          if (url.href !== signedFirst)
+            return new Response("trip,count\r\nA,7\r\n");
+          rejectedSignal = init?.signal ?? undefined;
+          return new Response(
+            new ReadableStream({
+              cancel() {
+                rejectedBodyCancelled = true;
+              },
+            }),
+            { status: 403 },
+          );
         },
       });
       const csv = await Effect.runPromise(
