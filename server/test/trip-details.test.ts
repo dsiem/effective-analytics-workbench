@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
-import { ConfigProvider, Effect, Layer, Redacted, Schema } from "effect";
+import {
+  Cause,
+  ConfigProvider,
+  Effect,
+  Exit,
+  Layer,
+  Redacted,
+  Schema,
+} from "effect";
 import * as TestClock from "effect/testing/TestClock";
 import {
   defaultTripLimit,
@@ -15,6 +23,7 @@ import {
   TripNotFound,
 } from "../src/errors.js";
 import { Settings } from "../src/settings.js";
+import { makeTripPages } from "../src/trip-pages.js";
 import { Workspace } from "../src/workspace.js";
 import { inlineResult, warehouseFetch } from "./warehouse-fixture.js";
 
@@ -47,6 +56,33 @@ function tripRow(trip_id: string) {
     duration: 10,
   };
 }
+
+test("a trip chunk that fails encoding leaves its successor unavailable", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const pages = yield* makeTripPages(() =>
+        Effect.succeed({
+          pageCount: 3,
+          rows: [tripRow("first")],
+          truncated: false,
+          readChunk: (index) =>
+            Effect.succeed([tripRow(index === 1 ? "" : "third")]),
+        }),
+      );
+      const first = Schema.decodeUnknownSync(Schema.fromJsonString(TripPage))(
+        new TextDecoder().decode(yield* pages.trips({})),
+      );
+      assert.ok(first.nextCursor);
+      const rejected = yield* Effect.exit(pages.tripPage(first.nextCursor));
+      assert.ok(Exit.isFailure(rejected) && Cause.hasDies(rejected.cause));
+      const successor = first.nextCursor.replace(/\.1$/, ".2");
+      const result = yield* Effect.result(pages.tripPage(successor));
+      assert.equal(result._tag, "Failure");
+      if (result._tag === "Failure")
+        assert.equal(result.failure._tag, "InvalidRequest");
+    }),
+  );
+});
 
 function runTrips<A, E>(program: Effect.Effect<A, E, Analytics>) {
   return Effect.runPromise(

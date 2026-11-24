@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { Cache, Effect, Exit, Option } from "effect";
+import { Cache, Cause, Effect, Exit, Option, Schema } from "effect";
 import {
   defaultTripLimit,
-  type TripPage,
+  TripPage,
   type TripSearch,
   type TripSort,
   type TripSummary,
@@ -14,7 +14,12 @@ import {
 } from "./errors.js";
 
 const encoder = new TextEncoder();
-const encodePage = (page: TripPage) => encoder.encode(JSON.stringify(page));
+const encodePageJson = Schema.encodeEffect(Schema.fromJsonString(TripPage));
+const encodePage = (page: TripPage) =>
+  encodePageJson(page).pipe(
+    Effect.orDie,
+    Effect.map((json) => encoder.encode(json)),
+  );
 
 type Search = TripSearch & {
   readonly limit: number;
@@ -65,7 +70,7 @@ export const makeTripPages = <E>(
         } = yield* start(search);
         if (pageCount <= 1)
           return {
-            body: encodePage({ rows, nextCursor: null, hasMoreMatches }),
+            body: yield* encodePage({ rows, nextCursor: null, hasMoreMatches }),
           };
         const id = randomUUID();
         const offsets = new Map([[1, rows.length]]);
@@ -74,6 +79,11 @@ export const makeTripPages = <E>(
             const rows = yield* readChunk(index, offset);
             const next = index + 1;
             const nextCursor = next < pageCount ? `${id}.${next}` : null;
+            const body = yield* encodePage({
+              rows,
+              nextCursor,
+              hasMoreMatches,
+            });
             if (nextCursor !== null) {
               const nextOffset = offset + rows.length;
               const previous = offsets.get(next);
@@ -86,7 +96,7 @@ export const makeTripPages = <E>(
                 );
               offsets.set(next, nextOffset);
             }
-            return encodePage({ rows, nextCursor, hasMoreMatches });
+            return body;
           });
         const chunks = cacheChunks
           ? yield* Cache.makeWith(readPage, {
@@ -95,7 +105,11 @@ export const makeTripPages = <E>(
             })
           : undefined;
         return {
-          body: encodePage({ rows, nextCursor: `${id}.1`, hasMoreMatches }),
+          body: yield* encodePage({
+            rows,
+            nextCursor: `${id}.1`,
+            hasMoreMatches,
+          }),
           continuation: {
             id,
             session: { search, offsets, readPage },
@@ -146,12 +160,14 @@ export const makeTripPages = <E>(
             ? Cache.get(continuation.chunks, position)
             : readPage(position)
         ).pipe(
-          Effect.tapError(() =>
-            Cache.invalidateWhen(
-              previews,
-              search,
-              (entry) => entry.continuation?.id === id,
-            ),
+          Effect.tapCause((cause) =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.void
+              : Cache.invalidateWhen(
+                  previews,
+                  search,
+                  (entry) => entry.continuation?.id === id,
+                ),
           ),
         );
       }).pipe(Effect.withSpan("analytics.tripPage"));
