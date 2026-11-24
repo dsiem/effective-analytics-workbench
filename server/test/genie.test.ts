@@ -15,7 +15,7 @@ import {
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { unavailable, UpstreamError } from "../src/errors.js";
-import { Genie } from "../src/genie.js";
+import { Genie } from "../src/genie/service.js";
 import { Settings } from "../src/settings.js";
 import { Workspace } from "../src/workspace.js";
 

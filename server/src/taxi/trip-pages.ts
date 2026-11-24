@@ -6,12 +6,12 @@ import {
   type TripSearch,
   type TripSort,
   type TripSummary,
-} from "../../shared/trips.js";
+} from "../../../shared/trips.js";
 import {
   InvalidRequest,
   type ServiceUnavailable,
   unavailable,
-} from "./errors.js";
+} from "../errors.js";
 
 const encoder = new TextEncoder();
 const encodePageJson = Schema.encodeEffect(Schema.fromJsonString(TripPage));

@@ -1,39 +1,31 @@
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 import { AuthenticationError, isSqlError, SqlError } from "effect/sql/SqlError";
 import * as Reactivity from "effect/reactivity/Reactivity";
 import * as SqlSchema from "effect/sql/SqlSchema";
 import { DatabricksClient } from "@dsiem/sql-warehouse";
 import { makeAdmission } from "./admission.js";
-import { permissionDenied, unavailable } from "./errors.js";
+import {
+  permissionDenied,
+  type ServiceUnavailable,
+  unavailable,
+} from "./errors.js";
 import { Settings } from "./settings.js";
 import { Workspace } from "./workspace.js";
 
 const makeWarehouse = Effect.gen(function* () {
   const settings = yield* Settings;
+  const { host, warehouseId } = settings;
+  if (!host || !warehouseId) return Option.none();
+
   const workspace = yield* Workspace;
-  const configured = !!(
-    settings.warehouseId &&
-    settings.host &&
-    settings.tripSnapshotTable
-  );
-  const [catalog = "unconfigured", schema = "snapshot", table = "trips"] =
-    settings.tripSnapshotTable
-      ? settings.tripSnapshotTable.split(".")
-      : ["unconfigured", "snapshot", "trips"];
   const admit = makeAdmission({
     service: "warehouse",
     concurrency: settings.warehouseConcurrency,
     timeout: "90 seconds",
   });
-  const error = unavailable(
-    "warehouse",
-    configured
-      ? "The NYC taxi query failed. Check warehouse access and SELECT permission on the configured trip snapshot."
-      : "Set DATABRICKS_WAREHOUSE_ID and TRIP_SNAPSHOT_TABLE to connect the NYC taxi dataset.",
-  );
   const sql = yield* DatabricksClient.make({
-    host: settings.host || "https://unconfigured.invalid",
-    warehouseId: settings.warehouseId || "unconfigured",
+    host,
+    warehouseId,
     accessToken: workspace.accessToken.pipe(
       Effect.mapError(
         (cause) =>
@@ -51,50 +43,44 @@ const makeWarehouse = Effect.gen(function* () {
   }).pipe(
     Effect.tapError(() =>
       Effect.logError("Invalid SQL client configuration", {
-        workspaceHost: settings.host,
-        warehouseConfigured: !!settings.warehouseId,
+        workspaceHost: host,
       }),
     ),
     Effect.mapError((cause) =>
-      unavailable(error.service, error.message, cause),
+      unavailable("warehouse", "Invalid SQL warehouse configuration.", cause),
     ),
   );
-  const snapshot = sql`${sql(catalog)}.${sql(schema)}.${sql(table)}`;
-  const denied =
-    "These trips are under lock. You need permission to read trip data.";
-  const warehouseError = (cause: unknown, deniedMessage: string) => {
-    if (
-      isSqlError(cause) &&
-      cause.reason._tag === "AuthorizationError" &&
-      cause.reason.operation !== "download"
-    )
-      return permissionDenied(deniedMessage);
-    return unavailable(error.service, error.message, cause);
+
+  const queries = <E extends ServiceUnavailable>(errors: {
+    readonly deniedMessage: string;
+    readonly unavailable: (cause: unknown) => E;
+  }) => {
+    const run = <A>(operation: Effect.Effect<A, unknown>) =>
+      operation.pipe(
+        Effect.mapError((cause) =>
+          isSqlError(cause) &&
+          cause.reason._tag === "AuthorizationError" &&
+          cause.reason.operation !== "download"
+            ? permissionDenied(errors.deniedMessage)
+            : errors.unavailable(cause),
+        ),
+        admit.effect,
+      );
+    const read = <A>(
+      schema: Schema.Decoder<A>,
+      statement: Effect.Effect<ReadonlyArray<unknown>, unknown>,
+    ) =>
+      run(
+        SqlSchema.findAll({
+          Request: Schema.Void,
+          Result: schema,
+          execute: () => statement,
+        })(undefined),
+      );
+    return { run, read };
   };
-  const run = <A>(
-    operation: Effect.Effect<A, unknown>,
-    deniedMessage = denied,
-  ) =>
-    configured
-      ? operation.pipe(
-          Effect.mapError((cause) => warehouseError(cause, deniedMessage)),
-          admit.effect,
-        )
-      : Effect.fail(error);
-  const read = <A>(
-    schema: Schema.Decoder<A>,
-    statement: Effect.Effect<ReadonlyArray<unknown>, unknown>,
-    deniedMessage = denied,
-  ) =>
-    run(
-      SqlSchema.findAll({
-        Request: Schema.Void,
-        Result: schema,
-        execute: () => statement,
-      })(undefined),
-      deniedMessage,
-    );
-  return { sql, snapshot, read, run, error };
+
+  return Option.some({ sql, queries });
 });
 
 export class Warehouse extends Context.Service<

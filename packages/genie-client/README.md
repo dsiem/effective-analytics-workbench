@@ -18,7 +18,7 @@ warning with the number of unsupported attachments.
 
 Pass a Genie space ID and a `request` function that sends authenticated
 requests and returns the parsed JSON body in an Effect.
-[App transport](../../server/src/genie.ts)
+[App transport](../../server/src/genie/service.ts)
 
 ```ts
 import { Effect } from "effect";
@@ -52,7 +52,7 @@ Genie space ID as `agentId` to
 `requestEvents` sends the submission body with `Accept: text/event-stream`
 and runs the supplied reader on the response byte stream within the HTTP
 response scope. The reader returns the operation IDs from `response.created`.
-[App transport](../../server/src/genie.ts)
+[App transport](../../server/src/genie/service.ts)
 
 Use `submit`, `poll`, and `result` as in Chat mode. Agent operations carry a
 response ID, and `result` returns the final report. Use each conversation ID

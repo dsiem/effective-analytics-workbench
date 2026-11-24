@@ -25,7 +25,7 @@ with Effect services at startup. [HTTP contract](../shared/api.ts) ·
   chart. [Feature bindings](../client/src/app/features.ts) · [Shell update](../client/src/app/update.ts)
 - **A Genie answer** contains ordered attachments and an optional warning.
   Chat and Agent both return this shape. The server turns it into the text and
-  query tables the workbench displays. [Answer type](../packages/genie-client/src/answer.ts) · [Genie service](../server/src/genie.ts)
+  query tables the workbench displays. [Answer type](../packages/genie-client/src/answer.ts) · [Genie service](../server/src/genie/service.ts)
 
 `GET /api/trips` returns a JSON page with `rows`, `nextCursor`, and
 `hasMoreMatches`. Each row carries a trip summary with numeric distance, fare,
@@ -53,7 +53,7 @@ Request fewer rows or narrow the filters to retry. [Databricks Statement Executi
 
 Open a row to load the full record through `/api/trip-details`. Comments
 from a listed row can use its summary while details load.
-[Trip ordering and limit](../server/src/trip-sql.ts) ·
+[Trip ordering and limit](../server/src/taxi/trips.ts) ·
 [Trip records view](../client/src/features/trips/view.ts)
 
 ## Carry a query through one HTTP contract
@@ -66,7 +66,8 @@ from a listed row can use its summary while details load.
    adapter. Ordinary warehouse queries return inline JSON. Overview uses
    `SqlSchema.findAll` to decode numeric text into numbers for the browser.
    The map requests Arrow explicitly for its query of up to 100,000 cell
-   polygons. [Overview and map queries](../server/src/analytics.ts) ·
+   polygons. [Overview queries](../server/src/taxi/overview.ts) · [Map queries](../server/src/taxi/trip-map.ts) ·
+   [Snapshot table and filters](../server/src/taxi/snapshot.ts) ·
    [Warehouse service](../server/src/warehouse.ts) · [SQL adapter](../packages/sql-warehouse/README.md)
 3. Provide `ApiClient.layer` once in Foldkit's `Runtime.makeApplication`.
    `LoadOverview` calls the generated client and returns a `LoadedOverview`
@@ -125,7 +126,7 @@ again. Capture the question's filters and context when the user sends it.
 
 The taxi app requires Genie. The server fails startup if `DATABRICKS_HOST` or
 `GENIE_SPACE_ID` is missing. Each Databricks request checks access to the space.
-[Genie service](../server/src/genie.ts) · [Startup smoke test](../server/test/built/smoke.test.mjs)
+[Genie service](../server/src/genie/service.ts) · [Startup smoke test](../server/test/built/smoke.test.mjs)
 
 In Databricks Apps, Genie binds each conversation to the authenticated viewer
 from the Databricks proxy. The browser keeps the signed grant with the
@@ -134,7 +135,7 @@ require that viewer's grant. The viewer-bound Genie service verifies grants befo
 calling Databricks. CSV downloads wait for transfer capacity before sending
 headers and hold it until the body closes. Databricks runs the queries with the
 app service principal. Local development uses the configured workspace identity.
-[Viewer authorization](../server/src/genie-access.ts) ·
+[Viewer authorization](../server/src/genie/access.ts) ·
 [Forwarded Databricks headers](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/http-headers)
 
 ## Assign permissions to the identity that uses them
@@ -166,7 +167,7 @@ per-viewer Unity Catalog permissions, use Databricks user authorization and
 provide the proxy's user token to the server-side query for that request. Require
 that credential on the route. Disable shared caching there or key it by the
 authorization context. Test identical filters for two viewers with different
-grants. [Viewer lookup](../server/src/current-user.ts) · [Analytics cache](../server/src/analytics.ts) ·
+grants. [Viewer lookup](../server/src/current-user.ts) · [Overview cache](../server/src/taxi/overview.ts) ·
 [Databricks user authorization](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/auth)
 
 Keep the Lakebase connection pool scoped to the server runtime. The sample
@@ -178,12 +179,13 @@ Initialize the schema during target setup. [Lakebase service](../server/src/lake
 ## Bound upstream work and verify real requests
 
 Create one concurrency limiter per service instance. The warehouse limiter
-shares permits across queries, including the queries that make up one Overview
-request. Genie has its own limiter for submissions. Put the deadline around both
-permit acquisition and execution so an expired request cannot start work after
-waiting in the queue. Each app process has its own limits.
+shares permits across taxi snapshot queries and analysis report reads. Each
+query in an Overview request takes a permit. Genie has its own limiter for
+submissions. Apply the deadline to permit acquisition and execution so an
+expired request cannot start work after waiting in the queue. Each app process
+has its own limits.
 [Admission control](../server/src/admission.ts) · [Warehouse service](../server/src/warehouse.ts) ·
-[Genie service](../server/src/genie.ts)
+[Genie service](../server/src/genie/service.ts)
 
 Put cancellation in the Effect that owns the upstream statement. When its
 scope closes, the SQL adapter attempts to cancel a known pending or running

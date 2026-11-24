@@ -658,12 +658,16 @@ test("changing the trip sort starts a fresh query and keeps the filters", async 
     "Highest fare",
     "Longest distance",
   ]);
-  await expect(page.getByText("1 shown", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("1 shown · more match", { exact: true }),
+  ).toBeVisible();
   await sort.focus();
   for (const value of ["fare", "distance", "newest"]) {
     await sort.selectOption(value);
     await expect(sort).toHaveValue(value);
-    await expect(page.getByText("1 shown", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("1 shown · more match", { exact: true }),
+    ).toBeVisible();
     await expect(sort).toBeFocused();
     await expect.poll(() => searches.at(-1)?.get("sort")).toBe(value);
     expect(searches.at(-1)?.has("cursor")).toBe(false);

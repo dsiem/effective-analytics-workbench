@@ -3,15 +3,15 @@ import { HttpMiddleware, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { AppApi } from "../../shared/api.js";
 import { AnalysisRuns } from "./analysis-runs.js";
-import { Analytics } from "./analytics.js";
 import {
   ApiNoStoreLive,
   RequestValidationErrorsLive,
   withApiErrors,
 } from "./api-boundary.js";
 import { CurrentViewer } from "./current-user.js";
-import { GenieRoutes } from "./genie-routes.js";
+import { GenieRoutes } from "./genie/routes.js";
 import { SavedViews } from "./saved-views.js";
+import { Analytics } from "./taxi/analytics.js";
 import { TripComments } from "./trip-comments.js";
 import { WebRoutes } from "./web-routes.js";
 
