@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ConfigProvider, Layer, Schema } from "effect";
+import { ConfigProvider, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServer } from "effect/http";
+import { TestClock } from "effect/testing";
 import { Overview } from "../../shared/overview.js";
 import { AnalysisRuns } from "../src/analysis-runs.js";
 import { Analytics } from "../src/taxi/analytics.js";
@@ -69,13 +70,34 @@ test("the overview API returns numeric aggregates and preserves ZIP strings from
     { disableLogger: true },
   );
   t.after(app.dispose);
-  const response = await app.handler(
-    new Request("http://localhost/api/overview"),
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const context = yield* Effect.context();
+      const load = Effect.promise(async () => {
+        const response = await app.handler(
+          new Request("http://localhost/api/overview"),
+          context,
+        );
+        assert.equal(response.status, 200);
+        return Schema.decodeUnknownSync(Overview)(await response.json());
+      });
+
+      const start = "2026-01-01T00:00:00.000Z";
+      yield* TestClock.setTime(Date.parse(start));
+      const first = yield* load;
+      assert.deepEqual(first, {
+        summary,
+        daily,
+        hourly,
+        zones,
+        queriedAt: start,
+      });
+
+      yield* TestClock.adjust("59 seconds");
+      assert.deepEqual(yield* load, first);
+
+      yield* TestClock.adjust("2 seconds");
+      assert.equal((yield* load).queriedAt, "2026-01-01T00:01:01.000Z");
+    }).pipe(Effect.provide(TestClock.layer())),
   );
-  assert.equal(response.status, 200);
-  const { queriedAt, ...data } = Schema.decodeUnknownSync(Overview)(
-    await response.json(),
-  );
-  assert.ok(Number.isFinite(Date.parse(queriedAt)));
-  assert.deepEqual(data, { summary, daily, hourly, zones });
 });

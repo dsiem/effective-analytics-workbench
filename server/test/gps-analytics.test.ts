@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { tableFromArrays } from "apache-arrow";
 import { ConfigProvider, Effect, Layer, Redacted } from "effect";
+import { TestClock } from "effect/testing";
 import { gpsFixture } from "../../client/test/gps-fixture.js";
 import { mapCellLimit } from "../../shared/map-dataset.js";
 import { Analytics } from "../src/taxi/analytics.js";
@@ -47,6 +48,7 @@ for (const truncated of [false, true])
       : fixture.cells;
     const totalCells = truncated ? mapCellLimit + 1 : fixture.totalCells;
     const located = truncated ? totalCells : fixture.locatedTrips;
+    const queriedAt = "2026-01-01T00:00:00.000Z";
     let statements = 0;
     globalThis.fetch = warehouseFetch(async (statement, _, parameters) => {
       statements++;
@@ -69,6 +71,7 @@ for (const truncated of [false, true])
     });
     const [first, second] = await Effect.runPromise(
       Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse(queriedAt));
         const analytics = yield* Analytics;
         return yield* Effect.all(
           [
@@ -77,9 +80,15 @@ for (const truncated of [false, true])
           ],
           { concurrency: 2 },
         );
-      }).pipe(Effect.provide(services), provide, Effect.scoped),
+      }).pipe(
+        Effect.provide(services),
+        provide,
+        Effect.scoped,
+        Effect.provide(TestClock.layer()),
+      ),
     );
     assert.deepEqual(first, second);
+    assert.equal(first.queriedAt, queriedAt);
     assert.equal(statements, 2);
     assert.equal(first.endpoint, "dropoff");
     assert.equal(first.locatedTrips, located);

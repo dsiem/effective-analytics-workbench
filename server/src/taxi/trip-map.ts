@@ -1,4 +1,4 @@
-import { Cache, Effect, Exit, Schema, Stream } from "effect";
+import { Cache, DateTime, Effect, Exit, Schema, Stream } from "effect";
 import type { Filters } from "../../../shared/filters.js";
 import {
   GpsCell,
@@ -30,7 +30,7 @@ export const makeTripMap = (taxi: TaxiSnapshot) =>
               : sql`dropoff_coordinates_valid`;
           const zip =
             endpoint === "pickup" ? sql`pickup_zip` : sql`dropoff_zip`;
-          return yield* Effect.all(
+          const { totals, cells } = yield* Effect.all(
             {
               totals: read(
                 Schema.Struct({
@@ -65,21 +65,19 @@ export const makeTripMap = (taxi: TaxiSnapshot) =>
               ),
             },
             { concurrency: 2 },
-          ).pipe(
-            Effect.map(({ totals, cells }): TripMap => {
-              const totalCells = cells[0]?.total_cells ?? 0;
-              return {
-                endpoint,
-                matchingTrips: totals[0]?.matching ?? 0,
-                locatedTrips: totals[0]?.located ?? 0,
-                shownTrips: cells.reduce((sum, cell) => sum + cell.trips, 0),
-                totalCells,
-                truncated: cells.length < totalCells,
-                cells: cells.map(({ total_cells: _, ...cell }) => cell),
-                queriedAt: new Date().toISOString(),
-              };
-            }),
           );
+          const now = yield* DateTime.now;
+          const totalCells = cells[0]?.total_cells ?? 0;
+          return {
+            endpoint,
+            matchingTrips: totals[0]?.matching ?? 0,
+            locatedTrips: totals[0]?.located ?? 0,
+            shownTrips: cells.reduce((sum, cell) => sum + cell.trips, 0),
+            totalCells,
+            truncated: cells.length < totalCells,
+            cells: cells.map(({ total_cells: _, ...cell }) => cell),
+            queriedAt: DateTime.formatIso(now),
+          } satisfies TripMap;
         }),
       {
         capacity: 16,

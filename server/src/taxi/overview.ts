@@ -1,4 +1,4 @@
-import { Cache, Effect, Exit, Schema } from "effect";
+import { Cache, DateTime, Effect, Exit, Schema } from "effect";
 import { DatasetMetadata } from "../../../shared/dataset.js";
 import type { Filters } from "../../../shared/filters.js";
 import { Daily, Hourly, Summary, Zone } from "../../../shared/overview.js";
@@ -78,10 +78,12 @@ export const makeOverview = (taxi: TaxiSnapshot) =>
             },
             { concurrency: 3 },
           ).pipe(
-            Effect.map((data) => ({
-              ...data,
-              queriedAt: new Date().toISOString(),
-            })),
+            Effect.flatMap((data) =>
+              Effect.map(DateTime.now, (now) => ({
+                ...data,
+                queriedAt: DateTime.formatIso(now),
+              })),
+            ),
             Effect.withSpan("analytics.overview"),
           );
         }),
