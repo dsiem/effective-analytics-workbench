@@ -1,5 +1,5 @@
 import type { HtmlBuilder } from "foldkit/html";
-import type { Filters } from "../../../shared/filters";
+import type { Filters } from "@dsiem/analytics-shared/filters";
 import { dateLabel } from "../lib/format";
 import { badge } from "../ui/primitives";
 export const filterSummary = <Message>(

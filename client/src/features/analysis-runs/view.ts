@@ -10,7 +10,7 @@ import type {
   AnalysisRunSummary,
   RouteReliabilityReport,
   RouteReliabilityRow,
-} from "../../../../shared/analysis-runs";
+} from "@dsiem/analytics-shared/analysis-runs";
 import { number } from "../../lib/format";
 import { icon } from "../../ui/icons";
 import {

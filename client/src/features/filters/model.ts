@@ -1,6 +1,6 @@
 import { DatePicker } from "@foldkit/ui";
 import { Schema } from "effect";
-import type { Filters } from "../../../../shared/filters";
+import type { Filters } from "@dsiem/analytics-shared/filters";
 export const FilterDraft = Schema.Struct({
   from: Schema.String,
   to: Schema.String,

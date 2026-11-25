@@ -4,7 +4,7 @@ import {
   GpsEndpoint,
   MapCellSummary,
   MapSummary,
-} from "../../../../shared/map-dataset";
+} from "@dsiem/analytics-shared/map-dataset";
 import { empty, Notice, request } from "../../lib/request-state";
 export const Model = Schema.Struct({
   endpoint: GpsEndpoint,

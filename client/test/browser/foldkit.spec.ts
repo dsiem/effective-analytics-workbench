@@ -463,12 +463,12 @@ for (const { name, width, height, count, fontSize } of [
 test("saved view chooser creates, edits, reloads, and deletes views with their filters", async ({
   page,
 }) => {
-  const stored: import("../../../shared/saved-views").SavedView[] = [];
+  const stored: import("@dsiem/analytics-shared/saved-views").SavedView[] = [];
   await page.route("**/api/saved-views**", (route) => {
     const request = route.request();
     if (request.method() === "PUT") {
       const input =
-        request.postDataJSON() as import("../../../shared/saved-views").SavedViewInput;
+        request.postDataJSON() as import("@dsiem/analytics-shared/saved-views").SavedViewInput;
       expect(input.filters).toEqual({ zip: "10001" });
       const previous = stored.find((savedView) => savedView.id === input.id);
       expect(input.version).toBe(previous?.version ?? null);

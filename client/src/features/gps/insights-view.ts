@@ -1,4 +1,7 @@
-import type { GpsEndpoint, MapSummary } from "../../../../shared/map-dataset";
+import type {
+  GpsEndpoint,
+  MapSummary,
+} from "@dsiem/analytics-shared/map-dataset";
 import { compact, money, number } from "../../lib/format";
 import { button, card } from "../../ui/primitives";
 import { endpointName, type Model } from "./model";

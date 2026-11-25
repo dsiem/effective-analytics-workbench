@@ -2,7 +2,10 @@ import { Notice } from "../../lib/request-state";
 import { Tabs } from "@foldkit/ui";
 import { Schema } from "effect";
 import { defineMessageUnion } from "foldkit/message";
-import { MapCellSummary, MapSummary } from "../../../../shared/map-dataset";
+import {
+  MapCellSummary,
+  MapSummary,
+} from "@dsiem/analytics-shared/map-dataset";
 export const messages = {
   GpsTabs: { message: Tabs.Message },
   LoadedGps: {

@@ -1,5 +1,5 @@
 import { Command } from "foldkit";
-import type { Filters } from "../../../../shared/filters";
+import type { Filters } from "@dsiem/analytics-shared/filters";
 import type { FeatureUpdate } from "../../lib/feature-update";
 import { pending } from "../../lib/request-state";
 import { LoadOverview } from "./commands";

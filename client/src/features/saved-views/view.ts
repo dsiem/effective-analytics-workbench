@@ -1,5 +1,5 @@
 import { defineView } from "foldkit/submodel";
-import { type Filters, sameFilters } from "../../../../shared/filters";
+import { type Filters, sameFilters } from "@dsiem/analytics-shared/filters";
 import { savedViewBrowser } from "./browser-view";
 import type { Model } from "./model";
 import { appliedView } from "./selection";

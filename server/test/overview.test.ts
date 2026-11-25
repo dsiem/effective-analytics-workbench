@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { ConfigProvider, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServer } from "effect/http";
 import { TestClock } from "effect/testing";
-import { Overview } from "../../shared/overview.js";
+import { Overview } from "@dsiem/analytics-shared/overview";
 import { AnalysisRuns } from "../src/analysis-runs.js";
 import { Analytics } from "../src/taxi/analytics.js";
 import { Genie } from "../src/genie/service.js";

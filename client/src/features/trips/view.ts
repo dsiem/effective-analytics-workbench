@@ -1,7 +1,7 @@
 import { Select } from "@foldkit/ui";
 import { Schema } from "effect";
 import { defineView } from "foldkit/submodel";
-import type { TripSummary } from "../../../../shared/trips";
+import type { TripSummary } from "@dsiem/analytics-shared/trips";
 import { money, number } from "../../lib/format";
 import { icon } from "../../ui/icons";
 import {

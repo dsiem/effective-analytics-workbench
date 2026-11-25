@@ -6,19 +6,19 @@ Effect HTTP contract to connect the server to Foldkit.
 
 ## How the workbench fits together
 
-The browser and server import their feature schemas from `shared/`.
+The browser and server import their feature schemas from `packages/shared/src/`.
 `AppApi` describes the HTTP operations, and the server supplies their handlers
-with Effect services at startup. [HTTP contract](../shared/api.ts) ·
+with Effect services at startup. [HTTP contract](../packages/shared/src/api.ts) ·
 [Server layers](../server/src/main.ts)
 
 - **Filters** select the records included in an exploration. **Trip explorer**
   and **Trip map** share pickup dates and ZIP, and saved views use the same
   filter comparison.
-  [Filter schema](../shared/filters.ts)
+  [Filter schema](../packages/shared/src/filters.ts)
 - **A cursor page** contains rows and an optional continuation cursor. Saved
   views and trip comments fetch one extra row to tell whether another page
   exists, and build the cursor from the last returned row.
-  [Page schema and construction](../shared/cursor-page.ts)
+  [Page schema and construction](../packages/shared/src/cursor-page.ts)
 - **A browser feature** owns its model, messages, and update function. Its
   binding connects that model and those messages to the app shell. The shell
   handles actions that involve another feature, such as opening Genie from a
@@ -35,7 +35,7 @@ before sending them to the browser.
 When `nextCursor` is present, pass it to `GET /api/trips/pages/:cursor` to read
 the next page. Continue until `nextCursor` is `null`. The browser can render
 each page as it arrives. Responses use gzip when the client accepts it and the
-body is at least 1 KiB. [Trip page schema](../shared/trips.ts)
+body is at least 1 KiB. [Trip page schema](../packages/shared/src/trips.ts)
 
 The optional positive integer `limit` defaults to 10,000. For example,
 `/api/trips?limit=500` requests at most 500 rows in the selected sort order.
@@ -61,7 +61,7 @@ from a listed row can use its summary while details load.
 1. Define the endpoint's input, response, and error schemas in `AppApi`. The
    `overview` endpoint takes `Filters` and returns `Overview`. `HttpApiBuilder`
    decodes the input and passes it to the handler, which calls `Analytics.overview`.
-   [HTTP contract](../shared/api.ts) · [Server handlers](../server/src/routes.ts)
+   [HTTP contract](../packages/shared/src/api.ts) · [Server handlers](../server/src/routes.ts)
 2. Bind user values as SQL parameters and quote table identifiers through the
    adapter. Ordinary warehouse queries return inline JSON. Overview uses
    `SqlSchema.findAll` to decode numeric text into numbers for the browser.

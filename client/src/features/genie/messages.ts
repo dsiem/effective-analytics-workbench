@@ -8,8 +8,8 @@ import {
   GenieMode,
   GenieModeQuery,
   GenieOperation,
-} from "../../../../shared/genie";
-import { Filters } from "../../../../shared/filters";
+} from "@dsiem/analytics-shared/genie";
+import { Filters } from "@dsiem/analytics-shared/filters";
 import { History, Turn } from "./model";
 
 export const QuestionSnapshot = Schema.Struct({

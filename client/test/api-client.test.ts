@@ -4,7 +4,7 @@ import { Cause, Effect, Exit, Fiber, Latch } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import * as TestClock from "effect/testing/TestClock";
-import { AppApi } from "../../shared/api";
+import { AppApi } from "@dsiem/analytics-shared/api";
 import { RetrieveQuestion } from "../src/features/genie/commands";
 import { ApiClient, request } from "../src/lib/api-client";
 

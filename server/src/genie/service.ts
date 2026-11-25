@@ -23,7 +23,7 @@ import {
   type GenieQueryPath,
   type GenieReply,
   genieResultTimeoutMs,
-} from "../../../shared/genie.js";
+} from "@dsiem/analytics-shared/genie";
 import { makeAdmission } from "../admission.js";
 import {
   GenieAgentModeUnavailable,

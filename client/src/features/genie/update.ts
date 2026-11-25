@@ -1,7 +1,7 @@
 import { Dialog } from "@foldkit/ui";
 import { Command } from "foldkit";
-import type { GenieContext, GenieMode } from "../../../../shared/genie";
-import type { Filters } from "../../../../shared/filters";
+import type { GenieContext, GenieMode } from "@dsiem/analytics-shared/genie";
+import type { Filters } from "@dsiem/analytics-shared/filters";
 import type { ApiClient } from "../../lib/api-client";
 import { syncDialog } from "../../lib/dialog";
 import type { FeatureUpdate } from "../../lib/feature-update";

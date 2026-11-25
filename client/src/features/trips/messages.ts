@@ -5,8 +5,8 @@ import {
   TripCommentCounts,
   TripCommentInput,
   TripComments,
-} from "../../../../shared/trip-comments";
-import { Trip, TripSummary } from "../../../../shared/trips";
+} from "@dsiem/analytics-shared/trip-comments";
+import { Trip, TripSummary } from "@dsiem/analytics-shared/trips";
 import { Notice } from "../../lib/request-state";
 import { Sort, TripViewport } from "./model";
 

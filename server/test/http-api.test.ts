@@ -15,9 +15,12 @@ import {
   HttpServer,
 } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
-import { ApiError, AppApi } from "../../shared/api.js";
-import type { SavedView, SavedViewInput } from "../../shared/saved-views.js";
-import { type Trip } from "../../shared/trips.js";
+import { ApiError, AppApi } from "@dsiem/analytics-shared/api";
+import type {
+  SavedView,
+  SavedViewInput,
+} from "@dsiem/analytics-shared/saved-views";
+import { type Trip } from "@dsiem/analytics-shared/trips";
 import { AnalysisRuns } from "../src/analysis-runs.js";
 import { Analytics } from "../src/taxi/analytics.js";
 import { TripNotFound } from "../src/errors.js";

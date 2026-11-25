@@ -1,12 +1,12 @@
 import { Effect, Schema, SchemaTransformation } from "effect";
 import type { DatabricksClient } from "@dsiem/sql-warehouse";
-import { Day } from "../../../shared/schema.js";
+import { Day } from "@dsiem/analytics-shared/schema";
 import {
   type Trip,
   TripDetails,
   type TripSort,
   TripSummary,
-} from "../../../shared/trips.js";
+} from "@dsiem/analytics-shared/trips";
 import { TripNotFound } from "../errors.js";
 import { type TaxiSnapshot, tripWhere } from "./snapshot.js";
 import { makeTripPages } from "./trip-pages.js";

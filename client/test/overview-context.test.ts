@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Schema } from "effect";
-import { GenieContext } from "../../shared/genie";
-import type { Overview } from "../../shared/overview";
+import { GenieContext } from "@dsiem/analytics-shared/genie";
+import type { Overview } from "@dsiem/analytics-shared/overview";
 import {
   dailyChartContext,
   hourlyChartContext,

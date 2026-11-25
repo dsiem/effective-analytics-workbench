@@ -1,6 +1,6 @@
 import { Dialog } from "@foldkit/ui";
 import { Command } from "foldkit";
-import { type Filters, sameFilters } from "../../../../shared/filters";
+import { type Filters, sameFilters } from "@dsiem/analytics-shared/filters";
 import { syncDialog } from "../../lib/dialog";
 import type { FeatureUpdate } from "../../lib/feature-update";
 import type * as Browser from "./browser-model";

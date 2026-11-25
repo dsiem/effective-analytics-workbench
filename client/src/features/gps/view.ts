@@ -1,7 +1,7 @@
 import type { Tabs } from "@foldkit/ui";
 import { defineView } from "foldkit/submodel";
-import type { GenieContext } from "../../../../shared/genie";
-import type { GpsEndpoint } from "../../../../shared/map-dataset";
+import type { GenieContext } from "@dsiem/analytics-shared/genie";
+import type { GpsEndpoint } from "@dsiem/analytics-shared/map-dataset";
 import { ask } from "../../domain/analysis";
 import { activityColors } from "../../lib/map-colors";
 import { badge, type Child, card, error, title } from "../../ui/primitives";

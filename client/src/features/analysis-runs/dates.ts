@@ -1,7 +1,7 @@
 import { DatePicker } from "@foldkit/ui";
 import { Option } from "effect";
 import { Calendar } from "foldkit";
-import type { DatasetMetadata } from "../../../../shared/dataset";
+import type { DatasetMetadata } from "@dsiem/analytics-shared/dataset";
 import { calendarDay } from "../../lib/format";
 import type { Model, WeekField } from "./model";
 

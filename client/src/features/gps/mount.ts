@@ -1,7 +1,7 @@
 import { Effect, Queue, Schema, Stream, SubscriptionRef } from "effect";
 import { Command, Mount } from "foldkit";
-import { GpsEndpoint } from "../../../../shared/map-dataset";
-import { Filters } from "../../../../shared/filters";
+import { GpsEndpoint } from "@dsiem/analytics-shared/map-dataset";
+import { Filters } from "@dsiem/analytics-shared/filters";
 import { ApiClient } from "../../lib/api-client";
 import { done } from "../../lib/command-result";
 import { Message as M } from "./messages";

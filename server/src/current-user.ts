@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Schema } from "effect";
-import type { CurrentUser } from "../../shared/current-user.js";
+import type { CurrentUser } from "@dsiem/analytics-shared/current-user";
 import { Settings } from "./settings.js";
 import { Workspace } from "./workspace.js";
 

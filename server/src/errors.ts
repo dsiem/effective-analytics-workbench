@@ -3,7 +3,7 @@ import type {
   TimeoutService,
   UnavailableService,
   UpstreamService,
-} from "../../shared/api.js";
+} from "@dsiem/analytics-shared/api";
 
 export class InvalidRequest extends Data.TaggedError("InvalidRequest")<{
   readonly message: string;

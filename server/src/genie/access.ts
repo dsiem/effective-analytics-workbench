@@ -5,7 +5,7 @@ import type {
   GenieInput,
   GenieOperation,
   GenieQueryPath,
-} from "../../../shared/genie.js";
+} from "@dsiem/analytics-shared/genie";
 import {
   type PermissionDenied,
   type ServiceUnavailable,

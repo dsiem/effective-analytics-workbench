@@ -3,7 +3,7 @@ import type {
   MapCellSummary,
   MapSummary,
   TripMap,
-} from "../../../../shared/map-dataset.js";
+} from "@dsiem/analytics-shared/map-dataset";
 
 export const activityBucket = (trips: number, maximum: number) =>
   Math.min(4, Math.floor((trips / maximum) ** 0.32 * 5));

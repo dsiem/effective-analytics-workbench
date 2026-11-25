@@ -3,12 +3,12 @@ import { test } from "node:test";
 import { Effect, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
-import { AppApi } from "../shared/api.js";
+import { AppApi } from "@dsiem/analytics-shared/api";
 import {
   TripCommentInput,
   TripCommentSearch,
-} from "../shared/trip-comments.js";
-import { Trip, TripSnapshot } from "../shared/trips.js";
+} from "@dsiem/analytics-shared/trip-comments";
+import { Trip, TripSnapshot } from "@dsiem/analytics-shared/trips";
 
 const historical: TripSnapshot = {
   trip_id: "00000000-0000-4000-8000-000000000001",

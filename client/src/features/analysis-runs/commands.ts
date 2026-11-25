@@ -1,7 +1,10 @@
 import { Clock, Effect, Schema } from "effect";
 import { Command, Navigation } from "foldkit";
-import { AnalysisInput, AnalysisRunId } from "../../../../shared/analysis-runs";
-import { Id } from "../../../../shared/schema";
+import {
+  AnalysisInput,
+  AnalysisRunId,
+} from "@dsiem/analytics-shared/analysis-runs";
+import { Id } from "@dsiem/analytics-shared/schema";
 import { request } from "../../lib/api-client";
 import { done, failure, result } from "../../lib/command-result";
 import { Message as M } from "./messages";

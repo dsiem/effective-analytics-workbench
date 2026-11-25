@@ -1,6 +1,6 @@
 import { Tabs } from "@foldkit/ui";
 import { Schema } from "effect";
-import { Overview } from "../../../../shared/overview";
+import { Overview } from "@dsiem/analytics-shared/overview";
 import { empty, request } from "../../lib/request-state";
 export const Model = Schema.Struct({
   metricTabs: Tabs.Model,

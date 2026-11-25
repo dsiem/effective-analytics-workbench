@@ -1,7 +1,7 @@
 import { Nav, Tooltip } from "@foldkit/ui";
 import { Array as Arr } from "effect";
 import type { Document } from "foldkit/html";
-import { pagePaths } from "../../../shared/page-paths";
+import { pagePaths } from "@dsiem/analytics-shared/page-paths";
 import { filterSummary } from "../domain/filter-summary";
 import { filterError, href, queryFor } from "../domain/filters";
 import { withoutRun } from "../features/analysis-runs/model";

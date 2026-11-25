@@ -1,5 +1,9 @@
 import { Struct } from "effect";
-import { TripSummary, type Trip, type TripPage } from "../../shared/trips";
+import {
+  TripSummary,
+  type Trip,
+  type TripPage,
+} from "@dsiem/analytics-shared/trips";
 
 export const tripDetails: Trip["details"] = {
   source_file: "test.csv",

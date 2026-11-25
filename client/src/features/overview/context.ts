@@ -1,8 +1,8 @@
 import {
   genieContextDataLimit,
   type GenieContext,
-} from "../../../../shared/genie";
-import type { Overview } from "../../../../shared/overview";
+} from "@dsiem/analytics-shared/genie";
+import type { Overview } from "@dsiem/analytics-shared/overview";
 import type { Model } from "./model";
 
 function snapshot(

@@ -1,6 +1,6 @@
 import type { Update } from "foldkit";
-import { pagePaths } from "../../../shared/page-paths";
-import type { TripSort } from "../../../shared/trips";
+import { pagePaths } from "@dsiem/analytics-shared/page-paths";
+import type { TripSort } from "@dsiem/analytics-shared/trips";
 import { href, withSort } from "../domain/filters";
 import { openAnalysisRuns } from "../features/analysis-runs/update";
 import { reloadGps } from "../features/gps/update";

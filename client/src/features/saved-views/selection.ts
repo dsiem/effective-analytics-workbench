@@ -1,4 +1,4 @@
-import { type Filters, sameFilters } from "../../../../shared/filters";
+import { type Filters, sameFilters } from "@dsiem/analytics-shared/filters";
 import type { Model } from "./model";
 
 export function appliedView(

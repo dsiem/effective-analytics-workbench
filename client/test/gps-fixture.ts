@@ -2,7 +2,7 @@ import type {
   GpsCell,
   GpsEndpoint,
   TripMap,
-} from "../../shared/map-dataset.js";
+} from "@dsiem/analytics-shared/map-dataset";
 
 const cells: GpsCell[] = [
   {

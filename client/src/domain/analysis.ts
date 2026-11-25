@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import type { HtmlBuilder } from "foldkit/html";
-import { GenieContext } from "../../../shared/genie";
+import { GenieContext } from "@dsiem/analytics-shared/genie";
 import { icon } from "../ui/icons";
 import { button } from "../ui/primitives";
 

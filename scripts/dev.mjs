@@ -64,7 +64,15 @@ process.once("SIGINT", () => stop(128 + constants.signals.SIGINT));
 const server = supervise(
   spawn(
     process.execPath,
-    [...envFile, "--import", "tsx", "--watch", "server/src/main.ts", "--dev"],
+    [
+      ...envFile,
+      "--conditions=development",
+      "--import",
+      "tsx",
+      "--watch",
+      "server/src/main.ts",
+      "--dev",
+    ],
     { stdio: ["inherit", "inherit", "inherit", "ipc"], env: serverEnv },
   ),
 );

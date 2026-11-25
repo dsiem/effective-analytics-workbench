@@ -1,7 +1,7 @@
 import { Cache, DateTime, Effect, Exit, Schema } from "effect";
-import { DatasetMetadata } from "../../../shared/dataset.js";
-import type { Filters } from "../../../shared/filters.js";
-import { Daily, Hourly, Summary, Zone } from "../../../shared/overview.js";
+import { DatasetMetadata } from "@dsiem/analytics-shared/dataset";
+import type { Filters } from "@dsiem/analytics-shared/filters";
+import { Daily, Hourly, Summary, Zone } from "@dsiem/analytics-shared/overview";
 import {
   taxiQueryUnavailable,
   type TaxiSnapshot,

@@ -8,8 +8,8 @@ import {
   GenieModeQuery,
   GenieOperation,
   GenieReply,
-} from "../../../../shared/genie";
-import { Filters } from "../../../../shared/filters";
+} from "@dsiem/analytics-shared/genie";
+import { Filters } from "@dsiem/analytics-shared/filters";
 export const TurnBase = {
   id: Schema.String,
   question: Schema.String,
