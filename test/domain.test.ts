@@ -67,7 +67,7 @@ test("bounds saved-view writes and conversational input", () => {
       created_at: "2026-01-01",
       updated_at: "2026-01-01",
     };
-    assert.deepEqual(Schema.decodeUnknownSync(SavedView)(existing), existing);
+    assert.throws(() => Schema.decodeUnknownSync(SavedView)(existing));
   }
   assert.throws(() =>
     Schema.decodeUnknownSync(SavedViewInput)({

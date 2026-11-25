@@ -19,7 +19,7 @@ const makeSavedViews = (sql: LakebaseSql) => {
   const columns = sql`id::text AS id, title, body, filters, pinned, version,
       to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at,
       to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at`;
-  const visible = sql`last_write IS DISTINCT FROM 'delete'`;
+  const visible = sql`last_write <> 'delete'`;
   const list = (search: SavedViewSearch) =>
     SqlSchema.findAll({
       Request: Schema.Void,
@@ -121,7 +121,7 @@ const makeSavedViews = (sql: LakebaseSql) => {
             sql`INSERT INTO app.saved_views (id,title,body,filters)
               VALUES (${id}::uuid,${title},${body},${sql.json(filters)})
               ON CONFLICT (id) DO NOTHING RETURNING ${columns}`,
-            sql`version=1 AND last_write IS NULL AND ${sameDraft}`,
+            sql`version=1 AND last_write='create' AND ${sameDraft}`,
           )
         : write(
             id,

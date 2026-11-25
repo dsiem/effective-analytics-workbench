@@ -4,15 +4,11 @@ import { boundedText, Id } from "./schema.js";
 import { Filters } from "./filters.js";
 
 export const SavedViewVersion = Schema.Int.check(Schema.isGreaterThan(0));
-const savedViewFields = {
+export const SavedViewInput = Schema.Struct({
   id: Id,
-  title: boundedText(160),
+  title: boundedText(160).check(Schema.isPattern(/\S/)),
   body: Schema.String.check(Schema.isMaxLength(10000)),
   filters: Filters,
-};
-export const SavedViewInput = Schema.Struct({
-  ...savedViewFields,
-  title: savedViewFields.title.check(Schema.isPattern(/\S/)),
   version: Schema.NullOr(SavedViewVersion),
 });
 export const SavedViewPin = Schema.Struct({
@@ -21,7 +17,7 @@ export const SavedViewPin = Schema.Struct({
 });
 export type SavedViewPin = typeof SavedViewPin.Type;
 export const SavedView = Schema.Struct({
-  ...savedViewFields,
+  ...SavedViewInput.fields,
   version: SavedViewVersion,
   pinned: Schema.Boolean,
   created_at: Schema.String,
