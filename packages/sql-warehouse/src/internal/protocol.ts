@@ -14,20 +14,19 @@ import {
 // Projection of the documented Statement Execution API response. Unknown fields
 // are intentionally ignored so additive server changes do not break the driver.
 // https://docs.databricks.com/api/statement-execution/v1/statement-execution
-const Index = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const StatementId = Schema.NonEmptyString.pipe(
   Schema.brand("DatabricksStatementId"),
 );
 const ExternalLink = Schema.Struct({
-  chunk_index: Index,
-  row_count: Schema.optional(Index),
+  chunk_index: Schema.Natural,
+  row_count: Schema.optional(Schema.Natural),
   external_link: Schema.NonEmptyString,
   http_headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 export type ExternalLink = typeof ExternalLink.Type;
 export const ResultChunk = Schema.Struct({
-  chunk_index: Schema.optional(Index),
-  row_count: Schema.optional(Index),
+  chunk_index: Schema.optional(Schema.Natural),
+  row_count: Schema.optional(Schema.Natural),
   external_links: Schema.optional(Schema.Array(ExternalLink)),
 });
 export const StatementHandle = Schema.Struct({
@@ -67,14 +66,14 @@ export const ArrowStatementResponse = Schema.Struct({
   manifest: Schema.optional(
     Schema.Struct({
       format: Schema.String,
-      total_chunk_count: Index,
-      total_row_count: Schema.optional(Index),
+      total_chunk_count: Schema.Natural,
+      total_row_count: Schema.optional(Schema.Natural),
       truncated: Schema.optional(Schema.Boolean),
       chunks: Schema.optional(
         Schema.Array(
           Schema.Struct({
-            chunk_index: Index,
-            row_count: Schema.optional(Index),
+            chunk_index: Schema.Natural,
+            row_count: Schema.optional(Schema.Natural),
           }),
         ),
       ),

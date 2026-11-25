@@ -1,6 +1,6 @@
 import { Schema, Struct } from "effect";
 import { filteredSearch } from "./filters.js";
-import { Count, Zip } from "./schema.js";
+import { Zip } from "./schema.js";
 
 export const GpsEndpoint = Schema.Literals(["pickup", "dropoff"]);
 export type GpsEndpoint = typeof GpsEndpoint.Type;
@@ -19,7 +19,7 @@ export const GpsCell = Schema.Struct({
     type: Schema.Literal("Polygon"),
     coordinates: Schema.mutable(Schema.Array(GpsRing)),
   }),
-  trips: Count,
+  trips: Schema.Natural,
   avg_fare: Schema.Finite,
   avg_distance: Schema.Finite,
   zip: Schema.NullOr(Zip),
@@ -28,10 +28,10 @@ export type GpsCell = typeof GpsCell.Type;
 export const mapCellLimit = 100_000;
 export const TripMap = Schema.Struct({
   endpoint: GpsEndpoint,
-  matchingTrips: Count,
-  locatedTrips: Count,
-  shownTrips: Count,
-  totalCells: Count,
+  matchingTrips: Schema.Natural,
+  locatedTrips: Schema.Natural,
+  shownTrips: Schema.Natural,
+  totalCells: Schema.Natural,
   truncated: Schema.Boolean,
   cells: Schema.Array(GpsCell).check(Schema.isMaxLength(mapCellLimit)),
   queriedAt: Schema.String,
@@ -42,7 +42,7 @@ export const MapCellSummary = GpsCell.mapFields(Struct.omit(["boundary"]));
 export type MapCellSummary = typeof MapCellSummary.Type;
 export const MapSummary = Schema.Struct({
   ...Struct.omit(TripMap.fields, ["cells"]),
-  loaded: Count,
+  loaded: Schema.Natural,
   cells: Schema.Array(MapCellSummary).check(Schema.isMaxLength(5)),
 });
 export type MapSummary = typeof MapSummary.Type;

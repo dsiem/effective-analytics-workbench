@@ -174,6 +174,21 @@ test("Chat rejects malformed statement status and missing SQL result data", asyn
   }
 });
 
+test("Chat rejects negative and fractional row counts and chunk indices", async () => {
+  for (const value of [-1, 0.5]) {
+    const rows = { data_array: [] };
+    for (const statement of [
+      { manifest: { ...manifest, total_row_count: value }, result: rows },
+      { manifest, result: { ...rows, next_chunk_index: value } },
+    ]) {
+      const error = await Effect.runPromise(
+        Effect.flip(readQueryResult(statement)),
+      );
+      assert.equal(error._tag, "GenieResponseError");
+    }
+  }
+});
+
 test("Chat returns column metadata for a valid zero-row SQL result", async () => {
   for (const statement of [
     { status: { state: "SUCCEEDED" }, manifest, result: { data_array: [] } },

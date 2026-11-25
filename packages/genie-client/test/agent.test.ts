@@ -151,3 +151,31 @@ test("an Agent turn absent from history has an unresolved outcome", async () => 
   assert.equal(unavailable._tag, "GenieMessageUnavailable");
   assert.equal(unavailable.state, "unresolved");
 });
+
+test("Agent keeps the report text when a table row count is negative or fractional", async () => {
+  for (const total_row_count of [-1, 0.5]) {
+    const report = {
+      ...assistant("report", "Query summary"),
+      content: [
+        {
+          type: "output_text",
+          text: "Query summary",
+          metadata: {
+            status: "available",
+            sql: "SELECT 1",
+            columns: [{ name: "one" }],
+            preview_rows: [["1"]],
+            total_row_count,
+          },
+        },
+      ],
+    };
+    const { client } = history([user("target"), report, user("newer")]);
+    const result = await Effect.runPromise(
+      client.result({ conversationId: "conversation", responseId: "target" }),
+    );
+    assert.deepEqual(result.attachments, [
+      { kind: "text", content: "Query summary" },
+    ]);
+  }
+});

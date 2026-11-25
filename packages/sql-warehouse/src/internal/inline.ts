@@ -2,33 +2,32 @@ import { Effect, Schema, Stream } from "effect";
 import type { SqlError } from "effect/sql/SqlError";
 import { failure, StatementResponse } from "./protocol.js";
 
-const Index = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const ChunkInfo = Schema.Struct({
-  chunk_index: Schema.optional(Index),
-  row_count: Schema.optional(Index),
-  row_offset: Schema.optional(Index),
+  chunk_index: Schema.optional(Schema.Natural),
+  row_count: Schema.optional(Schema.Natural),
+  row_offset: Schema.optional(Schema.Natural),
 });
 const Manifest = Schema.Struct({
   format: Schema.String,
-  total_chunk_count: Index,
-  total_row_count: Schema.optional(Index),
+  total_chunk_count: Schema.Natural,
+  total_row_count: Schema.optional(Schema.Natural),
   truncated: Schema.optional(Schema.Boolean),
   chunks: Schema.optional(
     Schema.Array(
       Schema.Struct({
         ...ChunkInfo.fields,
-        chunk_index: Index,
+        chunk_index: Schema.Natural,
       }),
     ),
   ),
   schema: Schema.optional(
     Schema.Struct({
-      column_count: Schema.optional(Index),
+      column_count: Schema.optional(Schema.Natural),
       columns: Schema.optional(
         Schema.Array(
           Schema.Struct({
             name: Schema.String,
-            position: Schema.optional(Index),
+            position: Schema.optional(Schema.Natural),
           }),
         ),
       ),
@@ -43,7 +42,7 @@ const Chunk = Schema.Struct({
   data_array: Schema.optional(
     Schema.Array(Schema.Array(Schema.NullOr(Schema.String))),
   ),
-  next_chunk_index: Schema.optional(Index),
+  next_chunk_index: Schema.optional(Schema.Natural),
 });
 
 const mismatches = (expected: number | undefined, actual: number) =>

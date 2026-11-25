@@ -31,7 +31,7 @@ const Download = Schema.Struct({
 });
 
 const Chunk = Schema.Struct({
-  chunk_index: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  chunk_index: Schema.Natural,
   external_link: Schema.NonEmptyString,
   expiration: Schema.optionalKey(Schema.String),
   http_headers: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
@@ -49,7 +49,7 @@ const Statement = Schema.Struct({
       Schema.Struct({
         format: Schema.Literal("CSV"),
         truncated: Schema.Boolean,
-        total_chunk_count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+        total_chunk_count: Schema.Natural,
         schema: Schema.Struct({
           columns: Schema.Array(Schema.Struct({ name: Schema.String })),
         }),
