@@ -1,6 +1,5 @@
 import { Dialog, Menu, Tooltip } from "@foldkit/ui";
 import { Schema } from "effect";
-import { pagePaths } from "@dsiem/analytics-shared/page-paths";
 import { CurrentUser } from "@dsiem/analytics-shared/current-user";
 import { DatasetMetadata } from "@dsiem/analytics-shared/dataset";
 import * as AnalysisRuns from "../features/analysis-runs/model";
@@ -11,7 +10,7 @@ import * as Overview from "../features/overview/model";
 import * as SavedViews from "../features/saved-views/model";
 import * as Trips from "../features/trips/model";
 import { request } from "../lib/request-state";
-import { Location } from "./route";
+import { Location, pageUrls } from "./route";
 import { ThemePreference } from "./theme";
 export const Model = Schema.Struct({
   location: Location,
@@ -35,11 +34,11 @@ export const Model = Schema.Struct({
 export type Model = typeof Model.Type;
 export const navigation = [
   {
-    path: pagePaths.Overview,
+    path: pageUrls.Overview,
     label: "Trip overview",
     icon: "layout-dashboard",
   },
-  { path: pagePaths.Trips, label: "Trip explorer", icon: "table-2" },
-  { path: pagePaths.TripMap, label: "Trip map", icon: "map" },
-  { path: pagePaths.AnalysisRuns, label: "Analysis runs", icon: "activity" },
+  { path: pageUrls.Trips, label: "Trip explorer", icon: "table-2" },
+  { path: pageUrls.TripMap, label: "Trip map", icon: "map" },
+  { path: pageUrls.AnalysisRuns, label: "Analysis runs", icon: "activity" },
 ] as const;

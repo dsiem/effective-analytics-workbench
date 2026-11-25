@@ -1,17 +1,14 @@
 import { DatePicker, Dialog, Tooltip } from "@foldkit/ui";
-import { Option, Schema } from "effect";
+import { Schema } from "effect";
 import { AsyncData } from "foldkit";
 import {
   AnalysisRun,
   AnalysisRunId,
-  AnalysisRunIdFromString,
   type AnalysisRunState,
   AnalysisRunSummary,
   RouteReliabilityReport,
 } from "@dsiem/analytics-shared/analysis-runs";
-import { pagePaths } from "@dsiem/analytics-shared/page-paths";
 import { Id } from "@dsiem/analytics-shared/schema";
-import { href } from "../../domain/filters";
 import { Notice, request } from "../../lib/request-state";
 
 export const Draft = Schema.Struct({
@@ -35,13 +32,6 @@ const Submission = Schema.Union([
   Ready,
   Schema.TaggedStruct("Submitting", { generation: Schema.Int }),
 ]);
-
-export const AnalysisRunLink = Schema.Union([
-  Schema.TaggedStruct("NoRun", {}),
-  Schema.TaggedStruct("InvalidRun", {}),
-  Schema.TaggedStruct("SelectedRun", { id: AnalysisRunId }),
-]);
-export type AnalysisRunLink = typeof AnalysisRunLink.Type;
 
 export const readyToSubmit = (
   retryId: string | null = null,
@@ -98,26 +88,6 @@ export const init = (): Model => ({
   selected: null,
 });
 
-export function parseRunLink(run: string | null): AnalysisRunLink {
-  if (run === null) return { _tag: "NoRun" };
-  const id = Schema.decodeUnknownOption(AnalysisRunIdFromString)(run);
-  return Option.isSome(id)
-    ? { _tag: "SelectedRun", id: id.value }
-    : { _tag: "InvalidRun" };
-}
-export const withoutRun = (query: string) => {
-  const params = new URLSearchParams(query);
-  if (!params.has("run")) return query;
-  params.delete("run");
-  return params.toString();
-};
-export const historyHref = (query: string) =>
-  href(pagePaths.AnalysisRuns, withoutRun(query));
-export const runHref = (id: AnalysisRunId, query: string) => {
-  const params = new URLSearchParams(query);
-  params.set("run", String(id));
-  return `${pagePaths.AnalysisRuns}?${params}`;
-};
 export const isActive = (state: AnalysisRunState) =>
   state === "queued" || state === "running";
 

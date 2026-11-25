@@ -8,7 +8,8 @@ import { Id } from "@dsiem/analytics-shared/schema";
 import { request } from "../../lib/api-client";
 import { done, failure, result } from "../../lib/command-result";
 import { Message as M } from "./messages";
-import { runHref, Selection } from "./model";
+import { runHref } from "../../app/route";
+import { Selection } from "./model";
 
 export const Submit = Command.define("SubmitAnalysisRun", {
   args: {
