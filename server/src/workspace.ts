@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import {
   Context,
   Effect,
+  Exit,
   Layer,
   Redacted,
   Schema,
@@ -86,7 +87,9 @@ export class Workspace extends Context.Service<
         Effect.flatMap(Schema.decodeUnknownEffect(CliToken)),
         Effect.map((value) => Redacted.make(value.access_token)),
         Effect.mapError(authError),
-        Effect.cachedWithTTL("30 seconds"),
+        Effect.cachedWithTTL((exit) =>
+          Exit.isSuccess(exit) ? "30 seconds" : 0,
+        ),
       );
       const accessToken = Redacted.value(settings.token)
         ? Effect.succeed(settings.token)
