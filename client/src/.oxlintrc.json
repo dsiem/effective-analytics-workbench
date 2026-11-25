@@ -1,0 +1,22 @@
+{
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
+  "extends": [
+    "../../.oxlintrc.json",
+    "../../node_modules/@foldkit/oxlint-plugin/recommended.json"
+  ],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    // The rule also reports clients constructing their own messages.
+    "foldkit/no-child-message-construction-in-root": "off"
+  },
+  "overrides": [
+    {
+      "files": ["app/update.ts"],
+      "rules": {
+        "foldkit/no-child-message-construction-in-root": "error"
+      }
+    }
+  ]
+}
