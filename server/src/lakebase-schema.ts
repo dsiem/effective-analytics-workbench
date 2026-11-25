@@ -16,12 +16,11 @@ export const initializeAppSchema = (
       body text NOT NULL DEFAULT '' CHECK (length(body) <= 10000),
       filters jsonb NOT NULL DEFAULT '{}',
       pinned boolean NOT NULL DEFAULT false,
+      last_write text NOT NULL DEFAULT 'create' CHECK (last_write IN ('create', 'edit', 'pin', 'delete')),
       version integer NOT NULL DEFAULT 1 CHECK (version > 0),
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`;
-      yield* sql`ALTER TABLE app.saved_views ADD COLUMN IF NOT EXISTS last_write text
-        CHECK (last_write IN ('edit', 'pin', 'delete'))`;
       yield* sql`CREATE INDEX IF NOT EXISTS saved_views_listing_idx ON app.saved_views (pinned DESC, updated_at DESC, id DESC)`;
       yield* sql`CREATE TABLE IF NOT EXISTS app.trip_comments (
         id uuid PRIMARY KEY,

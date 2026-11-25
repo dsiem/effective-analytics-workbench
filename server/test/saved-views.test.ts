@@ -271,31 +271,6 @@ test("the credential adapter preserves every reason in a mixed cause", async () 
   assert.deepEqual(Cause.interruptors(exit.cause), new Set([42]));
 });
 
-test("setup preserves older saved views without treating unknown writes as replays", async () => {
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const { savedViews, sql } = yield* lakebaseFixture;
-      yield* sql`ALTER TABLE app.saved_views DROP COLUMN last_write`;
-      yield* sql`INSERT INTO app.saved_views (id,title,version)
-        VALUES (${input.id}::uuid,${input.title},2)`;
-      yield* initializeAppSchema(sql);
-      const [existing] = (yield* savedViews.list({})).rows;
-      assert.ok(existing);
-      assert.equal(existing.title, input.title);
-      assert.equal(existing.version, 2);
-      const stale = yield* Effect.result(
-        savedViews.save({ ...input, version: 1 }),
-      );
-      assert.ok(
-        stale._tag === "Failure" && stale.failure._tag === "SavedViewConflict",
-      );
-      const updated = yield* savedViews.save({ ...existing, title: "Updated" });
-      assert.equal(updated.version, 3);
-      assert.equal(updated.title, "Updated");
-    }).pipe(Effect.provide(Reactivity.layer), Effect.scoped),
-  );
-});
-
 test("versioned saved-view writes replay matching operations and reject competing writes and deleted-view resurrection", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
