@@ -2,7 +2,7 @@ import { Dialog, Menu, Tooltip } from "@foldkit/ui";
 import { Option } from "effect";
 import { Command, Update } from "foldkit";
 import type { Url } from "foldkit/url";
-import { href, queryFor, withSort } from "../domain/filters";
+import { href, queryFor } from "../domain/filters";
 import * as AnalysisDates from "../features/analysis-runs/dates";
 import * as AnalysisRuns from "../features/analysis-runs/model";
 import {
@@ -36,7 +36,7 @@ import * as Features from "./features";
 import { Message as M, type Message } from "./message";
 import type { Model } from "./model";
 import { loadPage, sortTrips } from "./navigation";
-import { parseLocation, routePath, showsExplore } from "./route";
+import { parseLocation, routePath, showsExplore, withTripSort } from "./route";
 import { ThemeMenu } from "./theme";
 import { initTooltip } from "./ui-state";
 
@@ -292,7 +292,7 @@ function updateApplication(
               href: href(
                 routePath(route),
                 route._tag === "Trips"
-                  ? withSort(out.query, route.sort, "newest")
+                  ? withTripSort(out.query, route.sort)
                   : out.query,
               ),
               external: false,

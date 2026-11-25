@@ -20,10 +20,3 @@ export const queryFor = (filters: Filters) =>
   ).toString();
 export const href = (path: string, query: string) =>
   path + (query ? `?${query}` : "");
-
-export const withSort = (query: string, sort: string, defaultSort: string) => {
-  const params = new URLSearchParams(query);
-  params.delete("sort");
-  if (sort !== defaultSort) params.set("sort", sort);
-  return params.toString();
-};

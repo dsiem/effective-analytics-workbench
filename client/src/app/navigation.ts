@@ -1,7 +1,6 @@
 import type { Update } from "foldkit";
-import { pagePaths } from "@dsiem/analytics-shared/page-paths";
 import type { TripSort } from "@dsiem/analytics-shared/trips";
-import { href, withSort } from "../domain/filters";
+import { href } from "../domain/filters";
 import { openAnalysisRuns } from "../features/analysis-runs/update";
 import { reloadGps } from "../features/gps/update";
 import { reloadOverview } from "../features/overview/update";
@@ -11,7 +10,7 @@ import { Navigate } from "./commands";
 import * as Features from "./features";
 import type { Message } from "./message";
 import type { Model } from "./model";
-import { AppRoute } from "./route";
+import { AppRoute, pageUrls, withTripSort } from "./route";
 
 export function loadPage(
   model: Model,
@@ -54,7 +53,7 @@ export function sortTrips(
   model: Model,
   sort: typeof TripSort.Type,
 ): Update.Return<Model, Message, ApiClient> {
-  const query = withSort(model.location.query, sort, "newest");
+  const query = withTripSort(model.location.query, sort);
   const loaded = loadPage({
     ...model,
     location: { ...model.location, route: AppRoute.Trips({ sort }), query },
@@ -63,7 +62,7 @@ export function sortTrips(
     ...loaded,
     commands: [
       ...(loaded.commands ?? []),
-      Navigate({ href: href(pagePaths.Trips, query), external: false }),
+      Navigate({ href: href(pageUrls.Trips, query), external: false }),
     ],
   };
 }

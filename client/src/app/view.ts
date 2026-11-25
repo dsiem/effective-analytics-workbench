@@ -1,10 +1,8 @@
 import { Nav, Tooltip } from "@foldkit/ui";
 import { Array as Arr } from "effect";
 import type { Document } from "foldkit/html";
-import { pagePaths } from "@dsiem/analytics-shared/page-paths";
 import { filterSummary } from "../domain/filter-summary";
 import { filterError, href, queryFor } from "../domain/filters";
-import { withoutRun } from "../features/analysis-runs/model";
 import { analysisRunsView } from "../features/analysis-runs/view";
 import { Message as FilterMessage } from "../features/filters/messages";
 import { filterFields } from "../features/filters/view";
@@ -27,7 +25,7 @@ import { pageContext } from "./analysis-context";
 import * as Features from "./features";
 import { Message as M } from "./message";
 import { type Model, navigation } from "./model";
-import { routePath, showsExplore } from "./route";
+import { pageUrls, routePath, showsExplore, withoutRun } from "./route";
 import { themeSelector } from "./theme-view";
 import { initTooltip } from "./ui-state";
 import {
@@ -95,7 +93,7 @@ function sidebar(h: H, model: Model) {
         [
           h.a(
             [
-              h.Href(workspaceHref(pagePaths.Overview, query)),
+              h.Href(workspaceHref(pageUrls.Overview, query)),
               h.Class("sidebar-brand"),
             ],
             [
@@ -344,7 +342,7 @@ export function view(model: Model, h: H): Document {
             [
               "Page not found. ",
               h.a(
-                [h.Href(pagePaths.Overview), h.Class("underline")],
+                [h.Href(pageUrls.Overview), h.Class("underline")],
                 ["Back to overview"],
               ),
             ],
@@ -393,7 +391,7 @@ export function view(model: Model, h: H): Document {
                 h.span([h.Class("h-4 border-l mx-2")], []),
                 h.a(
                   [
-                    h.Href(workspaceHref(pagePaths.Overview, query)),
+                    h.Href(workspaceHref(pageUrls.Overview, query)),
                     h.Class("hidden sm:block muted text-sm"),
                   ],
                   ["NYC Taxi"],

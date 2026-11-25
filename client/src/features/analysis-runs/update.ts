@@ -2,6 +2,7 @@ import { DatePicker, Dialog, Tooltip } from "@foldkit/ui";
 import { Option, Result, Schema } from "effect";
 import { AsyncData, Command, type Update } from "foldkit";
 import { AnalysisInput } from "@dsiem/analytics-shared/analysis-runs";
+import type { AnalysisRunLink } from "../../app/route";
 import type { ApiClient } from "../../lib/api-client";
 import { isoDay } from "../../lib/format";
 import { empty, pending } from "../../lib/request-state";
@@ -9,7 +10,6 @@ import * as Commands from "./commands";
 import { focusWeek } from "./dates";
 import { Message as M, type Message } from "./messages";
 import {
-  type AnalysisRunLink,
   defaultDraft,
   initReuseTooltip,
   type Model,

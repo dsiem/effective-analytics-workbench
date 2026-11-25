@@ -23,7 +23,8 @@ import {
 } from "../../ui/primitives";
 import { analysisForm } from "./form-view";
 import { Message as M, type Message } from "./messages";
-import { historyHref, type Model, runHref } from "./model";
+import { historyHref, runHref } from "../../app/route";
+import type { Model } from "./model";
 
 type H = Builder<Message>;
 type ViewInputs = { readonly query: string };
