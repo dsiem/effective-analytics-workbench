@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
 import { test } from "node:test";
 import { ConfigProvider, Effect, Layer, Redacted } from "effect";
+import { FetchHttpClient } from "effect/http";
 import { CurrentViewer } from "../src/current-user.js";
 import { unavailable } from "../src/errors.js";
 import { Settings } from "../src/settings.js";
@@ -172,3 +176,54 @@ for (const [description, profile, failedLookups] of [
     assert.equal(await Effect.runPromise((await user)({})), null);
   });
 }
+
+test("local viewer retries a failed CLI lookup immediately and reuses the recovered token", async (t) => {
+  const bin = await mkdtemp(join(tmpdir(), "viewer-cli-"));
+  t.after(() => rm(bin, { recursive: true, force: true }));
+  await writeFile(
+    join(bin, "databricks"),
+    `#!/bin/sh
+calls="$0.calls"
+echo called >> "$calls"
+[ "$(wc -l < "$calls")" -gt 1 ] || exit 1
+echo '{"access_token":"recovered"}'
+`,
+    { mode: 0o700 },
+  );
+  const path = process.env.PATH;
+  t.after(() => {
+    if (path === undefined) delete process.env.PATH;
+    else process.env.PATH = path;
+  });
+  process.env.PATH = [bin, path].join(delimiter);
+
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const resolve = yield* CurrentViewer;
+      assert.equal(yield* resolve({}), null);
+      assert.deepEqual(yield* resolve({}), {
+        name: "local@example.com",
+        email: "local@example.com",
+      });
+      const token = yield* (yield* Workspace).accessToken;
+      assert.equal(Redacted.value(token), "recovered");
+    }).pipe(
+      Effect.provide(CurrentViewer.layer),
+      Effect.provide(Workspace.layer),
+      Effect.provide(Settings.layer),
+      Effect.provideService(
+        ConfigProvider.ConfigProvider,
+        ConfigProvider.fromEnvRecord({
+          DATABRICKS_HOST: "https://workspace.example",
+        }),
+      ),
+      Effect.provideService(FetchHttpClient.Fetch, async () =>
+        Response.json({ userName: "local@example.com" }),
+      ),
+    ),
+  );
+  assert.equal(
+    await readFile(join(bin, "databricks.calls"), "utf8"),
+    "called\ncalled\n",
+  );
+});
