@@ -16,14 +16,14 @@ const mapData = ({
   endpoint = "pickup",
   revision = 0,
   selected = null,
-  loading = true,
+  activityTag = "Loading",
 }: Partial<MapData> = {}): MapData => ({
   query,
   filters,
   endpoint,
   revision,
   selected,
-  loading,
+  activityTag,
   key: frameKey(query, endpoint, selected, revision),
 });
 
@@ -99,8 +99,14 @@ test("GPS loads only on query changes and ignores late results after switching o
       assert.ok(Result.isSuccess(result));
       assert.equal(result.success.summary.loaded, 2);
 
-      yield* SubscriptionRef.set(inputs, { ...dropoff, loading: false });
-      yield* SubscriptionRef.set(inputs, { ...dropoff, revision: 2 });
+      yield* SubscriptionRef.set(
+        inputs,
+        mapData({ ...dropoff, activityTag: "Success" }),
+      );
+      yield* SubscriptionRef.set(
+        inputs,
+        mapData({ ...dropoff, revision: 2, activityTag: "Refreshing" }),
+      );
       const pending = yield* Queue.take(requests);
       yield* stop;
       assert.equal(pending.signal?.aborted, true);

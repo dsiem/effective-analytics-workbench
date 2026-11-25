@@ -11,6 +11,7 @@ import { jsonMap } from "../src/features/gps/dataset";
 import { Message as M } from "../src/features/gps/messages";
 import { dataKey, frameKey, init as initGps } from "../src/features/gps/model";
 import { reloadGps, updateGps } from "../src/features/gps/update";
+import { fail, succeed } from "../src/lib/command-result";
 import { gpsFixture } from "./gps-fixture";
 
 const summary = (endpoint: "pickup" | "dropoff" = "pickup") =>
@@ -23,8 +24,7 @@ test("same-query retries reject old dataset and render revisions", () => {
   for (const message of [
     M.LoadedGps({
       key: dataKey("", "pickup", previous.revision),
-      data: summary(),
-      error: "",
+      result: succeed(summary()),
     }),
     M.GpsReady({
       key: frameKey("", "pickup", null, previous.revision),
@@ -40,13 +40,11 @@ test("stale endpoint, filter and render responses cannot replace the active GPS 
   for (const message of [
     M.LoadedGps({
       key: dataKey(query, "pickup"),
-      data: summary(),
-      error: "",
+      result: succeed(summary()),
     }),
     M.LoadedGps({
       key: dataKey("", "dropoff"),
-      data: summary("dropoff"),
-      error: "",
+      result: succeed(summary("dropoff")),
     }),
     M.GpsReady({ key: dataKey(query, "pickup"), error: "Old renderer failed" }),
   ])
@@ -95,8 +93,7 @@ test("leaving the GPS page ignores its late responses and keeps the current page
     Features.gps.toParentMessage(
       M.LoadedGps({
         key: dataKey("", "pickup"),
-        data: summary(),
-        error: "",
+        result: succeed(summary()),
       }),
     ),
   );
@@ -112,8 +109,7 @@ test("an old map reply keeps pinned Genie context until the map scope changes", 
   const currentReply = Features.gps.toParentMessage(
     M.LoadedGps({
       key: dataKey("", "pickup", initialized.gpsState.revision),
-      data: activity,
-      error: "",
+      result: succeed(activity),
     }),
   );
   const loaded = update(initialized, currentReply).model;
@@ -129,8 +125,7 @@ test("an old map reply keeps pinned Genie context until the map scope changes", 
     Features.gps.toParentMessage(
       M.LoadedGps({
         key: dataKey("", "pickup", pinned.gpsState.revision - 1),
-        data: null,
-        error: "old failure",
+        result: fail("old failure"),
       }),
     ),
   );

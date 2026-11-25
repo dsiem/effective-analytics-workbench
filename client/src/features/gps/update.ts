@@ -2,7 +2,6 @@ import { Option } from "effect";
 import { AsyncData, Command } from "foldkit";
 import { modifyFields } from "foldkit/struct";
 import type { FeatureUpdate } from "../../lib/feature-update";
-import { fromResponse } from "../../lib/request-state";
 import { Message as M, type Message } from "./messages";
 import { dataKey, frameKey, type Model } from "./model";
 import { RefreshGps, type MapData } from "./mount";
@@ -20,7 +19,7 @@ const refresh = (model: Model, { query, filters }: MapLocation) => {
       endpoint: model.endpoint,
       revision: model.revision,
       key: frameKey(query, model.endpoint, selected, model.revision),
-      loading: AsyncData.isPending(model.activity),
+      activityTag: model.activity._tag,
       selected,
     }),
   ];
@@ -85,7 +84,7 @@ export function updateGps(
       )
         return { model };
       const next = modifyFields(model, {
-        activity: () => fromResponse(message),
+        activity: () => message.result,
         renderedKey: () => "",
         mapError: () => "",
         selected: Option.none,

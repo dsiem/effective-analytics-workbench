@@ -1,3 +1,4 @@
+import { Completion } from "../../lib/command-result";
 import { Notice } from "../../lib/request-state";
 import { DatePicker, Dialog, Tooltip } from "@foldkit/ui";
 import { Schema } from "effect";
@@ -25,8 +26,7 @@ export const Message = defineMessageUnion({
   AnalysisSubmitted: {
     requestId: Id,
     generation: Schema.Int,
-    data: Schema.NullOr(AnalysisRunReference),
-    error: Notice,
+    result: Completion(AnalysisRunReference),
   },
   RefreshAnalysisHistory: {},
   LoadedAnalysisHistory: {
@@ -42,8 +42,7 @@ export const Message = defineMessageUnion({
   RetryAnalysisReport: {},
   LoadedAnalysisReport: {
     ...Selection.fields,
-    data: Schema.NullOr(RouteReliabilityReport),
-    error: Notice,
+    result: Completion(RouteReliabilityReport),
   },
   ReuseAnalysisInputs: { input: AnalysisInput },
   GotReuseTooltipMessage: { message: Tooltip.Message },

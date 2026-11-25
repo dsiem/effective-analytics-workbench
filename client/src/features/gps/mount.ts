@@ -12,7 +12,14 @@ const MapData = Schema.Struct({
   endpoint: GpsEndpoint,
   revision: Schema.Int,
   key: Schema.String,
-  loading: Schema.Boolean,
+  activityTag: Schema.Literals([
+    "Idle",
+    "Loading",
+    "Refreshing",
+    "Failure",
+    "Stale",
+    "Success",
+  ]),
   selected: Schema.NullOr(Schema.String),
 });
 export type MapData = typeof MapData.Type;

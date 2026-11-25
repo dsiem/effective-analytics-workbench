@@ -1,6 +1,20 @@
 import { Effect, Schema, type Scope } from "effect";
 import { ApiError } from "@dsiem/analytics-shared/api";
-import { AccessDenied, type Notice } from "./request-state";
+import { AccessDenied, Notice } from "./request-state";
+
+const successTag = "Success";
+const Failure = Schema.TaggedStruct("Failure", { error: Notice });
+
+export const Completion = <A extends Schema.Top>(data: A) =>
+  Schema.Union([Schema.TaggedStruct(successTag, { data }), Failure]);
+
+export const succeed = <A>(
+  data: A,
+): { readonly _tag: typeof successTag; readonly data: A } => ({
+  _tag: successTag,
+  data,
+});
+export const fail = (error: Notice) => Failure.make({ error });
 
 export const failure = (cause: unknown): Notice => {
   if (!Schema.is(ApiError)(cause))
@@ -15,7 +29,7 @@ export const result = <A, E, R>(effect: Effect.Effect<A, E, R | Scope.Scope>) =>
   effect.pipe(
     Effect.scoped,
     Effect.match({
-      onSuccess: (data) => ({ data, error: "" }),
-      onFailure: (error) => ({ data: null, error: failure(error) }),
+      onSuccess: succeed<A>,
+      onFailure: (error) => fail(failure(error)),
     }),
   );

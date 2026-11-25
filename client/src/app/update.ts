@@ -21,7 +21,6 @@ import { updateSavedViews } from "../features/saved-views/update";
 import * as Trips from "../features/trips/model";
 import { closeSortMenu, updateTrips } from "../features/trips/update";
 import type { ApiClient } from "../lib/api-client";
-import { fromResponse } from "../lib/request-state";
 import { pageContext } from "./analysis-context";
 import * as AppCommands from "./commands";
 import * as Features from "./features";
@@ -106,34 +105,37 @@ function updateApplication(model: Model, message: Message): AppUpdate {
         }).model,
         Theme.restore(model.theme, restored.themePreference),
       ),
-    LoadedMetadata: (message) =>
-      Update.combine(model, [
+    LoadedMetadata: ({ result, today }) => {
+      const metadata = AsyncData.getOrElse(result, () => null);
+      return Update.combine(model, [
         (parent) => ({
           model: modifyFields(parent, {
-            metadata: () => fromResponse(message),
+            metadata: () => result,
           }),
         }),
         (parent) =>
           Features.analysisRuns.foldInit(parent, {
             model: AnalysisDates.withMetadata(
               parent.analysisRunsState,
-              message.data,
-              message.today,
+              metadata,
+              today,
             ),
           }),
         (parent) =>
           Features.filters.foldInit(parent, {
             model: FilterDates.withMetadata(
               parent.filtersState,
-              message.data,
-              message.today,
+              metadata,
+              today,
             ),
           }),
-      ]),
-    LoadedUser: (message) => {
+      ]);
+    },
+    LoadedUser: ({ result }) => {
       return {
         model: modifyFields(model, {
-          user: () => Option.fromNullishOr(message.user),
+          user: () =>
+            Option.flatMap(AsyncData.getData(result), Option.fromNullishOr),
         }),
       };
     },

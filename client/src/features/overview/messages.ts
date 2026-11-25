@@ -1,4 +1,4 @@
-import { Notice } from "../../lib/request-state";
+import { Completion } from "../../lib/command-result";
 import { Tabs } from "@foldkit/ui";
 import { Schema } from "effect";
 import { defineMessageUnion } from "foldkit/message";
@@ -8,8 +8,7 @@ export const messages = {
   GotMetricTabsMessage: { message: Tabs.Message },
   LoadedOverview: {
     generation: Schema.Int,
-    data: Schema.NullOr(Overview),
-    error: Notice,
+    result: Completion(Overview),
   },
 };
 
