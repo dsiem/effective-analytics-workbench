@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Clock, Effect, Exit, Fiber, Latch, Stream } from "effect";
+import { Clock, Deferred, Effect, Exit, Fiber, Latch, Stream } from "effect";
 import * as TestClock from "effect/testing/TestClock";
 import {
   makeGenieDownloadClient,
@@ -218,44 +218,62 @@ test("does not fetch an unrecognized URL or deliver a Databricks-truncated resul
   }
 });
 
-test("cancels the CSV storage body when it stops delivering bytes", async () => {
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const received = Latch.makeUnsafe();
-      let cancelled = false;
-      const client = makeGenieDownloadClient({
-        spaceId: "space",
-        request: ({ kind }) =>
-          Effect.succeed(
-            kind === "start" ? accepted : prepared(signedFirst, { count: 1 }),
-          ),
-        fetch: async () =>
-          new Response(
-            new ReadableStream({
-              start(controller) {
-                controller.enqueue(new TextEncoder().encode("trip,count\r\n"));
-              },
-              cancel() {
-                cancelled = true;
-              },
-            }),
-          ),
-      });
-      const csv = yield* client.download(reference);
-      const transfer = yield* Stream.runForEach(csv, () => received.open).pipe(
-        Effect.forkChild,
-      );
+test(
+  "the CSV idle timeout aborts storage even when body cancellation stalls",
+  { timeout: 2000 },
+  async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const received = Latch.makeUnsafe();
+        const finishCleanup = Deferred.makeUnsafe<void>();
+        let signal: AbortSignal | null | undefined;
+        let cancelled = false;
+        const client = makeGenieDownloadClient({
+          spaceId: "space",
+          request: ({ kind }) =>
+            Effect.succeed(
+              kind === "start" ? accepted : prepared(signedFirst, { count: 1 }),
+            ),
+          fetch: async (_url, init) => {
+            signal = init?.signal;
+            return new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(
+                    new TextEncoder().encode("trip,count\r\n"),
+                  );
+                },
+                cancel() {
+                  cancelled = true;
+                  return Effect.runPromise(Deferred.await(finishCleanup));
+                },
+              }),
+            );
+          },
+        });
+        const csv = yield* client.download(reference);
+        const transfer = yield* Stream.runForEach(
+          csv,
+          () => received.open,
+        ).pipe(Effect.forkChild);
 
-      yield* received.await;
-      yield* TestClock.adjust("30 seconds");
+        yield* received.await;
+        yield* TestClock.adjust("30 seconds");
 
-      const exit = transfer.pollUnsafe();
-      assert.ok(exit, "The idle timeout must end the transfer");
-      assert.ok(Exit.isFailure(exit), "An incomplete CSV must fail");
-      assert.equal(cancelled, true);
-    }).pipe(Effect.provide(TestClock.layer())),
-  );
-});
+        const exit = transfer.pollUnsafe();
+        const aborted = signal?.aborted;
+        yield* Deferred.succeed(finishCleanup, undefined);
+        assert.ok(
+          exit,
+          "The idle timeout must end the transfer before body cancellation completes",
+        );
+        assert.ok(Exit.isFailure(exit), "An incomplete CSV must fail");
+        assert.equal(aborted, true);
+        assert.equal(cancelled, true);
+      }).pipe(Effect.provide(TestClock.layer())),
+    );
+  },
+);
 
 for (const link of ["expired", "rejected", "stalled cleanup"] as const) {
   const knownExpired = link === "expired";

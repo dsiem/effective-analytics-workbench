@@ -5,12 +5,14 @@ import {
   Cause,
   ConfigProvider,
   Console,
+  Deferred,
   Effect,
   Exit,
   Fiber,
   Latch,
   Layer,
 } from "effect";
+import { makeGenieAgentClient } from "@dsiem/genie-client";
 import { FetchHttpClient } from "effect/http";
 import * as TestClock from "effect/testing/TestClock";
 import { withApiErrors } from "../src/api-boundary.js";
@@ -228,3 +230,61 @@ for (const stage of ["request", "body"] as const) {
     );
   }
 }
+
+test(
+  "Agent submission returns the accepted IDs before body cancellation completes",
+  { timeout: 2000 },
+  async () => {
+    const finishCleanup = Deferred.makeUnsafe<void>();
+    let requests = 0;
+    let signal: AbortSignal | null | undefined;
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const service = yield* Workspace;
+        const agent = makeGenieAgentClient({
+          agentId: "space",
+          requestJson: () => Effect.die("Unexpected JSON request"),
+          requestEvents: ({ path, body }, read) =>
+            service.requestEvents(path, body, read),
+        });
+        const submission = yield* agent
+          .submit({ content: "Count trips" })
+          .pipe(Effect.forkChild);
+        yield* TestClock.adjust("1 second");
+        const exit = submission.pollUnsafe();
+        const aborted = signal?.aborted;
+        yield* Deferred.succeed(finishCleanup, undefined);
+        assert.ok(
+          exit,
+          "Agent acceptance must return before body cancellation completes",
+        );
+        assert.equal(aborted, true);
+        return yield* Fiber.join(submission);
+      }).pipe(
+        Effect.provide(workspace),
+        Effect.provideService(FetchHttpClient.Fetch, async (_url, init) => {
+          requests++;
+          signal = init?.signal;
+          return new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    'event: response.created\ndata: {"type":"response.created","response":{"id":"response","conversation_id":"conversation"}}\n\n',
+                  ),
+                );
+              },
+              cancel: () => Effect.runPromise(Deferred.await(finishCleanup)),
+            }),
+          );
+        }),
+        Effect.provide(TestClock.layer()),
+      ),
+    );
+    assert.deepEqual(result, {
+      conversationId: "conversation",
+      responseId: "response",
+    });
+    assert.equal(requests, 1);
+  },
+);

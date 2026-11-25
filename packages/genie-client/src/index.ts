@@ -30,3 +30,4 @@ export {
   GenieResponseError,
 } from "./protocol.js";
 export { GenieQueryFailed, GenieQueryUnavailable } from "./query-result.js";
+export { scopedFetchBody } from "./fetch-body.js";

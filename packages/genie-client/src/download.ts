@@ -10,6 +10,7 @@ import {
   Stream,
 } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
+import { scopedFetchBody } from "./fetch-body.js";
 import { chatPaths, GenieId, type GenieQueryReference } from "./protocol.js";
 
 export type GenieDownloadRequest =
@@ -150,7 +151,7 @@ export const makeGenieDownloadClient = <E, R>(options: {
             body.cancel().catch(() => undefined),
           ).pipe(Effect.timeoutOption("1 second"));
       }
-      return response;
+      return { response, scope };
     },
     Effect.provide(FetchHttpClient.layer),
     Effect.provideService(FetchHttpClient.Fetch, fetch),
@@ -234,13 +235,14 @@ export const makeGenieDownloadClient = <E, R>(options: {
               Date.parse(cached.expiration) <= (yield* Clock.currentTimeMillis);
             const link =
               !cached || expired ? yield* refreshLink(index) : cached;
-            let response = yield* openChunk(link);
-            if (response.status === 401 || response.status === 403) {
-              response = yield* openChunk(yield* refreshLink(index));
-            }
+            const first = yield* openChunk(link);
+            const { response, scope } =
+              first.response.status === 401 || first.response.status === 403
+                ? yield* openChunk(yield* refreshLink(index))
+                : first;
             if (response.status !== 200)
               return yield* storageError(response.status);
-            return response.stream.pipe(
+            return scopedFetchBody(response, scope).pipe(
               Stream.mapError(() => storageError()),
               Stream.filter((bytes) => bytes.length > 0),
               Stream.timeoutOrElse({
