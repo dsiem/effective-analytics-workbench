@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       # Keep this version aligned with @playwright/test in package.json.
-      image: mcr.microsoft.com/playwright:v1.65.0-resolute
+      image: mcr.microsoft.com/playwright:v1.65.1-resolute
       options: --user 1001 --ipc=host
     timeout-minutes: 10
     steps:
