@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Effect, Fiber, Latch, Queue, Stream, SubscriptionRef } from "effect";
+import {
+  Deferred,
+  Effect,
+  Fiber,
+  Latch,
+  Queue,
+  Stream,
+  SubscriptionRef,
+} from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import * as TestClock from "effect/testing/TestClock";
@@ -10,6 +18,74 @@ import { init } from "../src/features/genie/model";
 import { subscriptions } from "../src/features/genie/subscription";
 import { type Context, updateGenie } from "../src/features/genie/update";
 import { ApiClient } from "../src/lib/api-client";
+
+test("the turn deadline aborts an in-flight Genie poll and pauses once", async () => {
+  const operation = { conversationId: "conversation", messageId: "message" };
+  const target = { id: "turn", operation };
+  const generation = 1;
+
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const firstStarted = yield* Latch.make();
+      const stalled = yield* Deferred.make<AbortSignal>();
+      let calls = 0;
+      const httpClient = HttpClient.withScope(
+        HttpClient.make((request, _url, signal) =>
+          Effect.gen(function* () {
+            if (++calls === 1) {
+              yield* firstStarted.open;
+              yield* Effect.sleep("119 seconds");
+              return HttpClientResponse.fromWeb(
+                request,
+                Response.json({
+                  ...operation,
+                  state: "pending",
+                  status: "EXECUTING_QUERY",
+                }),
+              );
+            }
+            yield* Deferred.succeed(stalled, signal);
+            return yield* Effect.never;
+          }),
+        ),
+      );
+      const deps = { generation, waiting: [target] };
+      const polling = yield* subscriptions.geniePoll
+        .dependenciesToStream(deps, () => deps)
+        .pipe(
+          Stream.runCollect,
+          Effect.provideServiceEffect(
+            ApiClient,
+            HttpApiClient.makeWith(AppApi, {
+              httpClient,
+              baseUrl: "http://fixture.test",
+            }),
+          ),
+          Effect.forkChild,
+        );
+
+      yield* firstStarted.await;
+      yield* TestClock.adjust("120 seconds");
+      const signal = yield* Deferred.await(stalled);
+      yield* TestClock.adjust("59 seconds");
+      assert.equal(signal.aborted, false);
+      yield* TestClock.adjust("1 second");
+      assert.equal(signal.aborted, true);
+      assert.deepEqual(yield* Fiber.join(polling), [
+        M.PolledQuestion({
+          ...target,
+          generation,
+          outcome: {
+            state: "paused",
+            stage: "waiting",
+            error:
+              "Genie is taking longer than expected. Resume waiting for this answer.",
+          },
+        }),
+      ]);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+});
 
 test("finishing one restored Genie wait preserves the others' polling cadence", async () => {
   const context: Context = {

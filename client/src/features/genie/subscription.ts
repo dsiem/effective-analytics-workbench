@@ -1,4 +1,4 @@
-import { Clock, Effect, Result, Schema, Stream } from "effect";
+import { Clock, Data, Effect, Result, Schema, Stream } from "effect";
 import { genieAccessHeaders } from "@dsiem/analytics-shared/api";
 import { Subscription } from "foldkit";
 import type { GenieAgentPhase } from "@dsiem/analytics-shared/genie";
@@ -12,6 +12,7 @@ const PollSelection = Schema.Struct({
   waiting: Schema.Array(PollTarget),
 });
 const agentVisibilityGraceMs = 30_000;
+class PollDeadlineExceeded extends Data.TaggedError("PollDeadlineExceeded") {}
 
 function poll(target: typeof PollTarget.Type, generation: number) {
   const complete = (outcome: ReturnType<typeof M.PolledQuestion>["outcome"]) =>
@@ -30,7 +31,6 @@ function poll(target: typeof PollTarget.Type, generation: number) {
     | { readonly step: "first" }
     | {
         readonly step: "next";
-        readonly deadline: number;
         readonly phase: GenieAgentPhase | undefined;
         readonly unresolvedSince: number | undefined;
       }
@@ -39,10 +39,6 @@ function poll(target: typeof PollTarget.Type, generation: number) {
     { step: "first" },
     Effect.fnUntraced(function* (state) {
       if (state.step === "done") return undefined;
-      const deadline =
-        state.step === "first"
-          ? (yield* Clock.currentTimeMillis) + (agent ? 30 * 60_000 : 180_000)
-          : state.deadline;
       if (state.step === "next")
         yield* Effect.sleep(agent ? "5 seconds" : "1 second");
       const polled = yield* read;
@@ -86,24 +82,30 @@ function poll(target: typeof PollTarget.Type, generation: number) {
           done,
         ] as const;
       }
-      if (now >= deadline) {
-        return [
-          pause(
-            "Genie is taking longer than expected. Resume waiting for this answer.",
-          ),
-          done,
-        ] as const;
-      }
       const previous = state.step === "next" ? state.phase : undefined;
       const phase = agent && data.state === "pending" ? data.phase : undefined;
       return [
         phase !== undefined && phase !== previous
           ? complete({ state: "waiting", phase })
           : undefined,
-        { step: "next", deadline, phase, unresolvedSince },
+        { step: "next", phase, unresolvedSince },
       ] as const;
     }),
-  ).pipe(Stream.filter((message) => message !== undefined));
+  ).pipe(
+    Stream.filter((message) => message !== undefined),
+    Stream.interruptWhen(
+      Effect.sleep(agent ? "30 minutes" : "3 minutes").pipe(
+        Effect.andThen(Effect.fail(new PollDeadlineExceeded())),
+      ),
+    ),
+    Stream.catchTag("PollDeadlineExceeded", () =>
+      Stream.succeed(
+        pause(
+          "Genie is taking longer than expected. Resume waiting for this answer.",
+        ),
+      ),
+    ),
+  );
 }
 
 export const subscriptions = Subscription.make<Model, Message, ApiClient>()(
