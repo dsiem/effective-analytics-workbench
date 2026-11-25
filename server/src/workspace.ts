@@ -1,12 +1,21 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { Context, Effect, Layer, Redacted, Schema, Stream } from "effect";
+import {
+  Context,
+  Effect,
+  Layer,
+  Redacted,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
 import {
   FetchHttpClient,
   HttpClient,
   HttpClientRequest,
   type HttpClientResponse,
 } from "effect/http";
+import { scopedFetchBody } from "@dsiem/genie-client";
 import { Credentials } from "@dsiem/sql-warehouse";
 import {
   OperationTimeout,
@@ -101,6 +110,7 @@ export class Workspace extends Context.Service<
         body: unknown,
         read: (
           response: HttpClientResponse.HttpClientResponse,
+          scope: Scope.Closeable,
         ) => Effect.Effect<A, E, R>,
         accept?: "text/event-stream",
       ) =>
@@ -114,6 +124,7 @@ export class Workspace extends Context.Service<
             );
           const token = yield* accessToken;
           return yield* Effect.gen(function* () {
+            const scope = yield* Scope.fork(yield* Scope.Scope);
             const jsonRequest = HttpClientRequest.make(method)(
               `${settings.host.replace(/\/$/, "")}${path}`,
             ).pipe(
@@ -129,7 +140,9 @@ export class Workspace extends Context.Service<
                 : HttpClientRequest.bodyJson(request, body)
             ).pipe(
               Effect.flatMap((request) =>
-                HttpClient.withScope(client).execute(request),
+                HttpClient.withScope(client)
+                  .execute(request)
+                  .pipe(Scope.provide(scope)),
               ),
               Effect.mapError(requestFailure),
             );
@@ -152,9 +165,8 @@ export class Workspace extends Context.Service<
                 }),
               );
             }
-            return response;
+            return yield* read(response, scope);
           }).pipe(
-            Effect.flatMap(read),
             Effect.scoped,
             Effect.provideService(FetchHttpClient.RequestInit, {
               redirect: "error",
@@ -190,7 +202,10 @@ export class Workspace extends Context.Service<
           path,
           "POST",
           body,
-          (response) => read(Stream.mapError(response.stream, requestFailure)),
+          (response, scope) =>
+            read(
+              Stream.mapError(scopedFetchBody(response, scope), requestFailure),
+            ),
           "text/event-stream",
         );
       return { accessToken, request, requestEvents };

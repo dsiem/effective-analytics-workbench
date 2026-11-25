@@ -81,7 +81,8 @@ export const Model = Schema.Struct({
   genieMode: GenieMode,
   genieSelection: Schema.Option(GenieContext),
   turns: History,
-  pollGeneration: Schema.Int,
+  lastPollGeneration: Schema.Int,
+  pollGenerations: Schema.Record(Schema.String, Schema.Int),
   persistenceError: Schema.String,
   clipboard: Schema.String,
 });
@@ -111,7 +112,8 @@ export const init = (): Model => ({
   genieMode: "chat",
   genieSelection: Option.none(),
   turns: [],
-  pollGeneration: 0,
+  lastPollGeneration: 0,
+  pollGenerations: {},
   persistenceError: "",
   clipboard: "",
 });

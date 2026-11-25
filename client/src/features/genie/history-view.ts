@@ -1,14 +1,13 @@
 import { HttpApiClient } from "effect/http-api";
 import { Lexer } from "marked";
 import { AppApi } from "@dsiem/analytics-shared/api";
-import type { GenieReply } from "@dsiem/analytics-shared/genie";
+import type { GenieContext, GenieReply } from "@dsiem/analytics-shared/genie";
 import { filterSummary } from "../../domain/filter-summary";
 import { icon } from "../../ui/icons";
 import { alert, button, type Child, table } from "../../ui/primitives";
 import { markdown } from "./markdown-view";
-import { stoppableOperation, type Turn } from "./model";
+import { type Model, stoppableOperation, type Turn } from "./model";
 import { type H, Message as M } from "./view-messages";
-import type { ViewModel as Model } from "./view-model";
 
 const csvUrl = HttpApiClient.urlBuilder(AppApi).genie.downloadCsv;
 
@@ -167,7 +166,7 @@ function answer(h: H, clipboard: string, reply: GenieReply): Child[] {
   ];
 }
 
-function suggestions(h: H, page: Model["context"]["page"]) {
+function suggestions(h: H, page: GenieContext["page"]) {
   return h.div(
     [h.Class("genie-welcome")],
     [
@@ -322,7 +321,7 @@ function conversationTurn(
 export function history(
   h: H,
   model: Model,
-  page: Model["context"]["page"],
+  page: GenieContext["page"],
   enabled: boolean,
   working: boolean,
 ) {

@@ -99,6 +99,13 @@ const hasOriginalReason = Schema.is(
 );
 const decodeSqlErrorReason = Schema.decodeUnknownSync(SqlErrorReason);
 
+/** Includes timeouts marked nonretryable because a statement may have run. */
+export const isStatementTimeout = ({ reason }: SqlError): boolean =>
+  reason._tag === "StatementTimeoutError" ||
+  (reason._tag === "UnknownError" &&
+    hasOriginalReason(reason.cause) &&
+    reason.cause.reason === "StatementTimeoutError");
+
 export const afterSubmission = (
   error: SqlError,
   statementId?: typeof StatementId.Type,

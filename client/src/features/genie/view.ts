@@ -1,26 +1,39 @@
 import { Dialog, Select, Textarea } from "@foldkit/ui";
 import { Option } from "effect";
 import { defineView } from "foldkit/submodel";
+import type { Filters } from "@dsiem/analytics-shared/filters";
+import type { GenieContext } from "@dsiem/analytics-shared/genie";
 import { filterSummary } from "../../domain/filter-summary";
 import { dialog } from "../../ui/dialog";
 import { icon } from "../../ui/icons";
 import { alert, button, type Child } from "../../ui/primitives";
 import { PanelReturnFocus } from "./focus";
 import { history } from "./history-view";
-import { busy } from "./model";
+import { busy, type Model } from "./model";
 import type { H } from "./view-messages";
 import { Message as M } from "./view-messages";
-import type { ViewModel as Model } from "./view-model";
 
-function header(h: H, model: Model, floating: boolean, working: boolean) {
+type ViewInputs = {
+  readonly mobile: boolean;
+  readonly filters: Filters | null;
+  readonly context: GenieContext;
+};
+
+function header(
+  h: H,
+  model: Model,
+  {
+    floating,
+    modal,
+    working,
+  }: {
+    readonly floating: boolean;
+    readonly modal: boolean;
+    readonly working: boolean;
+  },
+) {
   const title = h.h2(
-    [
-      h.Id(
-        floating && model.mobile
-          ? Dialog.titleId(model.helperDialog)
-          : "genie-title",
-      ),
-    ],
+    [h.Id(modal ? Dialog.titleId(model.helperDialog) : "genie-title")],
     ["Genie"],
   );
   return h.div(
@@ -81,7 +94,11 @@ function header(h: H, model: Model, floating: boolean, working: boolean) {
   );
 }
 
-function scope(h: H, model: Model, context: Model["context"]) {
+function scope(
+  h: H,
+  model: Model,
+  { context, filters }: Pick<ViewInputs, "context" | "filters">,
+) {
   return h.section(
     [
       h.AriaLabel("Explore view for your next question"),
@@ -113,8 +130,8 @@ function scope(h: H, model: Model, context: Model["context"]) {
             : []),
         ],
       ),
-      ...(model.filters
-        ? [filterSummary(h, model.filters)]
+      ...(filters
+        ? [filterSummary(h, filters)]
         : [alert(h, "Correct the page filters before asking Genie.")]),
       h.p(
         [h.Class("muted text-[11px] leading-4 mt-2")],
@@ -132,7 +149,7 @@ function composer(h: H, model: Model, enabled: boolean, working: boolean) {
     [h.Class("genie-composer")],
     [
       h.form(
-        [h.OnSubmit(M.SendQuestion({ question: draft }))],
+        [h.OnSubmit(M.SubmittedQuestion())],
         [
           Textarea.view(
             {
@@ -148,7 +165,7 @@ function composer(h: H, model: Model, enabled: boolean, working: boolean) {
                   h.Maxlength(3500),
                   h.OnKeyDownPreventDefault((key, modifiers) =>
                     key === "Enter" && !modifiers.shiftKey
-                      ? Option.some(M.SendQuestion({ question: draft }))
+                      ? Option.some(M.SubmittedQuestion())
                       : Option.none(),
                   ),
                 ]),
@@ -207,19 +224,25 @@ function composer(h: H, model: Model, enabled: boolean, working: boolean) {
   );
 }
 
-function genie(h: H, model: Model, floating = false) {
-  const context = Option.getOrElse(model.genieSelection, () => model.context);
-  const enabled = model.filters !== null;
+function genie(
+  h: H,
+  model: Model,
+  { mobile, filters, context: pageContext }: ViewInputs,
+  floating = false,
+) {
+  const context = Option.getOrElse(model.genieSelection, () => pageContext);
+  const enabled = filters !== null;
   const working = busy(model);
+  const modal = floating && mobile;
   const content: Child[] = [
-    header(h, model, floating, working),
-    scope(h, model, context),
+    header(h, model, { floating, modal, working }),
+    scope(h, model, { context, filters }),
     history(h, model, context.page, enabled, working),
     composer(h, model, enabled, working),
   ];
   if (!floating) return h.div([h.Class("genie-full")], content);
   const classes = `genie-panel ${model.genieExpanded ? "expanded" : ""}`;
-  if (model.mobile)
+  if (modal)
     return dialog(h, {
       model: model.helperDialog,
       onMessage: (message) => M.GotGenieDialogMessage({ message }),
@@ -242,9 +265,9 @@ function genie(h: H, model: Model, floating = false) {
   );
 }
 
-export const genieView = defineView<Model, typeof M.Type>((model, h) =>
-  genie(h, model),
+export const genieView = defineView<Model, typeof M.Type, ViewInputs>(
+  (model, inputs, h) => genie(h, model, inputs),
 );
-export const genieHelperView = defineView<Model, typeof M.Type>((model, h) =>
-  genie(h, model, true),
+export const genieHelperView = defineView<Model, typeof M.Type, ViewInputs>(
+  (model, inputs, h) => genie(h, model, inputs, true),
 );

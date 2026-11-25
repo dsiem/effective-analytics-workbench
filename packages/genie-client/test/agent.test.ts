@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Effect } from "effect";
+import { Effect, Result, Stream } from "effect";
 import { makeGenieAgentClient } from "../src/index.js";
 
 const pageSize = 4;
+const acceptanceEvent =
+  'event: response.created\r\ndata: {"type":"response.created","response":{"id":"response","conversation_id":"conversation"}}\r\n\r\n';
 const user = (responseId: string) => ({
   id: `${responseId}_input`,
   type: "message",
@@ -43,6 +45,51 @@ const history = (items: ReadonlyArray<{ id: string; type: string }>) => {
   });
   return { client, cursors };
 };
+
+test("Agent submission waits for acceptance on the same connection after a retry hint", async () => {
+  const encode = new TextEncoder();
+  const body = Stream.concat(
+    Stream.make(encode.encode("retry: 1000\r\n\r\n")),
+    Stream.concat(Stream.make(encode.encode(acceptanceEvent)), Stream.never),
+  );
+  let submissions = 0;
+  const client = makeGenieAgentClient({
+    agentId: "space",
+    requestJson: () => Effect.die("Unexpected JSON request"),
+    requestEvents: ({ method }, read) =>
+      Effect.gen(function* () {
+        submissions++;
+        assert.equal(method, "POST");
+        return yield* read(body);
+      }),
+  });
+
+  assert.deepEqual(
+    await Effect.runPromise(
+      client.submit({ content: "Show the latest data" }).pipe(Effect.result),
+    ),
+    Result.succeed({ conversationId: "conversation", responseId: "response" }),
+  );
+  assert.equal(submissions, 1);
+});
+
+test("Agent submission stops parsing at acceptance in a shared chunk", async () => {
+  const bytes = new TextEncoder().encode(
+    `${acceptanceEvent}data: ${"x".repeat(10 * 1024 * 1024)}`,
+  );
+  const client = makeGenieAgentClient({
+    agentId: "space",
+    requestJson: () => Effect.die("Unexpected JSON request"),
+    requestEvents: (_request, read) => read(Stream.make(bytes)),
+  });
+
+  assert.deepEqual(
+    await Effect.runPromise(
+      client.submit({ content: "Show the latest data" }).pipe(Effect.result),
+    ),
+    Result.succeed({ conversationId: "conversation", responseId: "response" }),
+  );
+});
 
 test("polling the current Agent turn leaves old history unread", async () => {
   const older = Array.from({ length: (32 * pageSize) / 2 }, (_, index) => [

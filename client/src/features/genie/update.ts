@@ -1,5 +1,5 @@
 import { Dialog } from "@foldkit/ui";
-import { Option } from "effect";
+import { Option, Record } from "effect";
 import { Command } from "foldkit";
 import { modifyFields } from "foldkit/struct";
 import type { GenieContext, GenieMode } from "@dsiem/analytics-shared/genie";
@@ -27,7 +27,13 @@ export function updateGenie(
       model: modifyFields(model, {
         turns: () => message.turns,
         genieMode: () => message.turns.at(-1)?.mode ?? "chat",
-        pollGeneration: (generation) => generation + 1,
+        lastPollGeneration: (generation) => generation + 1,
+        pollGenerations: () =>
+          Object.fromEntries(
+            message.turns
+              .filter((turn) => turn.state === "waiting")
+              .map(({ id }) => [id, model.lastPollGeneration + 1]),
+          ),
         persistenceError: () => message.persistenceError,
       }),
       commands: message.turns.flatMap((turn) =>
@@ -73,24 +79,8 @@ export function updateGenie(
     SetGenieMode: (message) => ({
       model: modifyFields(model, { genieMode: () => message.mode }),
     }),
-    SendQuestion: (message) => {
-      const question = message.question.trim();
-      if (busy(model) || !question || !context.filters) return { model };
-      return {
-        model,
-        commands: [
-          GenieCommands.CreateQuestion({
-            question,
-            filters: context.filters,
-            context: Option.getOrElse(
-              model.genieSelection,
-              () => context.context,
-            ),
-            ...(model.genieMode === "agent" ? { mode: "agent" as const } : {}),
-          }),
-        ],
-      };
-    },
+    SubmittedQuestion: () => submitQuestion(model, model.genieDraft, context),
+    SendQuestion: ({ question }) => submitQuestion(model, question, context),
     CreatedTurn: (message) => {
       if (busy(model)) return { model };
       const turn = {
@@ -123,7 +113,7 @@ export function updateGenie(
     PolledQuestion: (message) => {
       const turn = model.turns.find(({ id }) => id === message.id);
       if (
-        message.generation !== model.pollGeneration ||
+        message.generation !== model.pollGenerations[message.id] ||
         turn?.state !== "waiting" ||
         turn.operation.conversationId !== message.operation.conversationId ||
         turn.operation.messageId !== message.operation.messageId
@@ -229,6 +219,26 @@ export function updateGenie(
   });
 }
 
+function submitQuestion(
+  model: Model,
+  draft: string,
+  { filters, context }: Context,
+): FeatureUpdate<Model, Message> {
+  const question = draft.trim();
+  if (busy(model) || !question || !filters) return { model };
+  return {
+    model,
+    commands: [
+      GenieCommands.CreateQuestion({
+        question,
+        filters,
+        context: Option.getOrElse(model.genieSelection, () => context),
+        ...(model.genieMode === "agent" ? { mode: "agent" } : {}),
+      }),
+    ],
+  };
+}
+
 export function clearSelection(model: Model): FeatureUpdate<Model, Message> {
   return {
     model: Option.isNone(model.genieSelection)
@@ -266,11 +276,20 @@ function changeTurn(
   ];
   if (next.state === "retrieving" && current.state !== "retrieving")
     commands.push(GenieCommands.RetrieveQuestion({ turn: next }));
+  const startsPolling = next.state === "waiting" && current.state !== "waiting";
+  const generation = startsPolling
+    ? model.lastPollGeneration + 1
+    : model.lastPollGeneration;
   return {
     model: modifyFields(model, {
       turns: () => turns,
-      pollGeneration: (generation) =>
-        next.state === "waiting" ? generation + 1 : generation,
+      lastPollGeneration: () => generation,
+      pollGenerations: (polls) =>
+        startsPolling
+          ? { ...polls, [next.id]: generation }
+          : next.state === "waiting"
+            ? polls
+            : Record.remove(polls, next.id),
     }),
     commands,
   };

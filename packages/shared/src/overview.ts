@@ -1,27 +1,28 @@
 import { Schema } from "effect";
+import { Count } from "./schema.js";
 
 export const Summary = Schema.Struct({
-  trips: Schema.Number,
-  revenue: Schema.Number,
-  avg_fare: Schema.Number,
-  avg_distance: Schema.Number,
-  avg_duration: Schema.Number,
+  trips: Count,
+  revenue: Schema.Finite,
+  avg_fare: Schema.Finite,
+  avg_distance: Schema.Finite,
+  avg_duration: Schema.Finite,
 });
 export const Daily = Schema.Struct({
   day: Schema.String,
-  trips: Schema.Number,
-  revenue: Schema.Number,
+  trips: Count,
+  revenue: Schema.Finite,
 });
 export const Hourly = Schema.Struct({
-  hour: Schema.Number,
-  trips: Schema.Number,
-  avg_fare: Schema.Number,
+  hour: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 23 })),
+  trips: Count,
+  avg_fare: Schema.Finite,
 });
 export const Zone = Schema.Struct({
   zip: Schema.String,
-  trips: Schema.Number,
-  revenue: Schema.Number,
-  avg_fare: Schema.Number,
+  trips: Count,
+  revenue: Schema.Finite,
+  avg_fare: Schema.Finite,
 });
 
 export const Overview = Schema.Struct({

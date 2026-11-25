@@ -16,28 +16,7 @@ import { Warehouse } from "../src/warehouse.js";
 import { Workspace } from "../src/workspace.js";
 import { warehouseFetch } from "./warehouse-fixture.js";
 
-test("the overview API returns numeric aggregates and preserves ZIP strings from inline warehouse rows", async (t) => {
-  const summary = {
-    trips: 4,
-    revenue: 70,
-    avg_fare: 17.5,
-    avg_distance: 2.5,
-    avg_duration: 10,
-  };
-  const daily = [{ day: "2016-01-01", trips: 4, revenue: 70 }];
-  const hourly = [{ hour: 9, trips: 4, avg_fare: 17.5 }];
-  const zones = [{ zip: "01234", trips: 4, revenue: 70, avg_fare: 17.5 }];
-  t.mock.method(
-    globalThis,
-    "fetch",
-    warehouseFetch(async (sql) => {
-      if (sql.includes(" AS avg_duration")) return [summary];
-      if (sql.includes(" AS day,")) return daily;
-      if (sql.includes(" AS hour,")) return hourly;
-      assert.match(sql, / AS zip,/);
-      return zones;
-    }),
-  );
+const analyticsApp = () => {
   const services = Layer.mergeAll(
     Analytics.layer,
     AnalysisRuns.layer,
@@ -62,13 +41,38 @@ test("the overview API returns numeric aggregates and preserves ZIP strings from
       ),
     ),
   );
-  const app = HttpRouter.toWebHandler(
+  return HttpRouter.toWebHandler(
     Routes.pipe(
       Layer.provide(services),
       Layer.provideMerge(HttpServer.layerServices),
     ),
     { disableLogger: true },
   );
+};
+
+test("the overview API returns numeric aggregates and preserves ZIP strings from inline warehouse rows", async (t) => {
+  const summary = {
+    trips: 4,
+    revenue: 70,
+    avg_fare: 17.5,
+    avg_distance: 2.5,
+    avg_duration: 10,
+  };
+  const daily = [{ day: "2016-01-01", trips: 4, revenue: 70 }];
+  const hourly = [{ hour: 9, trips: 4, avg_fare: 17.5 }];
+  const zones = [{ zip: "01234", trips: 4, revenue: 70, avg_fare: 17.5 }];
+  t.mock.method(
+    globalThis,
+    "fetch",
+    warehouseFetch(async (sql) => {
+      if (sql.includes(" AS avg_duration")) return [summary];
+      if (sql.includes(" AS day,")) return daily;
+      if (sql.includes(" AS hour,")) return hourly;
+      assert.match(sql, / AS zip,/);
+      return zones;
+    }),
+  );
+  const app = analyticsApp();
   t.after(app.dispose);
   await Effect.runPromise(
     Effect.gen(function* () {
@@ -100,4 +104,33 @@ test("the overview API returns numeric aggregates and preserves ZIP strings from
       assert.equal((yield* load).queriedAt, "2026-01-01T00:01:01.000Z");
     }).pipe(Effect.provide(TestClock.layer())),
   );
+});
+
+test("a warehouse statement deadline returns the existing timeout response", async (t) => {
+  const respond: typeof globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    assert.equal(request.method, "POST");
+    assert.equal(new URL(request.url).pathname, "/api/2.0/sql/statements");
+    return Response.json({
+      statement_id: "timed-out-statement",
+      status: {
+        state: "FAILED",
+        error: { error_code: "DEADLINE_EXCEEDED" },
+      },
+    });
+  };
+  const fetch = t.mock.method(globalThis, "fetch", respond);
+  const app = analyticsApp();
+  t.after(app.dispose);
+  const response = await app.handler(
+    new Request("http://localhost/api/metadata"),
+  );
+  assert.equal(response.status, 504);
+  assert.deepEqual(await response.json(), {
+    error: {
+      code: "warehouse_timeout",
+      message: "The warehouse query timed out. Try again.",
+    },
+  });
+  assert.equal(fetch.mock.callCount(), 1);
 });

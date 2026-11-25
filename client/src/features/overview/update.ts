@@ -1,9 +1,7 @@
 import { AsyncData, Command } from "foldkit";
 import { taggedStruct } from "foldkit/schema";
 import { modifyFields } from "foldkit/struct";
-import type { Filters } from "@dsiem/analytics-shared/filters";
 import type { FeatureUpdate } from "../../lib/feature-update";
-import { LoadOverview } from "./commands";
 import { Message as M, type Message } from "./messages";
 import { MetricTabs } from "./metric-tabs";
 import type { Model } from "./model";
@@ -11,17 +9,12 @@ import type { Model } from "./model";
 const SelectionInvalidated = taggedStruct("SelectionInvalidated");
 export type Out = typeof SelectionInvalidated.Type;
 
-export function reloadOverview(
-  model: Model,
-  filters: Filters,
-): FeatureUpdate<Model, Message> {
-  const generation = model.loadGeneration + 1;
+export function reloadOverview(model: Model): FeatureUpdate<Model, Message> {
   return {
     model: modifyFields(model, {
-      loadGeneration: () => generation,
+      loadGeneration: (generation) => generation + 1,
       overview: () => AsyncData.Loading(),
     }),
-    commands: [LoadOverview({ generation, filters })],
   };
 }
 

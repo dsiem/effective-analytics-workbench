@@ -22,6 +22,7 @@ export const QuestionSnapshot = Schema.Struct({
 export const PollTarget = Schema.Struct({
   id: Schema.String,
   operation: GenieOperation,
+  generation: Schema.Int,
 });
 
 const PollOutcome = Schema.Union([
@@ -49,12 +50,12 @@ export const messages = {
   ClearSelection: {},
   GenieDraft: { value: Schema.String },
   SetGenieMode: { mode: GenieMode },
+  SubmittedQuestion: {},
   SendQuestion: { question: Schema.String },
   CreatedTurn: { id: Schema.String, ...QuestionSnapshot.fields },
   ChangedTurn: { turn: Turn },
   PolledQuestion: {
     ...PollTarget.fields,
-    generation: Schema.Int,
     outcome: PollOutcome,
   },
   ResumeTurn: { id: Schema.String },

@@ -105,6 +105,41 @@ test("overview charts and browser history work through the runtime", async ({
   ).toBeVisible();
 });
 
+test("Overview cancels pending requests when filters change or the route closes", async ({
+  page,
+}) => {
+  const started: Array<string | null> = [];
+  const cancelled: Array<string | null> = [];
+  page.on("requestfailed", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/overview")
+      cancelled.push(url.searchParams.get("zip"));
+  });
+  await page.route("**/api/overview**", (route) => {
+    const url = new URL(route.request().url());
+    started.push(url.searchParams.get("zip"));
+    if (started.length > 2) return route.fulfill({ json: overview });
+  });
+  await page.route("**/api/trips**", (route) =>
+    route.fulfill(tripPreviewResponse([trip])),
+  );
+
+  await page.goto("/?zip=10001");
+  await expect.poll(() => started).toEqual(["10001"]);
+  await page.getByRole("textbox", { name: "Pickup ZIP code" }).fill("10002");
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await expect.poll(() => started).toEqual(["10001", "10002"]);
+  await expect.poll(() => cancelled).toEqual(["10001"]);
+
+  await page.getByRole("link", { name: "Trip explorer", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Trip records" }),
+  ).toBeVisible();
+  await expect.poll(() => cancelled).toEqual(["10001", "10002"]);
+  await page.getByRole("link", { name: "Trip overview", exact: true }).click();
+  await expect(page.getByText("$600", { exact: true }).first()).toBeVisible();
+});
+
 test("Records browses all 10,000 returned rows without growing the table DOM", async ({
   page,
 }) => {

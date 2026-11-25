@@ -2,10 +2,33 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Schema } from "effect";
 import { GenieInput } from "@dsiem/analytics-shared/genie";
+import { Summary } from "@dsiem/analytics-shared/overview";
 import { SavedView, SavedViewInput } from "@dsiem/analytics-shared/saved-views";
 import { Day } from "@dsiem/analytics-shared/schema";
 import { Filters } from "@dsiem/analytics-shared/filters";
 import { TripSearch } from "@dsiem/analytics-shared/trips";
+
+test("warehouse overview rows require finite measures and nonnegative whole counts", () => {
+  const decode = Schema.decodeUnknownSync(Schema.toCodecStringTree(Summary));
+  const row = {
+    trips: "1",
+    revenue: "-12.50",
+    avg_fare: "-12.50",
+    avg_distance: "2.5",
+    avg_duration: "9",
+  };
+  assert.deepEqual(decode(row), {
+    trips: 1,
+    revenue: -12.5,
+    avg_fare: -12.5,
+    avg_distance: 2.5,
+    avg_duration: 9,
+  });
+  for (const revenue of ["Infinity", "-Infinity", "NaN"])
+    assert.throws(() => decode({ ...row, revenue }));
+  for (const trips of ["-1", "0.5"])
+    assert.throws(() => decode({ ...row, trips }));
+});
 
 test("accepts real historical dates and rejects impossible dates", () => {
   assert.equal(Schema.decodeUnknownSync(Day)("2016-02-29"), "2016-02-29");

@@ -18,14 +18,7 @@ export const Focus = Command.define("Focus", {
   args: { selector: Schema.String },
   messages: [M.CompletedFocus],
   execute: ({ selector }) =>
-    Effect.sleep("20 millis").pipe(
-      Effect.andThen(
-        Effect.sync(() =>
-          document.querySelector<HTMLElement>(selector)?.focus(),
-        ),
-      ),
-      Effect.as(M.CompletedFocus()),
-    ),
+    Dom.focus(selector).pipe(Effect.ignore, Effect.as(M.CompletedFocus())),
 });
 export const FocusAnalysisHeading = Command.define("FocusAnalysisHeading", {
   messages: [M.CompletedFocusAnalysisHeading],

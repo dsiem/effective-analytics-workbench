@@ -12,7 +12,7 @@ const resolver = (
     displayName: "Local Developer",
     userName: "local@example.com",
   },
-  fail = false,
+  failedLookups = 0,
 ) => {
   const paths: string[] = [];
   const user = Effect.runPromise(
@@ -24,7 +24,7 @@ const resolver = (
         request: (path) =>
           Effect.suspend(() => {
             paths.push(path);
-            return fail
+            return paths.length <= failedLookups
               ? Effect.fail(unavailable("workspace", "Unavailable"))
               : Effect.succeed(profile);
           }),
@@ -120,6 +120,20 @@ test("local development uses the workspace display name and caches only the loca
   assert.deepEqual(paths, ["/api/2.0/preview/scim/v2/Me"]);
 });
 
+test("the local profile lookup can recover immediately after a failure", async () => {
+  const { user, paths } = resolver(
+    { DATABRICKS_HOST: "https://workspace.example" },
+    undefined,
+    1,
+  );
+  const resolve = await user;
+  assert.equal(await Effect.runPromise(resolve({})), null);
+  const expected = { name: "Local Developer", email: "local@example.com" };
+  assert.deepEqual(await Effect.runPromise(resolve({})), expected);
+  assert.deepEqual(await Effect.runPromise(resolve({})), expected);
+  assert.equal(paths.length, 2);
+});
+
 test("workspace username is used when the local profile has no display name", async () => {
   const { user } = resolver(
     { DATABRICKS_HOST: "https://workspace.example" },
@@ -145,15 +159,15 @@ for (const config of [
   });
 }
 
-for (const [description, profile, fail] of [
-  ["invalid profile", { applicationId: "service-principal" }, false],
-  ["unavailable workspace", null, true],
+for (const [description, profile, failedLookups] of [
+  ["invalid profile", { applicationId: "service-principal" }, 0],
+  ["unavailable workspace", null, 1],
 ] as const) {
   test(`optional profile lookup tolerates ${description}`, async () => {
     const { user } = resolver(
       { DATABRICKS_HOST: "https://workspace.example" },
       profile,
-      fail,
+      failedLookups,
     );
     assert.equal(await Effect.runPromise((await user)({})), null);
   });

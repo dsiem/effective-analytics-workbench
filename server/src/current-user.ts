@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Schema } from "effect";
 import type { CurrentUser } from "@dsiem/analytics-shared/current-user";
 import { Settings } from "./settings.js";
 import { Workspace } from "./workspace.js";
@@ -19,8 +19,7 @@ const makeCurrentUser = Effect.gen(function* () {
       name: user.displayName?.trim() || user.userName,
       email: user.userName,
     })),
-    Effect.catch(() => Effect.succeed(null)),
-    Effect.cachedWithTTL("5 minutes"),
+    Effect.cachedWithTTL((exit) => (Exit.isSuccess(exit) ? "5 minutes" : 0)),
   );
 
   return (
@@ -34,7 +33,7 @@ const makeCurrentUser = Effect.gen(function* () {
     // principal, not the viewer. Only use /Me for a local developer identity.
     if (settings.clientId || !settings.host || headers["x-forwarded-user"])
       return Effect.succeed(null);
-    return localUser;
+    return localUser.pipe(Effect.orElseSucceed(() => null));
   };
 });
 

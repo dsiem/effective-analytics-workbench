@@ -2,6 +2,10 @@ import { Effect, Queue, Stream } from "effect";
 import { Subscription } from "foldkit";
 import { subscriptions as analysisSubscriptions } from "../features/analysis-runs/subscription";
 import { subscriptions as genieSubscriptions } from "../features/genie/subscription";
+import {
+  pendingOverview,
+  subscriptions as overviewSubscriptions,
+} from "../features/overview/subscription";
 import { subscriptions as tripsSubscriptions } from "../features/trips/subscription";
 import * as Features from "./features";
 import { Message as LayoutMessage } from "./layout";
@@ -71,6 +75,12 @@ export const subscriptions = Subscription.aggregate(
     when: (model) => model.location.route._tag === "AnalysisRuns",
   }),
   Subscription.lift(genieSubscriptions)<Model, Message>(Features.genie),
+  Subscription.lift(overviewSubscriptions)<Model, Message>({
+    read: ({ overviewState, location }) =>
+      pendingOverview(overviewState, location.filters),
+    toParentMessage: Features.overview.toParentMessage,
+    when: (model) => model.location.route._tag === "Overview",
+  }),
   Subscription.lift(tripsSubscriptions)<Model, Message>({
     ...Features.trips,
     when: (model) => model.location.route._tag === "Trips",

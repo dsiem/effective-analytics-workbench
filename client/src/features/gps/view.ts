@@ -14,7 +14,7 @@ import { GpsMount, gpsHostId, type MapData } from "./mount";
 import { EndpointTabs } from "./tabs";
 import { type H, Message as M } from "./view-messages";
 
-export type ViewModel = Model & Pick<MapData, "query" | "filters">;
+type ViewInputs = Pick<MapData, "query" | "filters">;
 
 function mapHeader(
   h: H,
@@ -69,10 +69,11 @@ function mapHeader(
 
 function mapPanel(
   h: H,
-  model: ViewModel,
+  model: Model,
+  { query, filters }: ViewInputs,
   { tabs, activeIndex }: Tabs.RenderInfo<GpsEndpoint>,
 ) {
-  const { query, endpoint, revision, filters } = model;
+  const { endpoint, revision } = model;
   const selected = Option.getOrNull(model.selected);
   const loading = AsyncData.isPending(model.activity);
   const key = frameKey(query, endpoint, selected, revision);
@@ -119,8 +120,8 @@ function mapPanel(
   );
 }
 
-function mapCard(h: H, model: ViewModel) {
-  const analysis = gpsContext(model, model.filters);
+function mapCard(h: H, model: Model, inputs: ViewInputs) {
+  const analysis = gpsContext(model, inputs.filters);
   return card(
     h,
     [
@@ -138,7 +139,7 @@ function mapCard(h: H, model: ViewModel) {
               [],
               [
                 mapHeader(h, model.endpoint, analysis, tabs),
-                mapPanel(h, model, tabs),
+                mapPanel(h, model, inputs, tabs),
               ],
             ),
         },
@@ -170,7 +171,7 @@ function mapCard(h: H, model: ViewModel) {
   );
 }
 
-function gpsMap(h: H, model: ViewModel): Child[] {
+function gpsMap(h: H, model: Model, inputs: ViewInputs): Child[] {
   const heading = title(
     h,
     "Trip hotspots",
@@ -184,9 +185,12 @@ function gpsMap(h: H, model: ViewModel): Child[] {
   if (loadError) return [heading, error(h, loadError, M.Reload())];
   return [
     heading,
-    h.div([h.Class("gps-layout")], [mapCard(h, model), mapInsights(h, model)]),
+    h.div(
+      [h.Class("gps-layout")],
+      [mapCard(h, model, inputs), mapInsights(h, model)],
+    ),
   ];
 }
-export const gpsMapView = defineView<ViewModel, typeof M.Type>((model, h) =>
-  h.div([h.Class("contents")], gpsMap(h, model)),
+export const gpsMapView = defineView<Model, typeof M.Type, ViewInputs>(
+  (model, inputs, h) => h.div([h.Class("contents")], gpsMap(h, model, inputs)),
 );
