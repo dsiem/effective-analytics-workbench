@@ -6,24 +6,19 @@ import type { Model } from "./model";
 import { appliedView } from "./selection";
 import { Message as M } from "./view-messages";
 
-type ViewModel = Pick<
-  Model,
-  "browser" | "selection" | "savedViewBusy" | "savedViewError" | "deleting"
-> & {
+type ViewInputs = {
   readonly filters: Filters;
   readonly canSave: boolean;
 };
 
-export const savedViewsView = defineView<ViewModel, typeof M.Type>(
-  (model, h) => {
-    const { filters } = model;
-    return savedViewBrowser(h, {
+export const savedViewsView = defineView<Model, typeof M.Type, ViewInputs>(
+  (model, { filters, canSave }, h) =>
+    savedViewBrowser(h, {
       ...model.browser,
       selected: appliedView(model, filters),
       customFilters: !sameFilters(filters, {}),
-      canSave: model.canSave,
+      canSave,
       mutationBusy: model.savedViewBusy,
       mutationError: Option.isSome(model.deleting) ? "" : model.savedViewError,
-    });
-  },
+    }),
 );

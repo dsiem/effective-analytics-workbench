@@ -210,8 +210,8 @@ function filters(h: H, model: Model) {
     viewPicker: h.submodel({
       slotId: "saved-views-picker",
       view: savedViewsView,
-      model: {
-        ...model.savedViewsState,
+      model: model.savedViewsState,
+      viewInputs: {
         filters: applied ?? {},
         canSave: !!applied && !hasChanges,
       },
@@ -291,8 +291,8 @@ export function view(model: Model, h: H): Document {
             h.submodel({
               slotId: "overview",
               view: overviewView,
-              model: {
-                ...model.overviewState,
+              model: model.overviewState,
+              viewInputs: {
                 query,
                 filters: applied ?? {},
                 mobile: model.layout.mobile,
@@ -313,7 +313,8 @@ export function view(model: Model, h: H): Document {
             h.submodel({
               slotId: "gpsMap",
               view: gpsMapView,
-              model: { ...model.gpsState, query, filters: applied ?? {} },
+              model: model.gpsState,
+              viewInputs: { query, filters: applied ?? {} },
               toParentMessage: gpsViewMessage,
             }),
           ],
@@ -330,8 +331,8 @@ export function view(model: Model, h: H): Document {
             h.submodel({
               slotId: "genie",
               view: genieView,
-              model: {
-                ...model.genieState,
+              model: model.genieState,
+              viewInputs: {
                 context: pageContext(model),
                 mobile: model.layout.mobile,
                 filters: applied,
@@ -434,8 +435,8 @@ export function view(model: Model, h: H): Document {
               h.submodel({
                 slotId: "genie-helper",
                 view: genieHelperView,
-                model: {
-                  ...model.genieState,
+                model: model.genieState,
+                viewInputs: {
                   context: pageContext(model),
                   mobile: model.layout.mobile,
                   filters: applied,

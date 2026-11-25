@@ -1,5 +1,6 @@
 import { AsyncData } from "foldkit";
 import { defineView } from "foldkit/submodel";
+import type { Filters } from "@dsiem/analytics-shared/filters";
 import type { Overview } from "@dsiem/analytics-shared/overview";
 import { ask } from "../../domain/analysis";
 import { href, queryFor } from "../../domain/filters";
@@ -23,11 +24,22 @@ import {
   zonesChartContext,
 } from "./context";
 import { MetricTabs } from "./metric-tabs";
+import type { Model } from "./model";
 import type { H } from "./view-messages";
 import { Message as M } from "./view-messages";
-import type { ViewModel as Model } from "./view-model";
 
-function overviewData(h: H, model: Model, data: Overview): Child[] {
+type ViewInputs = {
+  readonly query: string;
+  readonly filters: Filters;
+  readonly mobile: boolean;
+};
+
+function overviewData(
+  h: H,
+  model: Model,
+  { query, filters, mobile }: ViewInputs,
+  data: Overview,
+): Child[] {
   const { summary, daily, hourly, zones, queriedAt } = data;
   const series = model.series;
   const dailyTitle =
@@ -121,7 +133,7 @@ function overviewData(h: H, model: Model, data: Overview): Child[] {
                             [
                               chart(h, {
                                 kind: "area",
-                                width: model.mobile ? 400 : 700,
+                                width: mobile ? 400 : 700,
                                 title: dailyTitle,
                                 data: daily.map((row) => ({
                                   label: row.day.slice(5),
@@ -195,7 +207,7 @@ function overviewData(h: H, model: Model, data: Overview): Child[] {
                     ),
                     h.a(
                       [
-                        h.Href(href("/trip-map", model.query)),
+                        h.Href(href("/trip-map", query)),
                         h.Class("btn btn-small"),
                         h.AriaLabel("View pickup map"),
                       ],
@@ -225,7 +237,7 @@ function overviewData(h: H, model: Model, data: Overview): Child[] {
                             href(
                               "/trips",
                               queryFor({
-                                ...model.filters,
+                                ...filters,
                                 zip: zone.zip,
                               }),
                             ),
@@ -275,27 +287,29 @@ function overviewData(h: H, model: Model, data: Overview): Child[] {
   ];
 }
 
-export const overviewView = defineView<Model, typeof M.Type>((model, h) => {
-  const loadingOverview = () => [loading(h)];
-  const loadError = (notice: Parameters<typeof error>[1]) => [
-    error(h, notice, M.Reload()),
-  ];
-  return h.div(
-    [h.Class("contents")],
-    [
-      title(
-        h,
-        "Trip overview",
-        "Trip activity, fares, and pickup patterns at a glance.",
-      ),
-      ...AsyncData.match(model.overview, {
-        onIdle: () => [],
-        onLoading: loadingOverview,
-        onRefreshing: loadingOverview,
-        onFailure: loadError,
-        onStale: ({ error }) => loadError(error),
-        onSuccess: (data) => overviewData(h, model, data),
-      }),
-    ],
-  );
-});
+export const overviewView = defineView<Model, typeof M.Type, ViewInputs>(
+  (model, inputs, h) => {
+    const loadingOverview = () => [loading(h)];
+    const loadError = (notice: Parameters<typeof error>[1]) => [
+      error(h, notice, M.Reload()),
+    ];
+    return h.div(
+      [h.Class("contents")],
+      [
+        title(
+          h,
+          "Trip overview",
+          "Trip activity, fares, and pickup patterns at a glance.",
+        ),
+        ...AsyncData.match(model.overview, {
+          onIdle: () => [],
+          onLoading: loadingOverview,
+          onRefreshing: loadingOverview,
+          onFailure: loadError,
+          onStale: ({ error }) => loadError(error),
+          onSuccess: (data) => overviewData(h, model, inputs, data),
+        }),
+      ],
+    );
+  },
+);
