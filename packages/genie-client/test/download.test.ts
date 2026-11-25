@@ -257,16 +257,22 @@ test("cancels the CSV storage body when it stops delivering bytes", async () => 
   );
 });
 
-for (const knownExpired of [true, false]) {
+for (const link of ["expired", "rejected", "stalled cleanup"] as const) {
+  const knownExpired = link === "expired";
+  const stallsDuringCleanup = link === "stalled cleanup";
   test(
     knownExpired
       ? "refreshes known expired CSV links without attempting storage"
-      : "refreshes a rejected signed CSV link once",
+      : stallsDuringCleanup
+        ? "refreshes a rejected signed CSV link even when body cancellation stalls"
+        : "refreshes a rejected signed CSV link once",
     async () => {
       const fetched: string[] = [];
       const calls: GenieDownloadRequest["kind"][] = [];
+      const cancelStarted = Latch.makeUnsafe();
       let rejectedBodyCancelled = false;
       let rejectedSignal: AbortSignal | undefined;
+      let abortedBeforeCancel = false;
       const client = makeGenieDownloadClient({
         spaceId: "space",
         request: ({ kind }) =>
@@ -304,20 +310,35 @@ for (const knownExpired of [true, false]) {
             new ReadableStream({
               cancel() {
                 rejectedBodyCancelled = true;
+                abortedBeforeCancel = rejectedSignal?.aborted === true;
+                cancelStarted.openUnsafe();
+                return stallsDuringCleanup
+                  ? new Promise<void>(() => undefined)
+                  : undefined;
               },
             }),
             { status: 403 },
           );
         },
       });
-      const csv = await Effect.runPromise(
-        client
-          .download(reference)
-          .pipe(
-            Effect.flatMap((bytes) =>
-              bytes.pipe(Stream.decodeText, Stream.runCollect),
-            ),
+      const readCsv = client
+        .download(reference)
+        .pipe(
+          Effect.flatMap((bytes) =>
+            bytes.pipe(Stream.decodeText, Stream.runCollect),
           ),
+        );
+      const csv = await Effect.runPromise(
+        stallsDuringCleanup
+          ? Effect.gen(function* () {
+              const transfer = yield* Effect.forkChild(readCsv);
+              yield* cancelStarted.await;
+              yield* TestClock.adjust("1 second");
+              assert.deepEqual(calls, ["start", "poll", "chunk"]);
+              assert.equal(abortedBeforeCancel, true);
+              return yield* Fiber.join(transfer);
+            }).pipe(Effect.provide(TestClock.layer()))
+          : readCsv,
       );
 
       assert.deepEqual(calls, ["start", "poll", "chunk"]);

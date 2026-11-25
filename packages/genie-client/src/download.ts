@@ -122,8 +122,8 @@ export const makeGenieDownloadClient = <E, R>(options: {
           : `Genie CSV storage returned HTTP ${status}.`,
     });
 
-  const openChunk = (chunk: typeof Chunk.Type) =>
-    Effect.gen(function* () {
+  const openChunk = Effect.fnUntraced(
+    function* (chunk: typeof Chunk.Type) {
       const url = yield* storageUrl(chunk.external_link);
       const headers = Object.fromEntries(
         Object.entries(chunk.http_headers ?? {}).filter(([name]) =>
@@ -144,20 +144,22 @@ export const makeGenieDownloadClient = <E, R>(options: {
         const body = Option.getOrUndefined(
           HttpClientResponse.toWeb(response),
         )?.body;
-        yield* Effect.promise(async () => {
-          await body?.cancel().catch(() => undefined);
-        }).pipe(Effect.ensuring(Scope.close(scope, Exit.void)));
+        yield* Scope.close(scope, Exit.void);
+        if (body)
+          yield* Effect.promise(() =>
+            body.cancel().catch(() => undefined),
+          ).pipe(Effect.timeoutOption("1 second"));
       }
       return response;
-    }).pipe(
-      Effect.provide(FetchHttpClient.layer),
-      Effect.provideService(FetchHttpClient.Fetch, fetch),
-      Effect.provideService(FetchHttpClient.RequestInit, {
-        credentials: "omit",
-        redirect: "error",
-      }),
-      Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
-    );
+    },
+    Effect.provide(FetchHttpClient.layer),
+    Effect.provideService(FetchHttpClient.Fetch, fetch),
+    Effect.provideService(FetchHttpClient.RequestInit, {
+      credentials: "omit",
+      redirect: "error",
+    }),
+    Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
+  );
 
   const download = (reference: GenieQueryReference) =>
     Effect.gen(function* () {
