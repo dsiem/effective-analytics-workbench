@@ -1,5 +1,13 @@
 import { Schema } from "effect";
 
+export const queryRowsMatchMetadata = (
+  rows: ReadonlyArray<ReadonlyArray<string | null>>,
+  columnCount: number,
+  totalRowCount: number | null | undefined,
+) =>
+  (totalRowCount == null || rows.length <= totalRowCount) &&
+  rows.every((row) => row.length === columnCount);
+
 export type GenieAttachment =
   | {
       readonly kind: "text";

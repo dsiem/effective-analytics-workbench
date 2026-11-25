@@ -1,5 +1,5 @@
 import { Data, Effect, Schema } from "effect";
-import type { GenieAttachment } from "./answer.js";
+import { type GenieAttachment, queryRowsMatchMetadata } from "./answer.js";
 import {
   decode,
   GeniePermissionDenied,
@@ -115,6 +115,18 @@ export const decodeQueryAttachment = (
       });
     }
     const totalRowCount = manifest.total_row_count;
+    const preview = rows ?? [];
+    if (
+      !queryRowsMatchMetadata(
+        preview,
+        manifest.schema.columns.length,
+        totalRowCount,
+      )
+    ) {
+      return yield* new GenieResponseError({
+        cause: new Error("Genie query rows do not match the result metadata"),
+      });
+    }
     const nextChunkIndex = result?.next_chunk_index;
     return {
       kind: "query",
@@ -132,7 +144,7 @@ export const decodeQueryAttachment = (
           ? {}
           : { typeText: column.type_text }),
       })),
-      rows: rows ?? [],
+      rows: preview,
       truncated: manifest.truncated === true,
       ...(totalRowCount === undefined ? {} : { totalRowCount }),
       ...(nextChunkIndex === undefined ? {} : { nextChunkIndex }),

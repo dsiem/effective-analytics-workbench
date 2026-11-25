@@ -1,6 +1,10 @@
 import { Effect, Option, Schema, Stream } from "effect";
 import { Sse } from "effect/encoding";
-import type { GenieAnswer, GenieAttachment } from "./answer.js";
+import {
+  type GenieAnswer,
+  type GenieAttachment,
+  queryRowsMatchMetadata,
+} from "./answer.js";
 import {
   decode,
   GenieId,
@@ -135,7 +139,11 @@ const Table = Schema.Struct({
   ),
   preview_rows: Schema.Array(Schema.Array(Schema.NullOr(Schema.String))),
   total_row_count: Schema.optionalKey(Schema.NullOr(Schema.Natural)),
-});
+}).check(
+  Schema.makeFilter(({ columns, preview_rows, total_row_count }) =>
+    queryRowsMatchMetadata(preview_rows, columns.length, total_row_count),
+  ),
+);
 
 const decodeTable = Schema.decodeUnknownOption(Table);
 const userInput = (item: Item) =>
