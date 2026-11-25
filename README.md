@@ -11,9 +11,11 @@ This project is independently maintained and is not affiliated with or endorsed 
 [Integration patterns](docs/integration.md) ·
 [Reuse the SQL adapter](packages/sql-warehouse/README.md)
 
-![Animated walkthrough that switches the overview chart to fare revenue, asks Genie about the chart, opens a trip with a comment, and reviews a route reliability report.](.github/assets/nyc-taxi-demo.gif)
+![Walkthrough of the fare revenue chart, sorted trips, a fare breakdown with a sample comment, and a route reliability report.](.github/assets/nyc-taxi-demo.gif)
 
-The walkthrough uses synthetic taxi data.
+The walkthrough uses real January 2016 yellow taxi records with fictional
+names and a sample comment. ZIP codes are approximated from taxi zones.
+[NYC Taxi and Limousine Commission trip data](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page)
 
 ## What the example does
 
