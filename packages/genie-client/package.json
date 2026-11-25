@@ -11,6 +11,7 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "workbench-source": "./src/index.ts",
       "import": "./dist/index.js"
     }
   },

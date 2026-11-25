@@ -32,7 +32,7 @@ const api = new URL("../server/src/main.ts", import.meta.url);
 const tsxPackage = new URL("../node_modules/tsx/", import.meta.url);
 const buildWorkspaces = "run build --workspaces --if-present";
 const watchServer =
-  "--conditions=development --import tsx --watch server/src/main.ts --dev";
+  "--conditions=development --conditions=workbench-source --import tsx --watch server/src/main.ts --dev";
 const startClient = "node_modules/vite/bin/vite.js --host 127.0.0.1";
 
 async function writeDevFixture(directory: string) {
