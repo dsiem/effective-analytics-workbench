@@ -137,22 +137,12 @@ const notFound = () =>
   new AnalysisRunNotFound({ message: "This analysis run could not be found." });
 
 const makeAnalysisRuns = Effect.gen(function* () {
-  const { analysisJobId, analysisResultsTable, tripSnapshotTable } =
-    yield* Settings;
+  const { analysisJobId, analysisResultsTable } = yield* Settings;
   const workspace = yield* Workspace;
   const warehouse = yield* Warehouse;
-  const configured =
-    analysisJobId &&
-    analysisResultsTable &&
-    tripSnapshotTable &&
-    Option.isSome(warehouse)
-      ? Effect.succeed(warehouse.value)
-      : Effect.fail(
-          unavailable(
-            "analysis",
-            "Analysis runs are unavailable. Connect the analysis job, warehouse, and results table in the app configuration.",
-          ),
-        );
+  const jobConfigured = analysisJobId
+    ? Effect.void
+    : Effect.fail(unavailable("analysis", "Configure the analysis job."));
 
   const decode =
     <A>(schema: Schema.Decoder<A>) =>
@@ -182,7 +172,7 @@ const makeAnalysisRuns = Effect.gen(function* () {
     const token = createHash("sha256")
       .update(JSON.stringify([analysisJobId, requestId, parameters]))
       .digest("hex");
-    return configured.pipe(
+    return jobConfigured.pipe(
       Effect.andThen(
         workspace.request(`${jobs}/run-now`, "POST", {
           job_id: analysisJobId,
@@ -200,7 +190,7 @@ const makeAnalysisRuns = Effect.gen(function* () {
     );
   };
 
-  const list = configured.pipe(
+  const list = jobConfigured.pipe(
     Effect.andThen(
       workspace.request(
         `${jobs}/runs/list?job_id=${analysisJobId}&limit=${historyLimit}`,
@@ -221,7 +211,7 @@ const makeAnalysisRuns = Effect.gen(function* () {
   );
 
   const lookup = (id: AnalysisRunId) =>
-    configured.pipe(
+    jobConfigured.pipe(
       Effect.andThen(
         workspace.request(
           `${jobs}/runs/get?run_id=${id}&include_resolved_values=true`,
@@ -259,7 +249,12 @@ const makeAnalysisRuns = Effect.gen(function* () {
 
   const readReport = (id: AnalysisRunId) =>
     Effect.gen(function* () {
-      const { sql, queries } = yield* configured;
+      if (Option.isNone(warehouse))
+        return yield* unavailable(
+          "analysis",
+          "Configure the report warehouse.",
+        );
+      const { sql, queries } = warehouse.value;
       const [catalog, schema, table] = analysisResultsTable.split(".");
       if (!catalog || !schema || !table)
         return yield* unavailable(

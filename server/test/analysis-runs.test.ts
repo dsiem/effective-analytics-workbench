@@ -106,35 +106,38 @@ test("analysis runs record the requester across retries, scope history and resul
         throw new Error(`Unexpected request to ${url.pathname}`);
     }
   };
-  const services = Layer.mergeAll(
-    Analytics.layer,
-    AnalysisRuns.layer,
-    Genie.layer,
-    SavedViews.layer,
-    TripComments.layer,
-  ).pipe(
-    Layer.provideMerge(Lakebase.layer),
-    Layer.provideMerge(Warehouse.layer),
-    Layer.provideMerge(Workspace.layer),
-    Layer.provideMerge(Settings.layer),
-    Layer.provide(
-      Layer.succeed(
-        ConfigProvider.ConfigProvider,
-        ConfigProvider.fromEnvRecord({
-          DATABRICKS_HOST: "https://workspace.invalid",
-          DATABRICKS_TOKEN: "fixture",
-          GENIE_SPACE_ID: "fixture-space",
-          DATABRICKS_WAREHOUSE_ID: "warehouse",
-          TRIP_SNAPSHOT_TABLE: "custom.taxi-schema.trips",
-          ANALYSIS_JOB_ID: "456",
-          ANALYSIS_RESULTS_TABLE: "custom.taxi-schema.route_reliability_runs",
-        }),
+  const services = (withReport = true) =>
+    Layer.mergeAll(
+      Analytics.layer,
+      AnalysisRuns.layer,
+      Genie.layer,
+      SavedViews.layer,
+      TripComments.layer,
+    ).pipe(
+      Layer.provideMerge(Lakebase.layer),
+      Layer.provideMerge(Warehouse.layer),
+      Layer.provideMerge(Workspace.layer),
+      Layer.provideMerge(Settings.layer),
+      Layer.provide(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromEnvRecord({
+            DATABRICKS_HOST: "https://workspace.invalid",
+            DATABRICKS_TOKEN: "fixture",
+            GENIE_SPACE_ID: "fixture-space",
+            DATABRICKS_WAREHOUSE_ID: withReport ? "warehouse" : "",
+            TRIP_SNAPSHOT_TABLE: withReport ? "custom.taxi-schema.trips" : "",
+            ANALYSIS_JOB_ID: "456",
+            ANALYSIS_RESULTS_TABLE: withReport
+              ? "custom.taxi-schema.route_reliability_runs"
+              : "",
+          }),
+        ),
       ),
-    ),
-  );
+    );
   const app = HttpRouter.toWebHandler(
     Routes.pipe(
-      Layer.provide(services),
+      Layer.provide(services()),
       Layer.provideMerge(HttpServer.layerServices),
     ),
     { disableLogger: true },
@@ -215,6 +218,24 @@ test("analysis runs record the requester across retries, scope history and resul
   assert.equal(result.status, 200);
   assert.deepEqual(await result.json(), report);
   assert.equal(reads, 1);
+  const jobsOnly = HttpRouter.toWebHandler(
+    Routes.pipe(
+      Layer.provide(services(false)),
+      Layer.provideMerge(HttpServer.layerServices),
+    ),
+    { disableLogger: true },
+  );
+  t.after(jobsOnly.dispose);
+  for (const [path, expected] of [
+    ["", 200],
+    ["/123", 200],
+    ["/123/result", 503],
+  ] as const) {
+    const response = await jobsOnly.handler(
+      new Request(`http://localhost/api/analysis-runs${path}`),
+    );
+    assert.equal(response.status, expected);
+  }
   denyReport = true;
   const denied = await api("/123/result");
   assert.equal(denied.status, 403);
