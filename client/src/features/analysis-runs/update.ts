@@ -1,7 +1,7 @@
 import { DatePicker, Dialog, Tooltip } from "@foldkit/ui";
 import { Option, Result, Schema } from "effect";
 import { AsyncData, Command, type Update } from "foldkit";
-import { AnalysisInput } from "../../../../shared/analysis-runs";
+import { AnalysisInput } from "@dsiem/analytics-shared/analysis-runs";
 import type { ApiClient } from "../../lib/api-client";
 import { isoDay } from "../../lib/format";
 import { empty, pending } from "../../lib/request-state";

@@ -1,7 +1,10 @@
 import { Effect, Schema } from "effect";
 import { Command } from "foldkit";
-import { ApiError, genieAccessHeaders } from "../../../../shared/api";
-import { GenieOperation, genieResultTimeoutMs } from "../../../../shared/genie";
+import { ApiError, genieAccessHeaders } from "@dsiem/analytics-shared/api";
+import {
+  GenieOperation,
+  genieResultTimeoutMs,
+} from "@dsiem/analytics-shared/genie";
 import { request } from "../../lib/api-client";
 import { failure } from "../../lib/command-result";
 import { Message as M, QuestionSnapshot } from "./messages";

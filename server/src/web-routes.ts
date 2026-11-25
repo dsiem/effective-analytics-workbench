@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/http";
-import { pagePaths } from "../../shared/page-paths.js";
+import { pagePaths } from "@dsiem/analytics-shared/page-paths";
 
 const webRoot = resolve("client/dist");
 

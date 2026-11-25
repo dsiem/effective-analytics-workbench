@@ -4,7 +4,7 @@ import { Effect, Fiber, Latch, Queue, Stream, SubscriptionRef } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import * as TestClock from "effect/testing/TestClock";
-import { AppApi } from "../../shared/api";
+import { AppApi } from "@dsiem/analytics-shared/api";
 import { Message as M } from "../src/features/genie/messages";
 import { init } from "../src/features/genie/model";
 import { subscriptions } from "../src/features/genie/subscription";

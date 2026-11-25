@@ -8,7 +8,7 @@ import {
   type AnalysisRunSummary,
   type AnalysisSubmission,
   RouteReliabilityReport,
-} from "../../shared/analysis-runs.js";
+} from "@dsiem/analytics-shared/analysis-runs";
 import {
   AnalysisReportPending,
   AnalysisRunNotFound,

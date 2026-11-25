@@ -8,8 +8,8 @@ import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import { gpsFixture } from "../client/test/gps-fixture.js";
-import type { SavedView } from "../shared/saved-views.js";
-import type { TripSummary } from "../shared/trips.js";
+import type { SavedView } from "@dsiem/analytics-shared/saved-views";
+import type { TripSummary } from "@dsiem/analytics-shared/trips";
 
 const run = promisify(execFile);
 const tripPageCursor = "00000000-0000-4000-8000-000000000000.1";

@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import * as SqlSchema from "effect/sql/SqlSchema";
 import type { Statement } from "effect/sql/Statement";
-import { pageWindow } from "../../shared/cursor-page.js";
+import { pageWindow } from "@dsiem/analytics-shared/cursor-page";
 import {
   SavedView,
   SavedViewCursor,
@@ -9,7 +9,7 @@ import {
   type SavedViewPin,
   type SavedViewSearch,
   type SavedViewsPage,
-} from "../../shared/saved-views.js";
+} from "@dsiem/analytics-shared/saved-views";
 import { SavedViewConflict, SavedViewNotFound } from "./errors.js";
 import { Lakebase, type LakebaseSql, lakebaseFailure } from "./lakebase.js";
 

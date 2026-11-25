@@ -8,8 +8,8 @@ import {
   AnalysisRunReference,
   AnalysisRunSummary,
   RouteReliabilityReport,
-} from "../../../../shared/analysis-runs";
-import { Id } from "../../../../shared/schema";
+} from "@dsiem/analytics-shared/analysis-runs";
+import { Id } from "@dsiem/analytics-shared/schema";
 import { Selection, WeekField } from "./model";
 
 const messages = {

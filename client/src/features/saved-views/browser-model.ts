@@ -1,6 +1,6 @@
 import { Popover } from "@foldkit/ui";
 import { Schema } from "effect";
-import { SavedView, SavedViewsPage } from "../../../../shared/saved-views";
+import { SavedView, SavedViewsPage } from "@dsiem/analytics-shared/saved-views";
 import { empty, request } from "../../lib/request-state";
 
 export const RecentIds = Schema.Array(SavedView.fields.id).check(

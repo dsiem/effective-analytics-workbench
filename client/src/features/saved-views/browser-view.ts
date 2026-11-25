@@ -1,7 +1,7 @@
 import type { Notice } from "../../lib/request-state";
 import { Input, Popover } from "@foldkit/ui";
 import { Option } from "effect";
-import type { SavedView } from "../../../../shared/saved-views";
+import type { SavedView } from "@dsiem/analytics-shared/saved-views";
 import { filterSummary } from "../../domain/filter-summary";
 import { dateLabel } from "../../lib/format";
 import { icon } from "../../ui/icons";

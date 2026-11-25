@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { Effect, Fiber, Queue, Result, Stream, SubscriptionRef } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
-import { AppApi } from "../../shared/api";
+import { AppApi } from "@dsiem/analytics-shared/api";
 import { mapLoads } from "../src/features/gps/load";
 import { dataKey, frameKey } from "../src/features/gps/model";
 import type { MapData } from "../src/features/gps/mount";

@@ -8,8 +8,8 @@ import {
 import type {
   TripComment,
   TripCommentInput,
-} from "../../../shared/trip-comments";
-import type { Trip, TripSnapshot } from "../../../shared/trips";
+} from "@dsiem/analytics-shared/trip-comments";
+import type { Trip, TripSnapshot } from "@dsiem/analytics-shared/trips";
 
 const historicalTrip: TripSnapshot = {
   trip_id: "7b2c6ab2-6f7d-4f8a-a05f-d07e4eb84a19",

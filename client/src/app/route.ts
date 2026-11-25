@@ -1,8 +1,8 @@
 import { Option, Schema } from "effect";
 import { defineRouteUnion } from "foldkit/route";
-import { Filters } from "../../../shared/filters";
-import { pagePaths } from "../../../shared/page-paths";
-import { TripSort } from "../../../shared/trips";
+import { Filters } from "@dsiem/analytics-shared/filters";
+import { pagePaths } from "@dsiem/analytics-shared/page-paths";
+import { TripSort } from "@dsiem/analytics-shared/trips";
 import { filtersFromQuery } from "../domain/filters";
 import { AnalysisRunLink, parseRunLink } from "../features/analysis-runs/model";
 

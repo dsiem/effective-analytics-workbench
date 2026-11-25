@@ -1,8 +1,8 @@
 import { tripDetails, tripPreviewResponse } from "../trip-fixture";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import { gpsFixture } from "../gps-fixture";
-import type { Overview } from "../../../shared/overview";
-import type { Trip } from "../../../shared/trips";
+import type { Overview } from "@dsiem/analytics-shared/overview";
+import type { Trip } from "@dsiem/analytics-shared/trips";
 
 // Deliberately offline review data: production continues to use the warehouse.
 const daily = Array.from({ length: 31 }, (_, index) => {

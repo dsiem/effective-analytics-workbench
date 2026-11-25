@@ -1,8 +1,8 @@
 import { DatePicker } from "@foldkit/ui";
 import { Option } from "effect";
 import { Calendar } from "foldkit";
-import type { Filters } from "../../../../shared/filters";
-import type { DatasetMetadata } from "../../../../shared/dataset";
+import type { Filters } from "@dsiem/analytics-shared/filters";
+import type { DatasetMetadata } from "@dsiem/analytics-shared/dataset";
 import { calendarDay } from "../../lib/format";
 import { init, type Model } from "./model";
 

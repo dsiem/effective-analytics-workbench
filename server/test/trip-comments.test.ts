@@ -6,8 +6,8 @@ import * as Reactivity from "effect/reactivity/Reactivity";
 import {
   TripCommentInput,
   type TripCommentSearch,
-} from "../../shared/trip-comments.js";
-import type { TripSnapshot } from "../../shared/trips.js";
+} from "@dsiem/analytics-shared/trip-comments";
+import type { TripSnapshot } from "@dsiem/analytics-shared/trips";
 import { initializeAppSchema } from "../src/lakebase-schema.js";
 import { lakebaseFixture } from "./lakebase-fixture.js";
 

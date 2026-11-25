@@ -2,7 +2,7 @@ import { Notice } from "../../lib/request-state";
 import { Dialog, Popover } from "@foldkit/ui";
 import { Schema } from "effect";
 import { defineMessageUnion } from "foldkit/message";
-import { SavedView, SavedViewsPage } from "../../../../shared/saved-views";
+import { SavedView, SavedViewsPage } from "@dsiem/analytics-shared/saved-views";
 import { RecentIds, Shortcuts } from "./browser-model";
 
 const messages = {

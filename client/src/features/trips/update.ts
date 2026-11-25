@@ -1,8 +1,8 @@
 import { Dialog } from "@foldkit/ui";
 import { Option } from "effect";
 import { Command } from "foldkit";
-import type { Filters } from "../../../../shared/filters";
-import { tripCommentCountLimit } from "../../../../shared/trip-comments";
+import type { Filters } from "@dsiem/analytics-shared/filters";
+import { tripCommentCountLimit } from "@dsiem/analytics-shared/trip-comments";
 import { syncDialog } from "../../lib/dialog";
 import type { FeatureUpdate } from "../../lib/feature-update";
 import { pending } from "../../lib/request-state";

@@ -1,5 +1,5 @@
 import { Schema, Struct } from "effect";
-import { Filters } from "../../../shared/filters";
+import { Filters } from "@dsiem/analytics-shared/filters";
 export const filtersFromQuery = (query: string | URLSearchParams) => {
   const parsed = Schema.decodeUnknownOption(Filters)(
     Object.fromEntries(

@@ -8,9 +8,9 @@ import {
   type AnalysisRunState,
   AnalysisRunSummary,
   RouteReliabilityReport,
-} from "../../../../shared/analysis-runs";
-import { pagePaths } from "../../../../shared/page-paths";
-import { Id } from "../../../../shared/schema";
+} from "@dsiem/analytics-shared/analysis-runs";
+import { pagePaths } from "@dsiem/analytics-shared/page-paths";
+import { Id } from "@dsiem/analytics-shared/schema";
 import { href } from "../../domain/filters";
 import { Notice, request } from "../../lib/request-state";
 

@@ -15,7 +15,7 @@ import {
   defaultTripLimit,
   TripPage,
   type TripSearch,
-} from "../../shared/trips.js";
+} from "@dsiem/analytics-shared/trips";
 import { Analytics } from "../src/taxi/analytics.js";
 import {
   InvalidRequest,

@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import * as SqlSchema from "effect/sql/SqlSchema";
-import { pageWindow } from "../../shared/cursor-page.js";
-import type { CurrentUser } from "../../shared/current-user.js";
+import { pageWindow } from "@dsiem/analytics-shared/cursor-page";
+import type { CurrentUser } from "@dsiem/analytics-shared/current-user";
 import {
   TripComment,
   type TripCommentCountSearch,
@@ -10,7 +10,7 @@ import {
   type TripCommentInput,
   type TripCommentSearch,
   type TripComments as TripCommentsPage,
-} from "../../shared/trip-comments.js";
+} from "@dsiem/analytics-shared/trip-comments";
 import { InvalidRequest } from "./errors.js";
 import { Lakebase, type LakebaseSql, lakebaseFailure } from "./lakebase.js";
 

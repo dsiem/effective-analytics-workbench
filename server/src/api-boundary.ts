@@ -8,7 +8,7 @@ import {
   RequestValidationErrors,
   serviceErrorSuffixes,
   UpstreamFailureStatus,
-} from "../../shared/api.js";
+} from "@dsiem/analytics-shared/api";
 import type { ServiceError } from "./errors.js";
 
 const isUpstreamFailureStatus = Schema.is(UpstreamFailureStatus);

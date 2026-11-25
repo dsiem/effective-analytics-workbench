@@ -1,13 +1,13 @@
 import { Dialog, Menu } from "@foldkit/ui";
 import { Schema } from "effect";
-import { Filters } from "../../../../shared/filters";
+import { Filters } from "@dsiem/analytics-shared/filters";
 import {
   TripCommentCounts,
   TripCommentCursor,
   TripCommentInput,
   TripComments,
-} from "../../../../shared/trip-comments";
-import { Trip, TripSort, TripSummary } from "../../../../shared/trips";
+} from "@dsiem/analytics-shared/trip-comments";
+import { Trip, TripSort, TripSummary } from "@dsiem/analytics-shared/trips";
 import { Notice, request } from "../../lib/request-state";
 
 export const Sort = TripSort;

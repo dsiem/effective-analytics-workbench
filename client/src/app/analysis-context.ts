@@ -1,4 +1,4 @@
-import type { GenieContext } from "../../../shared/genie";
+import type { GenieContext } from "@dsiem/analytics-shared/genie";
 import { gpsContext } from "../features/gps/context";
 import { overviewContext } from "../features/overview/context";
 import type { Model } from "./model";

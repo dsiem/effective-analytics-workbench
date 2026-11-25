@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
-import type { SavedView, SavedViewInput } from "../../../shared/saved-views";
+import type {
+  SavedView,
+  SavedViewInput,
+} from "@dsiem/analytics-shared/saved-views";
 
 const filters = { from: "2016-01-10", to: "2016-01-20", zip: "10001" };
 const query = new URLSearchParams(filters).toString();

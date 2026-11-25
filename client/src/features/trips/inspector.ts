@@ -1,7 +1,7 @@
 import { Dialog, Textarea } from "@foldkit/ui";
 import type { HtmlBuilder } from "foldkit/html";
 import { defineView } from "foldkit/submodel";
-import type { Coordinates } from "../../../../shared/trips";
+import type { Coordinates } from "@dsiem/analytics-shared/trips";
 import { money } from "../../lib/format";
 import { dialog } from "../../ui/dialog";
 import { icon } from "../../ui/icons";

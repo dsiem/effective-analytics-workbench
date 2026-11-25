@@ -5,7 +5,7 @@ import { AsyncData } from "foldkit";
 import {
   AnalysisRunId,
   type AnalysisRunSummary,
-} from "../../shared/analysis-runs";
+} from "@dsiem/analytics-shared/analysis-runs";
 import { Message as M } from "../src/features/analysis-runs/messages";
 import { init } from "../src/features/analysis-runs/model";
 import {

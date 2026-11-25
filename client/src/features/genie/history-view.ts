@@ -1,7 +1,7 @@
 import { HttpApiClient } from "effect/http-api";
 import { Lexer } from "marked";
-import { AppApi } from "../../../../shared/api";
-import type { GenieReply } from "../../../../shared/genie";
+import { AppApi } from "@dsiem/analytics-shared/api";
+import type { GenieReply } from "@dsiem/analytics-shared/genie";
 import { filterSummary } from "../../domain/filter-summary";
 import { icon } from "../../ui/icons";
 import { alert, button, type Child, table } from "../../ui/primitives";

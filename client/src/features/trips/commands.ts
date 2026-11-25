@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { Command } from "foldkit";
-import { Id } from "../../../../shared/schema";
-import { TripSnapshot } from "../../../../shared/trips";
+import { Id } from "@dsiem/analytics-shared/schema";
+import { TripSnapshot } from "@dsiem/analytics-shared/trips";
 import { request } from "../../lib/api-client";
 import { result } from "../../lib/command-result";
 import { Message as M } from "./messages";

@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import type { HttpServerRequest } from "effect/http";
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api";
-import { AppApi, genieCsvHeaders } from "../../../shared/api.js";
+import { AppApi, genieCsvHeaders } from "@dsiem/analytics-shared/api";
 import { withApiErrors } from "../api-boundary.js";
 import { InvalidRequest, type ServiceError } from "../errors.js";
 import { Genie, type GenieViewer } from "./service.js";

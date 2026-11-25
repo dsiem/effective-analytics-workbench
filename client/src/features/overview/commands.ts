@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { Command } from "foldkit";
-import { Filters } from "../../../../shared/filters";
+import { Filters } from "@dsiem/analytics-shared/filters";
 import { request } from "../../lib/api-client";
 import { result } from "../../lib/command-result";
 import { Message as M } from "./messages";

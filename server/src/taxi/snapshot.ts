@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import type { DatabricksClient } from "@dsiem/sql-warehouse";
-import type { Filters } from "../../../shared/filters.js";
+import type { Filters } from "@dsiem/analytics-shared/filters";
 import { unavailable } from "../errors.js";
 import type { Warehouse } from "../warehouse.js";
 

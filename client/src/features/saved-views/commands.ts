@@ -5,7 +5,7 @@ import {
   SavedView,
   SavedViewCursor,
   SavedViewInput,
-} from "../../../../shared/saved-views";
+} from "@dsiem/analytics-shared/saved-views";
 import { request } from "../../lib/api-client";
 import { result } from "../../lib/command-result";
 import { Message as M } from "./messages";

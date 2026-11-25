@@ -1,4 +1,4 @@
-import type { Filters } from "../../../../shared/filters";
+import type { Filters } from "@dsiem/analytics-shared/filters";
 import type { Model } from "./model";
 export type ViewModel = Model & {
   readonly query: string;

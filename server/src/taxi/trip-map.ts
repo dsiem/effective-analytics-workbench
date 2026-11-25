@@ -1,12 +1,12 @@
 import { Cache, DateTime, Effect, Exit, Schema, Stream } from "effect";
-import type { Filters } from "../../../shared/filters.js";
+import type { Filters } from "@dsiem/analytics-shared/filters";
 import {
   GpsCell,
   type GpsEndpoint,
   type GpsSearch,
   mapCellLimit,
   type TripMap,
-} from "../../../shared/map-dataset.js";
+} from "@dsiem/analytics-shared/map-dataset";
 import { type TaxiSnapshot, tripWhere } from "./snapshot.js";
 
 export const makeTripMap = (taxi: TaxiSnapshot) =>

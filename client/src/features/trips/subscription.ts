@@ -1,7 +1,7 @@
 import { Effect, Option, Schema, Stream } from "effect";
 import { Subscription } from "foldkit";
-import { TripCommentCursor } from "../../../../shared/trip-comments";
-import { TripSummary } from "../../../../shared/trips";
+import { TripCommentCursor } from "@dsiem/analytics-shared/trip-comments";
+import { TripSummary } from "@dsiem/analytics-shared/trips";
 import { type ApiClient, request } from "../../lib/api-client";
 import { failure, result } from "../../lib/command-result";
 import type { Notice } from "../../lib/request-state";

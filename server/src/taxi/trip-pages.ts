@@ -6,7 +6,7 @@ import {
   type TripSearch,
   type TripSort,
   type TripSummary,
-} from "../../../shared/trips.js";
+} from "@dsiem/analytics-shared/trips";
 import {
   InvalidRequest,
   type ServiceUnavailable,

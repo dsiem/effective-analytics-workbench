@@ -1,8 +1,8 @@
 import { Dialog, Menu, Tooltip } from "@foldkit/ui";
 import { Schema } from "effect";
-import { pagePaths } from "../../../shared/page-paths";
-import { CurrentUser } from "../../../shared/current-user";
-import { DatasetMetadata } from "../../../shared/dataset";
+import { pagePaths } from "@dsiem/analytics-shared/page-paths";
+import { CurrentUser } from "@dsiem/analytics-shared/current-user";
+import { DatasetMetadata } from "@dsiem/analytics-shared/dataset";
 import * as AnalysisRuns from "../features/analysis-runs/model";
 import * as Filters from "../features/filters/model";
 import * as Genie from "../features/genie/model";

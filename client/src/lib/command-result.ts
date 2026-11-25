@@ -1,5 +1,5 @@
 import { Effect, Schema, type Scope } from "effect";
-import { ApiError } from "../../../shared/api";
+import { ApiError } from "@dsiem/analytics-shared/api";
 import { AccessDenied, type Notice } from "./request-state";
 import { Idle } from "./idle";
 

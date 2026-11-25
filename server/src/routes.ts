@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect";
 import { HttpMiddleware, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
-import { AppApi } from "../../shared/api.js";
+import { AppApi } from "@dsiem/analytics-shared/api";
 import { AnalysisRuns } from "./analysis-runs.js";
 import {
   ApiNoStoreLive,

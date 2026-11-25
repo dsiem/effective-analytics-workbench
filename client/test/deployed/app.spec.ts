@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, type Page, test } from "@playwright/test";
 import { Schema } from "effect";
-import { SavedViewsPage } from "../../../shared/saved-views";
+import { SavedViewsPage } from "@dsiem/analytics-shared/saved-views";
 
 const pickupDate = process.env.DATABRICKS_APP_TEST_DATE ?? "2016-01-15";
 const date = new URLSearchParams({

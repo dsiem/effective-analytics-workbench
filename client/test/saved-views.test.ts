@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Popover } from "@foldkit/ui";
-import type { SavedView, SavedViewsPage } from "../../shared/saved-views";
+import type {
+  SavedView,
+  SavedViewsPage,
+} from "@dsiem/analytics-shared/saved-views";
 import { Message as M } from "../src/features/saved-views/messages";
 import { init as initBrowser } from "../src/features/saved-views/browser-model";
 import {

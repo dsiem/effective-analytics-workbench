@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Schema } from "effect";
-import { GenieInput } from "../shared/genie.js";
-import { SavedView, SavedViewInput } from "../shared/saved-views.js";
-import { Day } from "../shared/schema.js";
-import { Filters } from "../shared/filters.js";
-import { TripSearch } from "../shared/trips.js";
+import { GenieInput } from "@dsiem/analytics-shared/genie";
+import { SavedView, SavedViewInput } from "@dsiem/analytics-shared/saved-views";
+import { Day } from "@dsiem/analytics-shared/schema";
+import { Filters } from "@dsiem/analytics-shared/filters";
+import { TripSearch } from "@dsiem/analytics-shared/trips";
 
 test("accepts real historical dates and rejects impossible dates", () => {
   assert.equal(Schema.decodeUnknownSync(Day)("2016-02-29"), "2016-02-29");

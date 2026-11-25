@@ -1,7 +1,7 @@
 import { Context, type Duration, Effect, Layer } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
-import { AppApi } from "../../../shared/api.js";
+import { AppApi } from "@dsiem/analytics-shared/api";
 
 const makeClient = Effect.gen(function* () {
   const httpClient = HttpClient.withScope(yield* HttpClient.HttpClient);

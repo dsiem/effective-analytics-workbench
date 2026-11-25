@@ -1,9 +1,9 @@
 import { Context, Effect, Layer } from "effect";
-import type { DatasetMetadata } from "../../../shared/dataset.js";
-import type { Filters } from "../../../shared/filters.js";
-import type { GpsSearch, TripMap } from "../../../shared/map-dataset.js";
-import type { Overview } from "../../../shared/overview.js";
-import type { Trip, TripSearch } from "../../../shared/trips.js";
+import type { DatasetMetadata } from "@dsiem/analytics-shared/dataset";
+import type { Filters } from "@dsiem/analytics-shared/filters";
+import type { GpsSearch, TripMap } from "@dsiem/analytics-shared/map-dataset";
+import type { Overview } from "@dsiem/analytics-shared/overview";
+import type { Trip, TripSearch } from "@dsiem/analytics-shared/trips";
 import type {
   InvalidRequest,
   ServiceUnavailable,
