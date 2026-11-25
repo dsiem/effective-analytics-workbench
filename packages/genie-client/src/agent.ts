@@ -61,19 +61,28 @@ const Acceptance = Schema.fromJsonString(
 );
 
 const readGenieAgentAcceptance = <E>(body: Stream.Stream<Uint8Array, E>) =>
-  body.pipe(
-    Stream.decodeText,
-    Stream.pipeThroughChannel(Sse.decode()),
-    Stream.filter(({ event }) => event === "response.created"),
+  Stream.suspend(() => {
+    let accepted: string | undefined;
+    const parser = Sse.makeParser((event) => {
+      if (event._tag === "Event" && event.event === "response.created")
+        accepted ??= event.data;
+    });
+
+    return body.pipe(
+      Stream.decodeText,
+      Stream.mapEffect((chunk) => {
+        const cause = parser.feed(chunk);
+        return cause === undefined
+          ? Effect.succeed(accepted)
+          : Effect.fail(new GenieResponseError({ cause }));
+      }),
+      Stream.filter((data) => data !== undefined),
+    );
+  }).pipe(
     Stream.runHead,
-    Effect.mapError((cause) =>
-      cause instanceof Sse.SseError || cause instanceof Sse.Retry
-        ? new GenieResponseError({ cause })
-        : cause,
-    ),
-    Effect.flatMap((event) =>
-      Option.isSome(event)
-        ? decode(Acceptance, event.value.data)
+    Effect.flatMap((data) =>
+      Option.isSome(data)
+        ? decode(Acceptance, data.value)
         : Effect.fail(
             new GenieResponseError({
               cause: new Error("Genie stream ended before response.created"),
