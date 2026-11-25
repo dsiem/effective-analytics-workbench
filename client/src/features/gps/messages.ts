@@ -7,7 +7,8 @@ import {
   MapSummary,
 } from "@dsiem/analytics-shared/map-dataset";
 export const messages = {
-  GpsTabs: { message: Tabs.Message },
+  GotGpsTabsMessage: { message: Tabs.Message },
+  CompletedRefreshGps: {},
   LoadedGps: {
     key: Schema.String,
     data: Schema.NullOr(MapSummary),
@@ -20,5 +21,5 @@ export const messages = {
   },
   GpsSelect: { id: Schema.NullOr(Schema.String) },
 };
-export const Message = defineMessageUnion({ Idle: {}, ...messages });
+export const Message = defineMessageUnion(messages);
 export type Message = typeof Message.Type;

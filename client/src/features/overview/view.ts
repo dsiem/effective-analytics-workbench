@@ -1,4 +1,6 @@
+import { AsyncData } from "foldkit";
 import { defineView } from "foldkit/submodel";
+import type { Overview } from "@dsiem/analytics-shared/overview";
 import { ask } from "../../domain/analysis";
 import { href, queryFor } from "../../domain/filters";
 import { compact, money, number } from "../../lib/format";
@@ -25,23 +27,12 @@ import type { H } from "./view-messages";
 import { Message as M } from "./view-messages";
 import type { ViewModel as Model } from "./view-model";
 
-function overview(h: H, model: Model): Child[] {
-  const heading = title(
-    h,
-    "Trip overview",
-    "Trip activity, fares, and pickup patterns at a glance.",
-  );
-  if (model.overview.loading) return [heading, loading(h)];
-  if (model.overview.error)
-    return [heading, error(h, model.overview.error, M.Reload())];
-  const data = model.overview.data;
-  if (!data) return [heading];
+function overviewData(h: H, model: Model, data: Overview): Child[] {
   const { summary, daily, hourly, zones, queriedAt } = data;
   const series = model.series;
   const dailyTitle =
     series === "trips" ? "Trips by pickup date" : "Fare revenue by pickup date";
   return [
-    heading,
     h.div(
       [h.Class("metrics")],
       [
@@ -88,7 +79,8 @@ function overview(h: H, model: Model): Child[] {
                   slotId: "daily-metric",
                   view: MetricTabs.view,
                   model: model.metricTabs,
-                  toParentMessage: (message) => M.MetricTabs({ message }),
+                  toParentMessage: (message) =>
+                    M.GotMetricTabsMessage({ message }),
                   viewInputs: {
                     tabs: ["trips", "revenue"],
                     selectedValue: series,
@@ -283,6 +275,27 @@ function overview(h: H, model: Model): Child[] {
   ];
 }
 
-export const overviewView = defineView<Model, typeof M.Type>((model, h) =>
-  h.div([h.Class("contents")], overview(h, model)),
-);
+export const overviewView = defineView<Model, typeof M.Type>((model, h) => {
+  const loadingOverview = () => [loading(h)];
+  const loadError = (notice: Parameters<typeof error>[1]) => [
+    error(h, notice, M.Reload()),
+  ];
+  return h.div(
+    [h.Class("contents")],
+    [
+      title(
+        h,
+        "Trip overview",
+        "Trip activity, fares, and pickup patterns at a glance.",
+      ),
+      ...AsyncData.match(model.overview, {
+        onIdle: () => [],
+        onLoading: loadingOverview,
+        onRefreshing: loadingOverview,
+        onFailure: loadError,
+        onStale: ({ error }) => loadError(error),
+        onSuccess: (data) => overviewData(h, model, data),
+      }),
+    ],
+  );
+});

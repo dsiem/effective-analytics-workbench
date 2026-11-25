@@ -30,7 +30,7 @@ export type AppRoute = typeof AppRoute.Type;
 export const Location = Schema.Struct({
   route: AppRoute,
   query: Schema.String,
-  filters: Schema.NullOr(Filters),
+  filters: Schema.Option(Filters),
 });
 export type Location = typeof Location.Type;
 

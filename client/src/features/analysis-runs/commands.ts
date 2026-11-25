@@ -1,27 +1,28 @@
-import { Clock, Effect, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { Command, Navigation } from "foldkit";
 import {
   AnalysisInput,
   AnalysisRunId,
 } from "@dsiem/analytics-shared/analysis-runs";
 import { Id } from "@dsiem/analytics-shared/schema";
-import { request } from "../../lib/api-client";
-import { done, failure, result } from "../../lib/command-result";
-import { Message as M } from "./messages";
 import { runHref } from "../../app/route";
+import { request } from "../../lib/api-client";
+import { failure, result } from "../../lib/command-result";
+import { Message as M } from "./messages";
 import { Selection } from "./model";
 
-export const Submit = Command.define("SubmitAnalysisRun", {
+export const SubmitAnalysisRun = Command.define("SubmitAnalysisRun", {
   args: {
     input: AnalysisInput,
-    retryId: Schema.NullOr(Id),
+    retryId: Schema.Option(Id),
     generation: Schema.Int,
   },
   messages: [M.AnalysisSubmitted],
   execute: ({ input, retryId, generation }) =>
     Effect.gen(function* () {
-      const requestId =
-        retryId ?? (yield* Effect.sync(() => crypto.randomUUID()));
+      const requestId = Option.isSome(retryId)
+        ? retryId.value
+        : yield* Effect.sync(() => crypto.randomUUID());
       const submitted = yield* result(
         request((client) =>
           client.analysisRuns.submit({ payload: { input, requestId } }),
@@ -31,7 +32,7 @@ export const Submit = Command.define("SubmitAnalysisRun", {
     }),
 });
 
-export const LoadHistory = Command.define("LoadAnalysisHistory", {
+export const LoadAnalysisHistory = Command.define("LoadAnalysisHistory", {
   args: { generation: Schema.Int },
   messages: [M.LoadedAnalysisHistory],
   execute: ({ generation }) =>
@@ -56,7 +57,7 @@ export const loadStatus = (selection: typeof Selection.Type) =>
     });
   });
 
-export const LoadReport = Command.define("LoadAnalysisReport", {
+export const LoadAnalysisReport = Command.define("LoadAnalysisReport", {
   args: Selection.fields,
   messages: [M.LoadedAnalysisReport],
   execute: (selection) =>
@@ -71,8 +72,11 @@ export const LoadReport = Command.define("LoadAnalysisReport", {
     ),
 });
 
-export const OpenRun = Command.define("OpenAnalysisRun", {
+export const OpenAnalysisRun = Command.define("OpenAnalysisRun", {
   args: { id: AnalysisRunId, query: Schema.String },
-  messages: [M.Idle],
-  execute: ({ id, query }) => done(Navigation.pushUrl(runHref(id, query))),
+  messages: [M.CompletedOpenAnalysisRun],
+  execute: ({ id, query }) =>
+    Navigation.pushUrl(runHref(id, query)).pipe(
+      Effect.as(M.CompletedOpenAnalysisRun()),
+    ),
 });

@@ -1,5 +1,5 @@
 import { Effect, Option, Schema, Stream } from "effect";
-import { Subscription } from "foldkit";
+import { AsyncData, Subscription } from "foldkit";
 import { TripCommentCursor } from "@dsiem/analytics-shared/trip-comments";
 import { TripSummary } from "@dsiem/analytics-shared/trips";
 import { type ApiClient, request } from "../../lib/api-client";
@@ -132,12 +132,14 @@ export const subscriptions = Subscription.make<Model, Message, ApiClient>()(
       { request: Schema.NullOr(DetailRequest) },
       {
         modelToDependencies: ({ inspector, detailLoadGeneration }) => ({
-          request: inspector?.details.loading
-            ? {
-                tripId: inspector.trip.trip_id,
-                generation: detailLoadGeneration,
-              }
-            : null,
+          request:
+            Option.isSome(inspector) &&
+            AsyncData.isPending(inspector.value.details)
+              ? {
+                  tripId: inspector.value.trip.trip_id,
+                  generation: detailLoadGeneration,
+                }
+              : null,
         }),
         dependenciesToStream: ({ request }) =>
           request ? loadDetails(request) : Stream.empty,
@@ -146,15 +148,21 @@ export const subscriptions = Subscription.make<Model, Message, ApiClient>()(
     comments: entry(
       { request: Schema.NullOr(CommentRequest) },
       {
-        modelToDependencies: ({ inspector, commentLoadGeneration }) => ({
-          request: inspector?.comments.read
-            ? {
-                tripId: inspector.trip.trip_id,
-                generation: commentLoadGeneration,
-                cursor: inspector.comments.read.cursor,
-              }
-            : null,
-        }),
+        modelToDependencies: ({ inspector, commentLoadGeneration }) => {
+          const selected = Option.getOrUndefined(inspector);
+          const read =
+            selected && Option.getOrUndefined(selected.comments.read);
+          return {
+            request:
+              selected && read
+                ? {
+                    tripId: selected.trip.trip_id,
+                    generation: commentLoadGeneration,
+                    cursor: Option.getOrNull(read.cursor),
+                  }
+                : null,
+          };
+        },
         dependenciesToStream: ({ request }) =>
           request ? loadComments(request) : Stream.empty,
       },

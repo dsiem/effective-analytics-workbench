@@ -11,6 +11,7 @@ import type {
   RouteReliabilityReport,
   RouteReliabilityRow,
 } from "@dsiem/analytics-shared/analysis-runs";
+import { historyHref, runHref } from "../../app/route";
 import { number } from "../../lib/format";
 import { icon } from "../../ui/icons";
 import {
@@ -23,8 +24,7 @@ import {
 } from "../../ui/primitives";
 import { analysisForm } from "./form-view";
 import { Message as M, type Message } from "./messages";
-import { historyHref, runHref } from "../../app/route";
-import type { Model } from "./model";
+import type { Model, SelectedRun } from "./model";
 
 type H = Builder<Message>;
 type ViewInputs = { readonly query: string };
@@ -49,7 +49,7 @@ function reuseInputs(
     slotId: "reuse-tooltip",
     view: Tooltip.view,
     model: model.reuseTooltip,
-    toParentMessage: (message) => M.ReuseTooltip({ message }),
+    toParentMessage: (message) => M.GotReuseTooltipMessage({ message }),
     viewInputs: {
       anchor: { placement: "top", gap: 8 },
       isDisabled: disabled,
@@ -276,15 +276,14 @@ const weekStart = new Intl.DateTimeFormat(undefined, {
   timeZone: "UTC",
 });
 
-function selectedRun(
-  h: H,
-  model: Model,
-  selected: NonNullable<Model["selected"]>,
-  query: string,
-) {
+function selectedRun(h: H, model: Model, selected: SelectedRun, query: string) {
   const { detail, report } = selected;
-  const run = detail.data;
-  const input = report.data?.input ?? run?.input;
+  const run = Option.getOrUndefined(AsyncData.getData(detail));
+  const detailError = Option.getOrUndefined(AsyncData.getError(detail));
+  const checkingStatus = AsyncData.isPending(detail);
+  const reportData = Option.getOrUndefined(AsyncData.getData(report));
+  const reportError = Option.getOrUndefined(AsyncData.getError(report));
+  const input = reportData?.input ?? run?.input;
   const terminal =
     run?.state === "succeeded" ||
     run?.state === "failed" ||
@@ -318,7 +317,7 @@ function selectedRun(
                 [
                   run
                     ? status(h, run.state)
-                    : detail.loading
+                    : checkingStatus
                       ? "Checking status…"
                       : "Status unavailable",
                 ],
@@ -378,13 +377,13 @@ function selectedRun(
             ),
           ]
         : []),
-      ...(detail.error ? [alert(h, detail.error)] : []),
-      ...((!run && detail.error) || run?.state === "unknown"
+      ...(detailError ? [alert(h, detailError)] : []),
+      ...((!run && detailError) || run?.state === "unknown"
         ? [
             button(h, {
               label: "Check status",
               size: "small",
-              busy: detail.loading,
+              busy: checkingStatus,
               onClick: M.RetryAnalysisStatus(),
             }),
           ]
@@ -404,7 +403,7 @@ function selectedRun(
             ),
           ]
         : []),
-      ...(report.loading
+      ...(AsyncData.isPending(report)
         ? [
             h.p(
               [h.Role("status"), h.Class("muted text-sm")],
@@ -412,12 +411,12 @@ function selectedRun(
             ),
           ]
         : []),
-      ...(report.error
+      ...(reportError
         ? [
             h.div(
               [h.Class("space-y-3")],
               [
-                alert(h, report.error),
+                alert(h, reportError),
                 button(h, {
                   label: "Retry report",
                   size: "small",
@@ -427,7 +426,7 @@ function selectedRun(
             ),
           ]
         : []),
-      ...(report.data
+      ...(reportData
         ? [
             card(h, [
               panelHeader(h, {
@@ -435,7 +434,7 @@ function selectedRun(
                 description:
                   "Up to 50 routes ranked by the size of the change in p90 trip time. A p90 trip time is the time within which 90% of trips finish.",
               }),
-              reportTable(h, report.data),
+              reportTable(h, reportData),
             ]),
           ]
         : []),
@@ -448,8 +447,8 @@ export const analysisRunsView = defineView<Model, Message, ViewInputs>(
     h.div(
       [h.Class("analysis-page")],
       [
-        ...(model.selected
-          ? [selectedRun(h, model, model.selected, query)]
+        ...(Option.isSome(model.selected)
+          ? [selectedRun(h, model, model.selected.value, query)]
           : [
               h.header(
                 [h.Class("page-title")],

@@ -1,4 +1,6 @@
 import { Dialog, Textarea } from "@foldkit/ui";
+import { Option } from "effect";
+import { AsyncData } from "foldkit";
 import type { HtmlBuilder } from "foldkit/html";
 import { defineView } from "foldkit/submodel";
 import type { Coordinates } from "@dsiem/analytics-shared/trips";
@@ -27,11 +29,13 @@ const close = (h: H, label = "Close") =>
     variant: "ghost",
   });
 function inspector(h: H, model: Model) {
-  const { inspector } = model;
+  const inspector = Option.getOrUndefined(model.inspector);
   if (!inspector) return null;
   const { details: tripDetails, comments: thread } = inspector;
-  const trip = tripDetails.data ?? inspector.trip;
-  const details = tripDetails.data?.details;
+  const loadedTrip = Option.getOrUndefined(AsyncData.getData(tripDetails));
+  const loadError = Option.getOrUndefined(AsyncData.getError(tripDetails));
+  const trip = loadedTrip ?? inspector.trip;
+  const details = loadedTrip?.details;
   const location = (point: typeof Coordinates.Type | null) =>
     point
       ? `${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`
@@ -48,7 +52,9 @@ function inspector(h: H, model: Model) {
     "Voided trip",
   ];
   const draft = model.commentDrafts[trip.trip_id];
-  const rows = thread.data?.rows ?? [];
+  const threadData = Option.getOrUndefined(thread.data);
+  const loadingComments = Option.isSome(thread.read);
+  const rows = threadData?.rows ?? [];
   const info = (label: string, value: string) =>
     h.div([], [h.dt([], [label]), h.dd([], [value])]);
   const disclosure = (label: string, children: Child[]) =>
@@ -60,9 +66,9 @@ function inspector(h: H, model: Model) {
       ],
     );
   const comments: Child[] =
-    thread.read !== null && !thread.data
+    loadingComments && !threadData
       ? [loading(h, "Loading comments…")]
-      : thread.error && !thread.data
+      : thread.error && !threadData
         ? [error(h, thread.error, M.LoadComments({ more: false }))]
         : [
             ...(!rows.length
@@ -118,19 +124,18 @@ function inspector(h: H, model: Model) {
               ),
             ),
             ...(thread.error ? [alert(h, thread.error)] : []),
-            ...(thread.data?.nextCursor || thread.error
+            ...(threadData?.nextCursor || thread.error
               ? [
                   button(h, {
-                    label:
-                      thread.read !== null
-                        ? "Loading…"
-                        : thread.error
-                          ? "Retry loading comments"
-                          : "Load older comments",
+                    label: loadingComments
+                      ? "Loading…"
+                      : thread.error
+                        ? "Retry loading comments"
+                        : "Load older comments",
                     onClick: M.LoadComments({
-                      more: !!thread.data?.nextCursor,
+                      more: !!threadData?.nextCursor,
                     }),
-                    disabled: thread.read !== null,
+                    disabled: loadingComments,
                     className: " w-full mt-4",
                   }),
                 ]
@@ -138,7 +143,7 @@ function inspector(h: H, model: Model) {
           ];
   return dialog(h, {
     model: model.inspectorDialog,
-    onMessage: (message) => M.InspectorDialog({ message }),
+    onMessage: (message) => M.GotInspectorDialogMessage({ message }),
     className: "dialog-panel sheet trip-inspector",
     children: [
       close(h),
@@ -193,7 +198,7 @@ function inspector(h: H, model: Model) {
                     : []),
                 ],
               ),
-              ...(tripDetails.loading
+              ...(AsyncData.isPending(tripDetails)
                 ? [
                     h.p(
                       [h.Role("status"), h.Class("muted text-sm")],
@@ -201,9 +206,9 @@ function inspector(h: H, model: Model) {
                     ),
                   ]
                 : []),
-              ...(tripDetails.error
+              ...(loadError
                 ? [
-                    alert(h, tripDetails.error),
+                    alert(h, loadError),
                     button(h, {
                       label: "Retry loading trip details",
                       onClick: M.RetryTripDetails(),
@@ -320,9 +325,9 @@ function inspector(h: H, model: Model) {
           button(h, {
             type: "submit",
             variant: "primary",
-            disabled: !!model.postingTripId || !draft?.body.trim(),
+            disabled: Option.isSome(model.postingTripId) || !draft?.body.trim(),
             label:
-              model.postingTripId === trip.trip_id
+              Option.getOrUndefined(model.postingTripId) === trip.trip_id
                 ? "Posting…"
                 : "Post comment",
           }),

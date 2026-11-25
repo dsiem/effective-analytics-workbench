@@ -1,5 +1,4 @@
 import { Notice } from "../lib/request-state";
-import { Dialog, Menu, Tooltip } from "@foldkit/ui";
 import { Schema } from "effect";
 import { Calendar } from "foldkit";
 import { defineMessageUnion } from "foldkit/message";
@@ -12,36 +11,33 @@ import * as Gps from "../features/gps/messages";
 import * as Overview from "../features/overview/messages";
 import * as SavedViews from "../features/saved-views/messages";
 import * as Trips from "../features/trips/messages";
-import { ThemePreference } from "./theme";
+import * as Layout from "./layout";
+import * as Navigation from "./navigation";
+import * as Theme from "./theme";
 export const Message = defineMessageUnion({
-  Idle: {},
   LoadPage: {},
-  CloseNavigation: {},
-  NavigationDialog: { message: Dialog.Message },
-  Navigated: { path: Schema.String, query: Schema.String },
-  Navigate: { href: Schema.String, external: Schema.Boolean },
+  CompletedFocus: {},
+  CompletedFocusAnalysisHeading: {},
+  GotLayoutMessage: { message: Layout.Message },
+  GotNavigationMessage: { message: Navigation.Message },
+  GotThemeMessage: { message: Theme.Message },
   Booted: {
     sidebar: Schema.Boolean,
     mobile: Schema.Boolean,
-    themePreference: ThemePreference,
+    themePreference: Theme.ThemePreference,
   },
-  Resized: { mobile: Schema.Boolean },
-  ToggleSidebar: {},
-  ThemeMenu: { message: Menu.Message },
-  SystemThemeChanged: {},
-  Tooltip: { id: Schema.String, message: Tooltip.Message },
   LoadedMetadata: {
     data: Schema.NullOr(DatasetMetadata),
     error: Notice,
     today: Calendar.CalendarDate,
   },
   LoadedUser: { user: Schema.NullOr(CurrentUser) },
-  Filters: { message: Filters.Message },
-  Overview: { message: Overview.Message },
-  Trips: { message: Trips.Message },
-  SavedViews: { message: SavedViews.Message },
-  Genie: { message: Genie.Message },
-  Gps: { message: Gps.Message },
-  AnalysisRuns: { message: AnalysisRuns.Message },
+  GotFiltersMessage: { message: Filters.Message },
+  GotOverviewMessage: { message: Overview.Message },
+  GotTripsMessage: { message: Trips.Message },
+  GotSavedViewsMessage: { message: SavedViews.Message },
+  GotGenieMessage: { message: Genie.Message },
+  GotGpsMessage: { message: Gps.Message },
+  GotAnalysisRunsMessage: { message: AnalysisRuns.Message },
 });
 export type Message = typeof Message.Type;

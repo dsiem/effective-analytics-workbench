@@ -38,7 +38,8 @@ const PollOutcome = Schema.Union([
 
 export const messages = {
   CloseGenie: {},
-  GenieDialog: { message: Dialog.Message },
+  MountedPanelReturnFocus: {},
+  GotGenieDialogMessage: { message: Dialog.Message },
   RestoredConversation: { turns: History, persistenceError: Schema.String },
   OpenGenie: {
     context: Schema.NullOr(GenieContext),
@@ -66,5 +67,5 @@ export const messages = {
   CopiedSql: { text: Schema.String },
 };
 
-export const Message = defineMessageUnion({ Idle: {}, ...messages });
+export const Message = defineMessageUnion(messages);
 export type Message = typeof Message.Type;

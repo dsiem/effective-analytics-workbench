@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Popover } from "@foldkit/ui";
+import { AsyncData } from "foldkit";
 import type {
   SavedView,
   SavedViewsPage,
@@ -32,13 +33,13 @@ const row = (index: number): SavedView => ({
 const opened = () =>
   update(
     init(),
-    M.SavedViewsPicker({ message: Popover.Message.RequestedOpen() }),
+    M.GotSavedViewsPickerMessage({ message: Popover.Message.RequestedOpen() }),
     context,
   ).model;
 const openedBrowser = () =>
   updateBrowser(
     initBrowser(),
-    M.SavedViewsPicker({ message: Popover.Message.RequestedOpen() }),
+    M.GotSavedViewsPickerMessage({ message: Popover.Message.RequestedOpen() }),
   ).model;
 const result = (
   version: number,
@@ -94,11 +95,11 @@ test("closing and reopening cannot accept a previous session's search or shortcu
   ).model;
   const closed = updateBrowser(
     first,
-    M.SavedViewsPicker({ message: Popover.Message.RequestedClose() }),
+    M.GotSavedViewsPickerMessage({ message: Popover.Message.RequestedClose() }),
   ).model;
   const reopened = updateBrowser(
     closed,
-    M.SavedViewsPicker({ message: Popover.Message.RequestedOpen() }),
+    M.GotSavedViewsPickerMessage({ message: Popover.Message.RequestedOpen() }),
   ).model;
   const late = updateBrowser(
     reopened,
@@ -145,7 +146,8 @@ test("a failed continuation keeps results and its retry cursor, and a successful
     visibleSavedViews(failed).map((entry) => entry.id),
     [row(1).id],
   );
-  assert.deepEqual(failed.savedViews.data?.nextCursor, cursor);
+  assert.ok(AsyncData.isStale(failed.savedViews));
+  assert.deepEqual(failed.savedViews.data.nextCursor, cursor);
   const retry = updateBrowser(failed, M.LoadSavedViews({ more: true })).model;
   const loaded = updateBrowser(
     retry,
@@ -194,14 +196,11 @@ test("shortcuts are bounded, deduplicate pinned recents, and stay unavailable un
     ...row(index),
     pinned: true,
   }));
+  const data = { rows: pins, recents: [{ ...row(0), pinned: true }, row(30)] };
   const model = {
     ...openedBrowser(),
     recentIds: [row(0).id, row(30).id],
-    shortcuts: {
-      loading: false,
-      error: "",
-      data: { rows: pins, recents: [{ ...row(0), pinned: true }, row(30)] },
-    },
+    shortcuts: AsyncData.succeed(data),
   };
   assert.deepEqual(
     visibleSavedViews(model).map((entry) => entry.id),
@@ -210,14 +209,14 @@ test("shortcuts are bounded, deduplicate pinned recents, and stay unavailable un
   assert.deepEqual(
     visibleSavedViews({
       ...model,
-      shortcuts: { ...model.shortcuts, loading: true },
+      shortcuts: AsyncData.Refreshing({ data }),
     }),
     [],
   );
   assert.deepEqual(
     visibleSavedViews({
       ...model,
-      shortcuts: { ...model.shortcuts, error: "Unavailable" },
+      shortcuts: AsyncData.Stale({ data, error: "Unavailable" }),
     }),
     [],
   );

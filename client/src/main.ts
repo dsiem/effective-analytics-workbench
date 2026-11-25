@@ -1,7 +1,8 @@
 import { Option } from "effect";
 import { Runtime, Url } from "foldkit";
 import { subscriptions } from "./app/browser";
-import { Message } from "./app/message";
+import * as Features from "./app/features";
+import { Message as NavigationMessage } from "./app/navigation";
 import { Model } from "./app/model";
 import { init, update } from "./app/update";
 import { view } from "./app/view";
@@ -19,18 +20,22 @@ Runtime.run(
     container: document.getElementById("root"),
     routing: {
       onUrlRequest: (request) =>
-        Message.Navigate({
-          href:
-            request._tag === "Internal"
-              ? Url.toString(request.url)
-              : request.href,
-          external: request._tag === "External",
-        }),
+        Features.navigation.toParentMessage(
+          NavigationMessage.Navigate({
+            href:
+              request._tag === "Internal"
+                ? Url.toString(request.url)
+                : request.href,
+            external: request._tag === "External",
+          }),
+        ),
       onUrlChange: (url) =>
-        Message.Navigated({
-          path: url.pathname,
-          query: Option.getOrElse(url.search, () => "").replace(/^\?/, ""),
-        }),
+        Features.navigation.toParentMessage(
+          NavigationMessage.Navigated({
+            path: url.pathname,
+            query: Option.getOrElse(url.search, () => "").replace(/^\?/, ""),
+          }),
+        ),
     },
   }),
 );

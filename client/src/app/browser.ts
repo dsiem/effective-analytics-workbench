@@ -4,9 +4,10 @@ import { subscriptions as analysisSubscriptions } from "../features/analysis-run
 import { subscriptions as genieSubscriptions } from "../features/genie/subscription";
 import { subscriptions as tripsSubscriptions } from "../features/trips/subscription";
 import * as Features from "./features";
-import { Message as M, type Message } from "./message";
+import { Message as LayoutMessage } from "./layout";
+import type { Message } from "./message";
 import type { Model } from "./model";
-import { systemThemeQuery } from "./theme";
+import { Message as ThemeMessage, systemThemeQuery } from "./theme";
 
 const appSubscriptions = Subscription.make<Model, Message>()((entry) => ({
   browser: entry(
@@ -23,15 +24,30 @@ const appSubscriptions = Subscription.make<Model, Message>()((entry) => ({
                   event.key.toLowerCase() === "b"
                 ) {
                   event.preventDefault();
-                  Queue.offerUnsafe(queue, M.ToggleSidebar());
+                  Queue.offerUnsafe(
+                    queue,
+                    Features.layout.toParentMessage(
+                      LayoutMessage.ToggleSidebar(),
+                    ),
+                  );
                 }
               };
               const media = matchMedia("(max-width: 767px)");
               const resize = () =>
-                Queue.offerUnsafe(queue, M.Resized({ mobile: media.matches }));
+                Queue.offerUnsafe(
+                  queue,
+                  Features.layout.toParentMessage(
+                    LayoutMessage.Resized({ mobile: media.matches }),
+                  ),
+                );
               const themeMedia = matchMedia(systemThemeQuery);
               const themeChanged = () =>
-                Queue.offerUnsafe(queue, M.SystemThemeChanged());
+                Queue.offerUnsafe(
+                  queue,
+                  Features.theme.toParentMessage(
+                    ThemeMessage.SystemThemeChanged(),
+                  ),
+                );
               window.addEventListener("keydown", keydown);
               media.addEventListener("change", resize);
               themeMedia.addEventListener("change", themeChanged);

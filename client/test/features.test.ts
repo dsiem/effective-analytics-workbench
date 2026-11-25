@@ -4,11 +4,12 @@ import { Dialog } from "@foldkit/ui";
 import { Effect, Option, Schema, Stream } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
-import { Url } from "foldkit";
+import { AsyncData, Url } from "foldkit";
 import { given, message, model, story } from "foldkit/story";
 import { AppApi } from "@dsiem/analytics-shared/api";
 import { TripCommentInput } from "@dsiem/analytics-shared/trip-comments";
 import { Message as AppMessage } from "../src/app/message";
+import { Message as NavigationMessage } from "../src/app/navigation";
 import * as Features from "../src/app/features";
 import { init, update } from "../src/app/update";
 import { overviewViewMessage } from "../src/app/view-messages";
@@ -38,6 +39,13 @@ import { tripSummaryFor } from "./trip-fixture";
 const open = (path: string) =>
   init(Option.getOrThrow(Url.fromString(`http://localhost${path}`)));
 const app = (path: string) => open(path).model;
+
+const navigatedTo = (
+  location: Pick<
+    ReturnType<typeof NavigationMessage.Navigated>,
+    "path" | "query"
+  >,
+) => Features.navigation.toParentMessage(NavigationMessage.Navigated(location));
 
 function runRequest(
   load: ReturnType<typeof init>,
@@ -117,7 +125,10 @@ test("view intents are translated by the shell with their analysis scope intact"
     ),
   );
   assert.equal(changed.model.genieState.genieOpen, true);
-  assert.deepEqual(changed.model.genieState.genieSelection, context);
+  assert.deepEqual(
+    changed.model.genieState.genieSelection,
+    Option.some(context),
+  );
   assert.equal(changed.model.genieState.genieDraft, "Explain these fares");
   const picked = update(
     app("/trip-map"),
@@ -130,7 +141,7 @@ test("view intents are translated by the shell with their analysis scope intact"
   );
   const navigated = update(
     picked.model,
-    AppMessage.Navigated({ path: "/trip-map", query: "zip=10019" }),
+    navigatedTo({ path: "/trip-map", query: "zip=10019" }),
   );
   assert.equal(navigated.model.filtersState.filterDraft.zip, "10019");
 });
@@ -177,7 +188,7 @@ test("Records completes an empty trip page", async () => {
 test("returning to a filter ignores batches and errors from its original stream", () => {
   const opened = open("/trips?zip=10001");
   const visit = (zip: string) =>
-    AppMessage.Navigated({ path: "/trips", query: `zip=${zip}` });
+    navigatedTo({ path: "/trips", query: `zip=${zip}` });
   const changed = update(opened.model, visit("10002"));
   const returned = update(changed.model, visit("10001"));
   const data = { rows: [tripSummaryFor(trip)], hasMore: false };
@@ -228,7 +239,7 @@ test("returning to a filter ignores batches and errors from its original stream"
 test("returning to an Overview filter keeps the fresh summary when the original load fails", async () => {
   const opened = open("/?zip=10001");
   const visit = (zip: string) =>
-    AppMessage.Navigated({ path: "/", query: `zip=${zip}` });
+    navigatedTo({ path: "/", query: `zip=${zip}` });
   const changed = update(opened.model, visit("10002"));
   const returned = update(changed.model, visit("10001"));
   const data = {
@@ -252,8 +263,7 @@ test("returning to an Overview filter keeps the fresh summary when the original 
     message(fresh),
     message(stale),
     model(({ overviewState }) => {
-      assert.equal(overviewState.overview.error, "");
-      assert.deepEqual(overviewState.overview.data, data);
+      assert.deepEqual(overviewState.overview, AsyncData.succeed(data));
     }),
   );
 });
@@ -293,7 +303,11 @@ test("reopening the same trip keeps fresh comments when the original list arrive
     message(stale),
     model(({ tripsState }) => {
       assert.deepEqual(
-        tripsState.inspector?.comments.data?.rows.map(({ body }) => body),
+        Option.getOrUndefined(
+          tripsState.inspector.pipe(
+            Option.flatMap((inspector) => inspector.comments.data),
+          ),
+        )?.rows.map(({ body }) => body),
         ["Current note"],
       );
     }),
@@ -370,17 +384,21 @@ test("trip details ignore an earlier selection and retry independently", () => {
     retry.tripsState.commentLoadGeneration,
     opened.tripsState.commentLoadGeneration,
   );
-  assert.equal(retry.tripsState.inspector?.details.loading, true);
   assert.deepEqual(
-    send(retry, reply(retry, other)).tripsState.inspector?.details.data,
-    other,
+    Option.getOrUndefined(retry.tripsState.inspector)?.details,
+    AsyncData.Loading(),
+  );
+  assert.deepEqual(
+    Option.getOrUndefined(send(retry, reply(retry, other)).tripsState.inspector)
+      ?.details,
+    AsyncData.succeed(other),
   );
 });
 
-test("an idle message keeps the current model reference", () => {
+test("a completed focus command keeps the current model reference", () => {
   const initial = app("/");
-  const result = update(initial, AppMessage.Idle());
-  assert.ok(result.model === initial, "Idle returned a new model");
+  const result = update(initial, AppMessage.CompletedFocus());
+  assert.ok(result.model === initial, "the completion returned a new model");
   assert.deepEqual(result.commands, []);
 });
 
@@ -389,9 +407,11 @@ test("a standalone trip feature closes its inspector and ignores late comments",
   assert.equal(opened.model.inspectorDialog.isOpen, true);
   const closed = updateTrips(
     opened.model,
-    TripMessage.InspectorDialog({ message: Dialog.Message.RequestedClose() }),
+    TripMessage.GotInspectorDialogMessage({
+      message: Dialog.Message.RequestedClose(),
+    }),
   );
-  assert.equal(closed.model.inspector, null);
+  assert.ok(Option.isNone(closed.model.inspector));
   assert.equal(closed.model.inspectorDialog.isOpen, false);
   assert.ok(closed.commands?.some((command) => command.name === "CloseDialog"));
   const late = updateTrips(
@@ -403,7 +423,7 @@ test("a standalone trip feature closes its inspector and ignores late comments",
       error: "",
     }),
   );
-  assert.equal(late.model.inspector, null);
+  assert.ok(Option.isNone(late.model.inspector));
   assert.equal(late.model.inspectorDialog.isOpen, false);
 });
 
@@ -412,11 +432,8 @@ test("navigation retains the trip feature's dialog cleanup commands", () => {
     app("/trips"),
     Features.trips.toParentMessage(TripMessage.InspectTrip({ trip })),
   );
-  const navigated = update(
-    opened.model,
-    AppMessage.Navigated({ path: "/", query: "" }),
-  );
-  assert.equal(navigated.model.tripsState.inspector, null);
+  const navigated = update(opened.model, navigatedTo({ path: "/", query: "" }));
+  assert.ok(Option.isNone(navigated.model.tripsState.inspector));
   assert.equal(navigated.model.tripsState.inspectorDialog.isOpen, false);
   assert.ok(
     navigated.commands?.some((command) => command.name === "CloseDialog"),
@@ -444,7 +461,7 @@ test("sort URLs survive reload and history; saved views restore global scope wit
   );
   const arrived = update(
     sorted.model,
-    AppMessage.Navigated({ path: "/trips", query: "zip=10001&sort=distance" }),
+    navigatedTo({ path: "/trips", query: "zip=10001&sort=distance" }),
   );
   assert.equal(
     arrived.model.tripsState.loadGeneration,
@@ -452,7 +469,7 @@ test("sort URLs survive reload and history; saved views restore global scope wit
   );
   const back = update(
     sorted.model,
-    AppMessage.Navigated({ path: "/trips", query: "zip=10001&sort=fare" }),
+    navigatedTo({ path: "/trips", query: "zip=10001&sort=fare" }),
   );
   assert.equal(tripLoad(back)?.sort, "fare");
   const applied = update(
@@ -488,7 +505,7 @@ test("sort URLs survive reload and history; saved views restore global scope wit
   );
   const restored = update(
     back.model,
-    AppMessage.Navigated({ path: "/trips", query: "from=2016-01-01" }),
+    navigatedTo({ path: "/trips", query: "from=2016-01-01" }),
   );
   assert.equal(tripLoad(restored)?.sort, "newest");
   assert.equal(restored.model.filtersState.filterDraft.from, "2016-01-01");
@@ -635,19 +652,22 @@ test("comment-count denial needs an explicit retry and uses the current window",
 
 test("analysis links distinguish valid, malformed, and absent run IDs", () => {
   const linked = app("/analysis?zip=invalid&run=123&run=invalid");
-  assert.equal(linked.analysisRunsState.selected?.id, 123);
+  assert.equal(
+    Option.getOrUndefined(linked.analysisRunsState.selected)?.id,
+    123,
+  );
   assert.equal(linked.analysisRunsState.invalidLink, false);
   const malformed = update(
     linked,
-    AppMessage.Navigated({ path: "/analysis", query: "run=01" }),
+    navigatedTo({ path: "/analysis", query: "run=01" }),
   ).model;
-  assert.equal(malformed.analysisRunsState.selected, null);
+  assert.ok(Option.isNone(malformed.analysisRunsState.selected));
   assert.equal(malformed.analysisRunsState.invalidLink, true);
   const absent = update(
     malformed,
-    AppMessage.Navigated({ path: "/analysis", query: "" }),
+    navigatedTo({ path: "/analysis", query: "" }),
   ).model;
-  assert.equal(absent.analysisRunsState.selected, null);
+  assert.ok(Option.isNone(absent.analysisRunsState.selected));
   assert.equal(absent.analysisRunsState.invalidLink, false);
 });
 
@@ -671,10 +691,12 @@ test("saved views own editor dismissal and prevent closing an in-flight save", (
   );
   for (const message of [
     SavedMessage.CloseSavedView(),
-    SavedMessage.SavedViewDialog({ message: Dialog.Message.RequestedClose() }),
+    SavedMessage.GotSavedViewDialogMessage({
+      message: Dialog.Message.RequestedClose(),
+    }),
   ]) {
     const blocked = updateSavedViews(saving.model, message, context);
-    assert.equal(blocked.model.editor?.saving, true);
+    assert.equal(Option.getOrUndefined(blocked.model.editor)?.saving, true);
     assert.equal(blocked.model.dialogs.savedView.isOpen, true);
   }
   const failed = updateSavedViews(
@@ -687,7 +709,7 @@ test("saved views own editor dismissal and prevent closing an in-flight save", (
     SavedMessage.CloseSavedView(),
     context,
   );
-  assert.equal(closed.model.editor, null);
+  assert.ok(Option.isNone(closed.model.editor));
   assert.equal(closed.model.dialogs.savedView.isOpen, false);
 });
 
@@ -716,10 +738,15 @@ test("saved views keep deletion open during a write and close it after success",
   );
   for (const message of [
     SavedMessage.CloseDelete(),
-    SavedMessage.DeleteDialog({ message: Dialog.Message.RequestedClose() }),
+    SavedMessage.GotDeleteDialogMessage({
+      message: Dialog.Message.RequestedClose(),
+    }),
   ]) {
     const blocked = updateSavedViews(busy.model, message, context);
-    assert.equal(blocked.model.deleting?.id, savedView.id);
+    assert.equal(
+      Option.getOrUndefined(blocked.model.deleting)?.id,
+      savedView.id,
+    );
     assert.equal(blocked.model.dialogs.delete.isOpen, true);
   }
   const deleted = updateSavedViews(
@@ -727,7 +754,7 @@ test("saved views keep deletion open during a write and close it after success",
     SavedMessage.MutatedSavedView({ removed: true, error: "" }),
     context,
   );
-  assert.equal(deleted.model.deleting, null);
+  assert.ok(Option.isNone(deleted.model.deleting));
   assert.equal(deleted.model.dialogs.delete.isOpen, false);
 });
 
@@ -750,7 +777,9 @@ test("Genie owns its modal presentation without discarding the conversation on r
   const remounted = presentGenie(desktop.model, true);
   const closed = updateGenie(
     remounted.model,
-    GenieMessage.GenieDialog({ message: Dialog.Message.RequestedClose() }),
+    GenieMessage.GotGenieDialogMessage({
+      message: Dialog.Message.RequestedClose(),
+    }),
     context,
   );
   assert.equal(closed.model.genieOpen, false);
@@ -777,7 +806,7 @@ test("Genie submits the filters and pinned chart from Send after navigation", as
   );
   const navigated = update(
     sent.model,
-    AppMessage.Navigated({ path: "/trips", query: "zip=10002" }),
+    navigatedTo({ path: "/trips", query: "zip=10002" }),
   ).model;
   const created = await runRequest(sent, "CreateQuestion", async () => {
     assert.fail("Creating a turn should not make a request");
@@ -856,12 +885,19 @@ test("overview accepts only the active response and requests selection invalidat
       error: "Warehouse unavailable",
     }),
   );
-  assert.equal(current.model.overview.error, "Warehouse unavailable");
+  assert.deepEqual(
+    current.model.overview,
+    AsyncData.fail("Warehouse unavailable"),
+  );
   assert.deepEqual(current.outMessage, { _tag: "SelectionInvalidated" });
 });
 
 test("application opens Genie, dismisses mobile navigation, and requests focus", () => {
-  const model = { ...app("/trips"), mobileNavigation: true };
+  const initial = app("/trips");
+  const model = {
+    ...initial,
+    layout: { ...initial.layout, mobileNavigation: true },
+  };
   const changed = update(
     model,
     Features.genie.toParentMessage(
@@ -869,7 +905,7 @@ test("application opens Genie, dismisses mobile navigation, and requests focus",
     ),
   );
   assert.equal(changed.model.genieState.genieOpen, true);
-  assert.equal(changed.model.mobileNavigation, false);
+  assert.equal(changed.model.layout.mobileNavigation, false);
   assert.ok(changed.commands?.some((command) => command.name === "Focus"));
 });
 

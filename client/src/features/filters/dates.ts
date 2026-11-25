@@ -1,6 +1,7 @@
 import { DatePicker } from "@foldkit/ui";
 import { Option } from "effect";
 import { Calendar } from "foldkit";
+import { modifyFields } from "foldkit/struct";
 import type { Filters } from "@dsiem/analytics-shared/filters";
 import type { DatasetMetadata } from "@dsiem/analytics-shared/dataset";
 import { calendarDay } from "../../lib/format";
@@ -56,7 +57,7 @@ export function withMetadata(
   today: Calendar.CalendarDate,
 ): Model {
   const bounds = limits(metadata, model.filterDraft);
-  if (!bounds) return { ...model, datePickers: null };
+  if (!bounds) return modifyFields(model, { datePickers: Option.none });
   const picker = (field: "from" | "to") => {
     const range = bounds[field];
     return DatePicker.init({
@@ -67,7 +68,9 @@ export function withMetadata(
       initialViewDate: viewDate(field, model.filterDraft[field], range),
     });
   };
-  return { ...model, datePickers: { from: picker("from"), to: picker("to") } };
+  return modifyFields(model, {
+    datePickers: () => Option.some({ from: picker("from"), to: picker("to") }),
+  });
 }
 
 /** Reopening always starts at the selection or a valid range boundary. */
@@ -91,9 +94,10 @@ export function reset(
   metadata: Metadata,
 ): Model {
   const fresh = init(filters);
-  return model.datePickers
-    ? withMetadata(fresh, metadata, model.datePickers.from.calendar.today)
-    : fresh;
+  return Option.match(model.datePickers, {
+    onNone: () => fresh,
+    onSome: ({ from }) => withMetadata(fresh, metadata, from.calendar.today),
+  });
 }
 
 /** Reflect a typed edit or calendar selection into both pickers' constraints. */
@@ -104,11 +108,14 @@ export function syncDates(
 ): Model {
   const bounds = limits(metadata, model.filterDraft);
   const pickers = model.datePickers;
-  if (!bounds || !pickers) return model;
+  if (!bounds || Option.isNone(pickers)) return model;
   const reflect = (field: "from" | "to") => {
     const range = bounds[field];
     let picker = DatePicker.reflectMaxDate(
-      DatePicker.reflectMinDate(pickers[field], Option.some(range.minimum)),
+      DatePicker.reflectMinDate(
+        pickers.value[field],
+        Option.some(range.minimum),
+      ),
       Option.some(range.maximum),
     );
     const selected = calendarDay(model.filterDraft[field]);
@@ -119,8 +126,8 @@ export function syncDates(
       );
     return picker;
   };
-  return {
-    ...model,
-    datePickers: { from: reflect("from"), to: reflect("to") },
-  };
+  return modifyFields(model, {
+    datePickers: () =>
+      Option.some({ from: reflect("from"), to: reflect("to") }),
+  });
 }

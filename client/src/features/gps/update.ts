@@ -1,5 +1,8 @@
-import { Command } from "foldkit";
+import { Option } from "effect";
+import { AsyncData, Command } from "foldkit";
+import { modifyFields } from "foldkit/struct";
 import type { FeatureUpdate } from "../../lib/feature-update";
+import { fromResponse } from "../../lib/request-state";
 import { Message as M, type Message } from "./messages";
 import { dataKey, frameKey, type Model } from "./model";
 import { RefreshGps, type MapData } from "./mount";
@@ -8,30 +11,33 @@ import { EndpointTabs } from "./tabs";
 type MapLocation = Pick<MapData, "query" | "filters">;
 type Out = { readonly _tag: "SelectionInvalidated" };
 
-const refresh = (model: Model, { query, filters }: MapLocation) => [
-  RefreshGps({
-    query,
-    filters,
-    endpoint: model.endpoint,
-    revision: model.revision,
-    key: frameKey(query, model.endpoint, model.selected, model.revision),
-    loading: model.activity.loading,
-    selected: model.selected,
-  }),
-];
+const refresh = (model: Model, { query, filters }: MapLocation) => {
+  const selected = Option.getOrNull(model.selected);
+  return [
+    RefreshGps({
+      query,
+      filters,
+      endpoint: model.endpoint,
+      revision: model.revision,
+      key: frameKey(query, model.endpoint, selected, model.revision),
+      loading: AsyncData.isPending(model.activity),
+      selected,
+    }),
+  ];
+};
 export function reloadGps(
   model: Model,
   location: MapLocation,
 ): FeatureUpdate<Model, Message> {
-  const next = {
-    ...model,
-    selected: null,
-    selectedCell: null,
-    revision: model.revision + 1,
-    renderedKey: "",
-    mapError: "",
-    activity: { ...model.activity, loading: true, error: "" },
-  };
+  const next = modifyFields(model, {
+    selected: Option.none,
+    selectedCell: Option.none,
+    revision: (revision) => revision + 1,
+    renderedKey: () => "",
+    mapError: () => "",
+    activity: (activity) =>
+      Option.getOrElse(AsyncData.revalidateOrLoad(activity), () => activity),
+  });
   return {
     model: next,
     commands: refresh(next, location),
@@ -42,16 +48,18 @@ export function updateGps(
   message: Message,
   location: MapLocation,
 ): FeatureUpdate<Model, Message, Out> {
-  switch (message._tag) {
-    case "Idle":
-      return { model };
-    case "GpsTabs": {
+  return M.match<FeatureUpdate<Model, Message, Out>>(message, {
+    CompletedRefreshGps: () => ({ model }),
+    GotGpsTabsMessage: (message) => {
       const changed = EndpointTabs.update(model.endpointTabs, message.message);
       const endpoint = changed.outMessage?.value ?? model.endpoint;
       const next =
         changed.model === model.endpointTabs && endpoint === model.endpoint
           ? model
-          : { ...model, endpointTabs: changed.model, endpoint };
+          : modifyFields(model, {
+              endpointTabs: () => changed.model,
+              endpoint: () => endpoint,
+            });
       const loaded: FeatureUpdate<Model, Message, Out> =
         endpoint === model.endpoint
           ? { model: next }
@@ -63,61 +71,70 @@ export function updateGps(
         ...loaded,
         commands: [
           ...(changed.commands ?? []).map((command) =>
-            Command.mapMessage(command, (message) => M.GpsTabs({ message })),
+            Command.mapMessage(command, (message) =>
+              M.GotGpsTabsMessage({ message }),
+            ),
           ),
           ...(loaded.commands ?? []),
         ],
       };
-    }
-    case "LoadedGps": {
+    },
+    LoadedGps: (message) => {
       if (
         message.key !== dataKey(location.query, model.endpoint, model.revision)
       )
         return { model };
-      const next = {
-        ...model,
-        activity: { data: message.data, loading: false, error: message.error },
-        renderedKey: "",
-        mapError: "",
-        selected: null,
-        selectedCell: null,
-      };
+      const next = modifyFields(model, {
+        activity: () => fromResponse(message),
+        renderedKey: () => "",
+        mapError: () => "",
+        selected: Option.none,
+        selectedCell: Option.none,
+      });
       return {
         model: next,
         commands: refresh(next, location),
         outMessage: { _tag: "SelectionInvalidated" },
       };
-    }
-    case "GpsReady":
-      return message.key !==
-        frameKey(location.query, model.endpoint, model.selected, model.revision)
+    },
+    GpsReady: (message) =>
+      message.key !==
+      frameKey(
+        location.query,
+        model.endpoint,
+        Option.getOrNull(model.selected),
+        model.revision,
+      )
         ? { model }
         : {
-            model: {
-              ...model,
-              renderedKey: message.error ? "" : message.key,
-              mapError: message.error,
-              selectedCell:
+            model: modifyFields(model, {
+              renderedKey: () => (message.error ? "" : message.key),
+              mapError: () => message.error,
+              selectedCell: (selectedCell) =>
                 message.selectedCell === undefined
-                  ? model.selectedCell
-                  : message.selectedCell,
-            },
-          };
-    case "GpsSelect": {
-      if (model.activity.loading || model.selected === message.id)
+                  ? selectedCell
+                  : Option.fromNullishOr(message.selectedCell),
+            }),
+          },
+    GpsSelect: (message) => {
+      if (
+        AsyncData.isPending(model.activity) ||
+        Option.getOrNull(model.selected) === message.id
+      )
         return { model };
-      const next = {
-        ...model,
-        selected: message.id,
-        selectedCell:
-          model.activity.data?.cells.find((cell) => cell.id === message.id) ??
-          null,
-      };
+      const summary = Option.getOrUndefined(AsyncData.getData(model.activity));
+      const next = modifyFields(model, {
+        selected: () => Option.fromNullishOr(message.id),
+        selectedCell: () =>
+          Option.fromNullishOr(
+            summary?.cells.find((cell) => cell.id === message.id),
+          ),
+      });
       return {
         model: next,
         commands: refresh(next, location),
         outMessage: { _tag: "SelectionInvalidated" },
       };
-    }
-  }
+    },
+  });
 }

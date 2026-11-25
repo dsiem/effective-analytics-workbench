@@ -1,5 +1,6 @@
 import { defineView } from "foldkit/submodel";
 import { type Filters, sameFilters } from "@dsiem/analytics-shared/filters";
+import { Option } from "effect";
 import { savedViewBrowser } from "./browser-view";
 import type { Model } from "./model";
 import { appliedView } from "./selection";
@@ -22,7 +23,7 @@ export const savedViewsView = defineView<ViewModel, typeof M.Type>(
       customFilters: !sameFilters(filters, {}),
       canSave: model.canSave,
       mutationBusy: model.savedViewBusy,
-      mutationError: model.deleting ? "" : model.savedViewError,
+      mutationError: Option.isSome(model.deleting) ? "" : model.savedViewError,
     });
   },
 );

@@ -1,6 +1,7 @@
 import type { Notice } from "../../lib/request-state";
 import { Input, Popover } from "@foldkit/ui";
 import { Option } from "effect";
+import { AsyncData } from "foldkit";
 import type { SavedView } from "@dsiem/analytics-shared/saved-views";
 import { filterSummary } from "../../domain/filter-summary";
 import { dateLabel } from "../../lib/format";
@@ -25,6 +26,12 @@ type PickerModel = Model & {
   readonly mutationBusy: boolean;
   readonly mutationError: Notice;
 };
+
+const moveFocus = (id: string) =>
+  Option.some({
+    focusSelector: `#${id}`,
+    message: M.MovedSavedViewPickerFocus({ id }),
+  });
 
 function viewRow(
   h: H,
@@ -61,16 +68,8 @@ function viewRow(
                   ? options.previous
                   : undefined;
             if (key === "ArrowUp" && !options.previous)
-              return Option.some({
-                focusSelector: `#${searchId}`,
-                message: M.Idle(),
-              });
-            return target
-              ? Option.some({
-                  focusSelector: `#${resultId(target.id)}`,
-                  message: M.Idle(),
-                })
-              : Option.none();
+              return moveFocus(searchId);
+            return target ? moveFocus(resultId(target.id)) : Option.none();
           }),
         ],
         actions: [
@@ -107,10 +106,10 @@ function viewRow(
 }
 
 function quickViews(h: H, model: PickerModel, renderedRows: Child[]): Child[] {
-  if (model.shortcuts.loading)
+  if (AsyncData.isPending(model.shortcuts))
     return [loading(h, "Loading pinned and recent views…")];
-  if (model.shortcuts.error)
-    return [error(h, model.shortcuts.error, M.LoadSavedViewShortcuts())];
+  const loadError = Option.getOrUndefined(AsyncData.getError(model.shortcuts));
+  if (loadError) return [error(h, loadError, M.LoadSavedViewShortcuts())];
   const groups = shortcutGroups(model);
   let offset = 0;
   return groups.length
@@ -144,7 +143,9 @@ function matchingViews(
   model: PickerModel,
   renderedRows: Child[],
 ): Child[] {
-  const { data, loading: busy, error: problem } = model.savedViews;
+  const data = Option.getOrUndefined(AsyncData.getData(model.savedViews));
+  const busy = AsyncData.isPending(model.savedViews);
+  const problem = Option.getOrUndefined(AsyncData.getError(model.savedViews));
   if (busy && !data) return [loading(h, "Searching saved views…")];
   if (problem && !data)
     return [error(h, problem, M.LoadSavedViews({ more: false }))];
@@ -209,7 +210,7 @@ export function savedViewBrowser(h: H, model: PickerModel) {
   );
   return viewPicker(h, {
     model: model.picker,
-    onMessage: (message) => M.SavedViewsPicker({ message }),
+    onMessage: (message) => M.GotSavedViewsPickerMessage({ message }),
     label: "Saved views",
     focusSelector: `#${searchId}`,
     triggerLabel:
@@ -230,7 +231,7 @@ export function savedViewBrowser(h: H, model: PickerModel) {
           ),
           button(h, {
             label: icon(h, "x"),
-            onClick: M.SavedViewsPicker({
+            onClick: M.GotSavedViewsPickerMessage({
               message: Popover.Message.RequestedClose(),
             }),
             size: "icon",
@@ -260,18 +261,15 @@ export function savedViewBrowser(h: H, model: PickerModel) {
                       h.AriaLabel("Search all saved views"),
                       h.AriaBusy(
                         model.pickerMode._tag === "Quick"
-                          ? model.shortcuts.loading
-                          : model.savedViews.loading,
+                          ? AsyncData.isPending(model.shortcuts)
+                          : AsyncData.isPending(model.savedViews),
                       ),
                       h.Maxlength(200),
                       h.Autocomplete("off"),
                       h.AriaDescribedBy("saved-view-search-help"),
                       h.OnKeyDownFocus((key) =>
                         key === "ArrowDown" && rows[0]
-                          ? Option.some({
-                              focusSelector: `#${resultId(rows[0].id)}`,
-                              message: M.Idle(),
-                            })
+                          ? moveFocus(resultId(rows[0].id))
                           : Option.none(),
                       ),
                       h.OnKeyDownPreventDefault((key) =>

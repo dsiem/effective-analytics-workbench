@@ -1,3 +1,4 @@
+import { AsyncData } from "foldkit";
 import {
   genieContextDataLimit,
   type GenieContext,
@@ -90,8 +91,7 @@ export const zonesChartContext = (overview: Overview) =>
   );
 
 export function overviewContext(model: Model): GenieContext {
-  const overview = model.overview.data;
-  return overview && !model.overview.error
-    ? dailySnapshot("Trip overview", overview, model.series, "page")
+  return AsyncData.isSuccess(model.overview)
+    ? dailySnapshot("Trip overview", model.overview.data, model.series, "page")
     : { page: "overview", title: "Trip overview" };
 }

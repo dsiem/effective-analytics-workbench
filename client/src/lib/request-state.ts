@@ -1,20 +1,19 @@
 import { Schema } from "effect";
+import { AsyncData } from "foldkit";
+
 export const AccessDenied = Schema.TaggedStruct("AccessDenied", {
   message: Schema.String,
 });
 export const Notice = Schema.Union([Schema.String, AccessDenied]);
 export type Notice = typeof Notice.Type;
 
-export const request = <S extends Schema.Top>(data: S) =>
-  Schema.Struct({
-    data: Schema.NullOr(data),
-    error: Notice,
-    loading: Schema.Boolean,
-  });
-
-export type RequestState<S extends Schema.Top> = ReturnType<
-  typeof request<S>
->["Type"];
-
-export const empty = { data: null, error: "", loading: false };
-export const pending = { ...empty, loading: true };
+export const fromResponse = <A>({
+  data,
+  error,
+}: {
+  readonly data: A | null;
+  readonly error: Notice;
+}): AsyncData.AsyncData<A, Notice> => {
+  if (error) return AsyncData.fail(error);
+  return data === null ? AsyncData.Idle() : AsyncData.succeed(data);
+};

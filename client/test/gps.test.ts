@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Option } from "effect";
-import { Url } from "foldkit";
+import { AsyncData, Url } from "foldkit";
 import { pageContext } from "../src/app/analysis-context";
 import * as Features from "../src/app/features";
 import { init, update } from "../src/app/update";
@@ -62,7 +62,7 @@ test("selection and Genie use the same GPS endpoint, counts and area without cop
   const model = {
     ...initGps(),
     endpoint: "dropoff" as const,
-    activity: { data: activity, loading: false, error: "" },
+    activity: AsyncData.succeed(activity),
   };
   const cell = activity.cells[0];
   assert.ok(cell);
@@ -79,11 +79,11 @@ test("selection and Genie use the same GPS endpoint, counts and area without cop
   assert.equal(data.selectedArea.trips, 60);
   assert.equal(data.selectedArea.id, cell.id);
   assert.equal(data.selectedArea.boundary, undefined);
-  assert.equal(
-    updateGps(selected, M.GpsSelect({ id: null }), { query: "", filters: {} })
-      .model.selected,
-    null,
-  );
+  const cleared = updateGps(selected, M.GpsSelect({ id: null }), {
+    query: "",
+    filters: {},
+  });
+  assert.ok(Option.isNone(cleared.model.selected));
 });
 
 test("leaving the GPS page ignores its late responses and keeps the current page context", () => {
@@ -134,7 +134,7 @@ test("an old map reply keeps pinned Genie context until the map scope changes", 
       }),
     ),
   );
-  assert.deepEqual(stale.model.genieState.genieSelection, context);
+  assert.deepEqual(stale.model.genieState.genieSelection, Option.some(context));
   assert.equal(stale.model, pinned);
   const rendered = update(
     stale.model,
@@ -145,13 +145,13 @@ test("an old map reply keeps pinned Genie context until the map scope changes", 
       }),
     ),
   ).model;
-  assert.deepEqual(rendered.genieState.genieSelection, context);
+  assert.deepEqual(rendered.genieState.genieSelection, Option.some(context));
   const cell = activity.cells[0];
   assert.ok(cell);
   const changed = update(
     rendered,
     Features.gps.toParentMessage(M.GpsSelect({ id: cell.id })),
   );
-  assert.equal(changed.model.gpsState.selected, cell.id);
-  assert.equal(changed.model.genieState.genieSelection, null);
+  assert.deepEqual(changed.model.gpsState.selected, Option.some(cell.id));
+  assert.ok(Option.isNone(changed.model.genieState.genieSelection));
 });

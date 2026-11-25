@@ -1,3 +1,4 @@
+import { Match } from "effect";
 import { Message as Genie } from "../features/genie/messages";
 import type { Message as GpsMessage } from "../features/gps/view-messages";
 import type { Message as OverviewMessage } from "../features/overview/view-messages";
@@ -14,29 +15,22 @@ export const openGenie = ({
 export function overviewViewMessage(
   message: typeof OverviewMessage.Type,
 ): Message {
-  switch (message._tag) {
-    case "Analyze":
-      return openGenie(message);
-    case "Reload":
-      return M.LoadPage();
-    default:
-      return Features.overview.toParentMessage(message);
-  }
+  return Match.value(message).pipe(
+    Match.tags({ Analyze: openGenie, Reload: () => M.LoadPage() }),
+    Match.orElse(Features.overview.toParentMessage),
+  );
 }
 
 export function tripsViewMessage(message: typeof TripsMessage.Type): Message {
-  return message._tag === "Reload"
-    ? M.LoadPage()
-    : Features.trips.toParentMessage(message);
+  return Match.value(message).pipe(
+    Match.tag("Reload", () => M.LoadPage()),
+    Match.orElse(Features.trips.toParentMessage),
+  );
 }
 
 export function gpsViewMessage(message: typeof GpsMessage.Type): Message {
-  switch (message._tag) {
-    case "Analyze":
-      return openGenie(message);
-    case "Reload":
-      return M.LoadPage();
-    default:
-      return Features.gps.toParentMessage(message);
-  }
+  return Match.value(message).pipe(
+    Match.tags({ Analyze: openGenie, Reload: () => M.LoadPage() }),
+    Match.orElse(Features.gps.toParentMessage),
+  );
 }

@@ -1,5 +1,5 @@
 import { Select } from "@foldkit/ui";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 import { defineView } from "foldkit/submodel";
 import type { TripSummary } from "@dsiem/analytics-shared/trips";
 import { money, number } from "../../lib/format";
@@ -203,7 +203,7 @@ function sortControl(
       slotId: "trip-sort-menu",
       model: menu,
       view: SortMenu.view,
-      toParentMessage: (message) => M.SortMenu({ message }),
+      toParentMessage: (message) => M.GotSortMenuMessage({ message }),
       viewInputs: {
         anchor: { placement: "bottom-end", gap: 8, padding: 8 },
         ariaLabel: `Sort trips, currently ${sortLabels[sort]}`,
@@ -284,7 +284,7 @@ function trips(
     counts._tag === "Failed"
       ? counts.error
       : counts._tag === "Loading"
-        ? counts.previousError
+        ? Option.getOrUndefined(counts.previousError)
         : null;
 
   return [

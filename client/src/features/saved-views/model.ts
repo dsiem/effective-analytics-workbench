@@ -1,6 +1,6 @@
 import { Notice } from "../../lib/request-state";
 import { Dialog } from "@foldkit/ui";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 import { SavedView, SavedViewInput } from "@dsiem/analytics-shared/saved-views";
 import { Filters } from "@dsiem/analytics-shared/filters";
 import * as Browser from "./browser-model";
@@ -12,11 +12,11 @@ export const SavedViewEditor = Schema.Struct({
 export const Model = Schema.Struct({
   dialogs: Schema.Struct({ savedView: Dialog.Model, delete: Dialog.Model }),
   browser: Browser.Model,
-  editor: Schema.NullOr(SavedViewEditor),
-  deleting: Schema.NullOr(SavedView),
+  editor: Schema.Option(SavedViewEditor),
+  deleting: Schema.Option(SavedView),
   savedViewBusy: Schema.Boolean,
   savedViewError: Notice,
-  selection: Schema.NullOr(
+  selection: Schema.Option(
     Schema.Struct({
       id: Schema.String,
       title: Schema.String,
@@ -37,10 +37,10 @@ export const init = (): Model => ({
     delete: Dialog.init({ id: "delete-saved-view", focusSelector: "button" }),
   },
   browser: Browser.init(),
-  editor: null,
-  deleting: null,
+  editor: Option.none(),
+  deleting: Option.none(),
   savedViewBusy: false,
   savedViewError: "",
-  selection: null,
+  selection: Option.none(),
   notice: "",
 });

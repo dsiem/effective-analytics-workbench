@@ -1,21 +1,10 @@
 import { Effect, Schema } from "effect";
-import { Calendar, Command, Dom, Navigation } from "foldkit";
+import { Calendar, Command, Dom } from "foldkit";
 import { request } from "../lib/api-client";
-import { done, result } from "../lib/command-result";
+import { result } from "../lib/command-result";
 import { Message as M } from "./message";
-import {
-  applyTheme,
-  readThemePreference,
-  ThemePreference,
-  themeStorageKey,
-} from "./theme";
-export const Navigate = Command.define("Navigate", {
-  args: { href: Schema.String, external: Schema.Boolean },
-  messages: [M.Idle],
-  execute: ({ href, external }) =>
-    done(external ? Navigation.load(href) : Navigation.pushUrl(href)),
-});
-export const Boot = Command.define("RestoreWorkspace", {
+import { readThemePreference } from "./theme";
+export const RestoreWorkspace = Command.define("RestoreWorkspace", {
   messages: [M.Booted],
   execute: Effect.sync(() => {
     return M.Booted({
@@ -25,50 +14,25 @@ export const Boot = Command.define("RestoreWorkspace", {
     });
   }),
 });
-export const SetTheme = Command.define("SetTheme", {
-  args: { preference: ThemePreference, persist: Schema.Boolean },
-  messages: [M.Idle],
-  execute: ({ preference, persist }) =>
-    done(
-      Effect.sync(() => {
-        applyTheme(preference);
-        if (persist) {
-          try {
-            localStorage.setItem(themeStorageKey, preference);
-          } catch {
-            // Keep the selected theme for this session even without storage.
-          }
-        }
-      }),
-    ),
-});
-export const PersistSidebar = Command.define("PersistSidebar", {
-  args: { open: Schema.Boolean },
-  messages: [M.Idle],
-  execute: ({ open }) =>
-    done(
-      Effect.sync(() => {
-        document.cookie = `sidebar_state=${open}; path=/; max-age=604800; SameSite=Lax`;
-      }),
-    ),
-});
 export const Focus = Command.define("Focus", {
   args: { selector: Schema.String },
-  messages: [M.Idle],
+  messages: [M.CompletedFocus],
   execute: ({ selector }) =>
-    done(
-      Effect.sleep("20 millis").pipe(
-        Effect.andThen(
-          Effect.sync(() =>
-            document.querySelector<HTMLElement>(selector)?.focus(),
-          ),
+    Effect.sleep("20 millis").pipe(
+      Effect.andThen(
+        Effect.sync(() =>
+          document.querySelector<HTMLElement>(selector)?.focus(),
         ),
       ),
+      Effect.as(M.CompletedFocus()),
     ),
 });
 export const FocusAnalysisHeading = Command.define("FocusAnalysisHeading", {
-  messages: [M.Idle],
-  execute: done(Dom.focus("#analysis-heading").pipe(Effect.ignore)),
+  messages: [M.CompletedFocusAnalysisHeading],
+  execute: Dom.focus("#analysis-heading").pipe(
+    Effect.ignore,
+    Effect.as(M.CompletedFocusAnalysisHeading()),
+  ),
 });
 export const LoadMetadata = Command.define("LoadMetadata", {
   messages: [M.LoadedMetadata],

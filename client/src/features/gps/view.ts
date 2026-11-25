@@ -1,4 +1,6 @@
 import type { Tabs } from "@foldkit/ui";
+import { Option } from "effect";
+import { AsyncData } from "foldkit";
 import { defineView } from "foldkit/submodel";
 import type { GenieContext } from "@dsiem/analytics-shared/genie";
 import type { GpsEndpoint } from "@dsiem/analytics-shared/map-dataset";
@@ -70,8 +72,9 @@ function mapPanel(
   model: ViewModel,
   { tabs, activeIndex }: Tabs.RenderInfo<GpsEndpoint>,
 ) {
-  const { query, endpoint, revision, selected, filters } = model;
-  const loading = model.activity.loading;
+  const { query, endpoint, revision, filters } = model;
+  const selected = Option.getOrNull(model.selected);
+  const loading = AsyncData.isPending(model.activity);
   const key = frameKey(query, endpoint, selected, revision);
   const ready = !loading && model.renderedKey === key;
   return h.div(
@@ -125,7 +128,7 @@ function mapCard(h: H, model: ViewModel) {
         slotId: "gps-endpoint",
         view: EndpointTabs.view,
         model: model.endpointTabs,
-        toParentMessage: (message) => M.GpsTabs({ message }),
+        toParentMessage: (message) => M.GotGpsTabsMessage({ message }),
         viewInputs: {
           tabs: ["pickup", "dropoff"],
           selectedValue: model.endpoint,
@@ -174,9 +177,11 @@ function gpsMap(h: H, model: ViewModel): Child[] {
     "See where journeys begin and end, beyond ZIP boundaries.",
     [badge(h, "NYC yellow taxis")],
   );
-  const activity = model.activity;
-  if (activity.error || model.mapError)
-    return [heading, error(h, activity.error || model.mapError, M.Reload())];
+  const loadError = Option.getOrElse(
+    AsyncData.getError(model.activity),
+    () => model.mapError,
+  );
+  if (loadError) return [heading, error(h, loadError, M.Reload())];
   return [
     heading,
     h.div([h.Class("gps-layout")], [mapCard(h, model), mapInsights(h, model)]),

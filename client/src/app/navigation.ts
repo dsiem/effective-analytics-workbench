@@ -1,68 +1,33 @@
+import { Effect, Schema } from "effect";
+import { Command, Navigation } from "foldkit";
 import type { Update } from "foldkit";
-import type { TripSort } from "@dsiem/analytics-shared/trips";
-import { href } from "../domain/filters";
-import { openAnalysisRuns } from "../features/analysis-runs/update";
-import { reloadGps } from "../features/gps/update";
-import { reloadOverview } from "../features/overview/update";
-import { reloadTrips } from "../features/trips/update";
-import type { ApiClient } from "../lib/api-client";
-import { Navigate } from "./commands";
-import * as Features from "./features";
-import type { Message } from "./message";
-import type { Model } from "./model";
-import { AppRoute, pageUrls, withTripSort } from "./route";
+import { defineMessageUnion } from "foldkit/message";
+import { type Location, parseLocation, routePath } from "./route";
 
-export function loadPage(
-  model: Model,
-): Update.Return<Model, Message, ApiClient> {
-  const { route, query, filters } = model.location;
-  if (route._tag === "AnalysisRuns") {
-    return Features.analysisRuns.foldInit(
-      model,
-      openAnalysisRuns(model.analysisRunsState, route.run),
-    );
-  }
-  if (!filters) return { model };
-  const page = {
-    ...model,
-    genieState: { ...model.genieState, genieSelection: null },
-  };
-  switch (route._tag) {
-    case "TripMap":
-      return Features.gps.foldInit(
-        page,
-        reloadGps(model.gpsState, { query, filters }),
-      );
-    case "Overview":
-      return Features.overview.foldInit(
-        page,
-        reloadOverview(model.overviewState, filters),
-      );
-    case "Trips":
-      return Features.trips.foldInit(
-        page,
-        reloadTrips(model.tripsState, { filters, sort: route.sort }),
-      );
-    case "Genie":
-    case "NotFound":
-      return { model };
-  }
-}
+export const Message = defineMessageUnion({
+  Navigate: { href: Schema.String, external: Schema.Boolean },
+  Navigated: { path: Schema.String, query: Schema.String },
+  CompletedNavigate: {},
+});
+export type Message = typeof Message.Type;
 
-export function sortTrips(
-  model: Model,
-  sort: typeof TripSort.Type,
-): Update.Return<Model, Message, ApiClient> {
-  const query = withTripSort(model.location.query, sort);
-  const loaded = loadPage({
-    ...model,
-    location: { ...model.location, route: AppRoute.Trips({ sort }), query },
+export const Navigate = Command.define("Navigate", {
+  args: { href: Schema.String, external: Schema.Boolean },
+  messages: [Message.CompletedNavigate],
+  execute: ({ href, external }) =>
+    (external ? Navigation.load(href) : Navigation.pushUrl(href)).pipe(
+      Effect.as(Message.CompletedNavigate()),
+    ),
+});
+
+type Out = "LocationChanged" | "LocationRepeated";
+
+export const update = (model: Location, message: Message) =>
+  Message.match<Update.ReturnWithOutMessage<Location, Message, Out>>(message, {
+    Navigate: (destination) => ({ model, commands: [Navigate(destination)] }),
+    Navigated: ({ path, query }) =>
+      routePath(model.route) === path && model.query === query
+        ? { model, outMessage: "LocationRepeated" }
+        : { model: parseLocation(path, query), outMessage: "LocationChanged" },
+    CompletedNavigate: () => ({ model }),
   });
-  return {
-    ...loaded,
-    commands: [
-      ...(loaded.commands ?? []),
-      Navigate({ href: href(pageUrls.Trips, query), external: false }),
-    ],
-  };
-}

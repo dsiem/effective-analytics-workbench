@@ -43,7 +43,7 @@ export const RestoreConversation = Command.define("RestoreConversation", {
     return M.RestoredConversation({ turns, persistenceError });
   }),
 });
-export const CreateTurn = Command.define("CreateQuestion", {
+export const CreateQuestion = Command.define("CreateQuestion", {
   args: QuestionSnapshot.fields,
   messages: [M.CreatedTurn],
   execute: (snapshot) =>
@@ -211,7 +211,7 @@ export const RetrieveQuestion = Command.define("RetrieveQuestion", {
     );
   },
 });
-export const PersistTurns = Command.define("PersistConversation", {
+export const PersistConversation = Command.define("PersistConversation", {
   args: { turns: History },
   messages: [M.Persisted],
   execute: ({ turns }) =>

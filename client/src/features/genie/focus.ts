@@ -1,12 +1,13 @@
 import { Effect } from "effect";
 import { Mount } from "foldkit";
-import { Idle } from "../../lib/idle";
+import { Message } from "./messages";
 
-// The desktop assistant is a persistent non-modal panel, rather than a modal Dialog.
+// The desktop assistant restores focus when its panel is removed.
 export const PanelReturnFocus = Mount.define("PanelReturnFocus", {
-  messages: [Idle],
-  execute: () =>
-    Effect.acquireRelease(
+  messages: [Message.MountedPanelReturnFocus],
+  execute: ({ element }) => {
+    const document = element.ownerDocument;
+    return Effect.acquireRelease(
       Effect.sync(() =>
         document.activeElement instanceof HTMLElement
           ? document.activeElement
@@ -17,5 +18,6 @@ export const PanelReturnFocus = Mount.define("PanelReturnFocus", {
           if (opener?.isConnected) opener.focus();
           else document.querySelector<HTMLElement>("#genie-trigger")?.focus();
         }),
-    ).pipe(Effect.as(Idle())),
+    ).pipe(Effect.as(Message.MountedPanelReturnFocus()));
+  },
 });

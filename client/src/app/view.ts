@@ -1,5 +1,5 @@
 import { Nav, Tooltip } from "@foldkit/ui";
-import { Array as Arr } from "effect";
+import { Array, Option } from "effect";
 import type { Document } from "foldkit/html";
 import { filterSummary } from "../domain/filter-summary";
 import { filterError, href, queryFor } from "../domain/filters";
@@ -23,11 +23,16 @@ import { icon } from "../ui/icons";
 import { button, type Child, card } from "../ui/primitives";
 import { pageContext } from "./analysis-context";
 import * as Features from "./features";
-import { Message as M } from "./message";
 import { type Model, navigation } from "./model";
-import { pageUrls, routePath, showsExplore, withoutRun } from "./route";
+import {
+  AppRoute,
+  pageUrls,
+  routePath,
+  showsExplore,
+  withoutRun,
+} from "./route";
 import { themeSelector } from "./theme-view";
-import { initTooltip } from "./ui-state";
+import { initTooltip, Message as LayoutMessage } from "./layout";
 import {
   openGenie,
   overviewViewMessage,
@@ -42,7 +47,7 @@ function workspaceHref(path: string, query: string) {
 
 function sidebar(h: H, model: Model) {
   const { route, query } = model.location;
-  const user = model.user;
+  const user = Option.getOrUndefined(model.user);
   const initials =
     user?.name
       .split(/\s+/)
@@ -55,12 +60,15 @@ function sidebar(h: H, model: Model) {
     text: string,
     render: (attrs: import("foldkit/html").ChildAttribute[]) => Child,
   ) => {
-    if (model.sidebar || model.mobile) return render([]);
+    if (model.layout.sidebar || model.layout.mobile) return render([]);
     return h.submodel({
       slotId: `tooltip-${id}`,
       view: Tooltip.view,
-      model: model.tooltips[id] ?? initTooltip(id),
-      toParentMessage: (message) => M.Tooltip({ id, message }),
+      model: model.layout.tooltips[id] ?? initTooltip(id),
+      toParentMessage: (message) =>
+        Features.layout.toParentMessage(
+          LayoutMessage.GotTooltipMessage({ id, message }),
+        ),
       viewInputs: {
         anchor: { placement: "right", gap: 8 },
         toView: ({ trigger, panel, isVisible }) =>
@@ -87,7 +95,7 @@ function sidebar(h: H, model: Model) {
           ...nav,
           h.Id("main-navigation"),
           h.Class(
-            `sidebar ${!model.sidebar && !model.mobile ? "collapsed" : ""}`,
+            `sidebar ${!model.layout.sidebar && !model.layout.mobile ? "collapsed" : ""}`,
           ),
         ],
         [
@@ -107,11 +115,13 @@ function sidebar(h: H, model: Model) {
               ),
             ],
           ),
-          ...(model.mobile
+          ...(model.layout.mobile
             ? [
                 button(h, {
                   label: icon(h, "x"),
-                  onClick: M.CloseNavigation(),
+                  onClick: Features.layout.toParentMessage(
+                    LayoutMessage.CloseNavigation(),
+                  ),
                   attributes: [h.AriaLabel("Close navigation")],
                   className: " absolute right-2 top-4",
                   variant: "ghost",
@@ -125,7 +135,7 @@ function sidebar(h: H, model: Model) {
                 [h.Class("sidebar-section-label sidebar-label")],
                 ["Workspace"],
               ),
-              ...Arr.zip(navigation, items).map(([item, current]) =>
+              ...Array.zip(navigation, items).map(([item, current]) =>
                 tooltip(item.path, item.label, (attrs) =>
                   h.a(
                     [
@@ -191,7 +201,8 @@ function sidebar(h: H, model: Model) {
   });
 }
 function filters(h: H, model: Model) {
-  const { filters: applied, query } = model.location;
+  const { filters, query } = model.location;
+  const applied = Option.getOrUndefined(filters);
   const hasChanges =
     !applied || queryFor(model.filtersState.filterDraft) !== queryFor(applied);
   return filterPanel(h, {
@@ -211,7 +222,7 @@ function filters(h: H, model: Model) {
       datePickers: model.filtersState.datePickers,
       onDateMessage: (field, message) =>
         Features.filters.toParentMessage(
-          FilterMessage.FilterDatePicker({ field, message }),
+          FilterMessage.GotFilterDatePickerMessage({ id: field, message }),
         ),
       onChange: (field, value) =>
         Features.filters.toParentMessage(
@@ -251,104 +262,96 @@ function filters(h: H, model: Model) {
   });
 }
 export function view(model: Model, h: H): Document {
-  const { route, query, filters: applied } = model.location;
+  const { route, query, filters: appliedFilters } = model.location;
+  const applied = Option.getOrNull(appliedFilters);
   const explore = showsExplore(route);
-  let content: Child[];
-  if (route._tag !== "AnalysisRuns" && !applied)
-    content = [
-      card(
-        h,
-        [
-          h.h1([h.Class("text-lg font-semibold")], ["Invalid Explore filters"]),
-          h.p([h.Class("muted text-sm mt-3 mb-5")], [filterError]),
-          button(h, {
-            label: "Clear invalid filters",
-            onClick: Features.filters.toParentMessage(
-              FilterMessage.ResetFilters(),
-            ),
-          }),
-        ],
-        "p-8",
-      ),
-    ].map((child) => h.div([h.Role("alert")], [child]));
-  else
-    switch (route._tag) {
-      case "Overview":
-        content = [
-          h.submodel({
-            slotId: "overview",
-            view: overviewView,
-            model: {
-              ...model.overviewState,
-              query,
-              filters: applied ?? {},
-              mobile: model.mobile,
-            },
-            toParentMessage: overviewViewMessage,
-          }),
-        ];
-        break;
-      case "Trips":
-        content = [
-          h.submodel({
-            slotId: "trips",
-            view: tripsView,
-            model: model.tripsState,
-            viewInputs: { sort: route.sort, mobile: model.mobile },
-            toParentMessage: tripsViewMessage,
-          }),
-        ];
-        break;
-      case "TripMap":
-        content = [
-          h.submodel({
-            slotId: "gpsMap",
-            view: gpsMapView,
-            model: { ...model.gpsState, query, filters: applied ?? {} },
-            toParentMessage: gpsViewMessage,
-          }),
-        ];
-        break;
-      case "AnalysisRuns":
-        content = [
-          h.submodel({
-            slotId: "analysis-runs",
-            view: analysisRunsView,
-            model: model.analysisRunsState,
-            viewInputs: { query },
-            toParentMessage: Features.analysisRuns.toParentMessage,
-          }),
-        ];
-        break;
-      case "Genie":
-        content = [
-          h.submodel({
-            slotId: "genie",
-            view: genieView,
-            model: {
-              ...model.genieState,
-              context: pageContext(model),
-              mobile: model.mobile,
-              filters: applied,
-            },
-            toParentMessage: Features.genie.toParentMessage,
-          }),
-        ];
-        break;
-      case "NotFound":
-        content = [
-          h.p(
-            [h.Class("text-center py-20")],
+  const content =
+    route._tag !== "AnalysisRuns" && !applied
+      ? [
+          card(
+            h,
             [
-              "Page not found. ",
-              h.a(
-                [h.Href(pageUrls.Overview), h.Class("underline")],
-                ["Back to overview"],
+              h.h1(
+                [h.Class("text-lg font-semibold")],
+                ["Invalid Explore filters"],
               ),
+              h.p([h.Class("muted text-sm mt-3 mb-5")], [filterError]),
+              button(h, {
+                label: "Clear invalid filters",
+                onClick: Features.filters.toParentMessage(
+                  FilterMessage.ResetFilters(),
+                ),
+              }),
             ],
+            "p-8",
           ),
-        ];
-    }
+        ].map((child) => h.div([h.Role("alert")], [child]))
+      : AppRoute.match<Child[]>(route, {
+          Overview: () => [
+            h.submodel({
+              slotId: "overview",
+              view: overviewView,
+              model: {
+                ...model.overviewState,
+                query,
+                filters: applied ?? {},
+                mobile: model.layout.mobile,
+              },
+              toParentMessage: overviewViewMessage,
+            }),
+          ],
+          Trips: ({ sort }) => [
+            h.submodel({
+              slotId: "trips",
+              view: tripsView,
+              model: model.tripsState,
+              viewInputs: { sort, mobile: model.layout.mobile },
+              toParentMessage: tripsViewMessage,
+            }),
+          ],
+          TripMap: () => [
+            h.submodel({
+              slotId: "gpsMap",
+              view: gpsMapView,
+              model: { ...model.gpsState, query, filters: applied ?? {} },
+              toParentMessage: gpsViewMessage,
+            }),
+          ],
+          AnalysisRuns: () => [
+            h.submodel({
+              slotId: "analysis-runs",
+              view: analysisRunsView,
+              model: model.analysisRunsState,
+              viewInputs: { query },
+              toParentMessage: Features.analysisRuns.toParentMessage,
+            }),
+          ],
+          Genie: () => [
+            h.submodel({
+              slotId: "genie",
+              view: genieView,
+              model: {
+                ...model.genieState,
+                context: pageContext(model),
+                mobile: model.layout.mobile,
+                filters: applied,
+              },
+              toParentMessage: Features.genie.toParentMessage,
+            }),
+          ],
+          NotFound: () => [
+            h.p(
+              [h.Class("text-center py-20")],
+              [
+                "Page not found. ",
+                h.a(
+                  [h.Href(pageUrls.Overview), h.Class("underline")],
+                  ["Back to overview"],
+                ),
+              ],
+            ),
+          ],
+        });
   const current =
     navigation.find((item) => item.path === routePath(route))?.label ??
     (route._tag === "Genie" ? "Ask Genie" : "Workspace");
@@ -360,7 +363,7 @@ export function view(model: Model, h: H): Document {
     body: h.div(
       [h.Class("workspace")],
       [
-        ...(!model.mobile ? [sidebar(h, model)] : []),
+        ...(!model.layout.mobile ? [sidebar(h, model)] : []),
         h.div(
           [h.Class("workspace-main")],
           [
@@ -368,21 +371,25 @@ export function view(model: Model, h: H): Document {
               [h.Class("workspace-header")],
               [
                 button(h, {
-                  label: icon(h, model.mobile ? "menu" : "panel-left"),
-                  onClick: M.ToggleSidebar(),
+                  label: icon(h, model.layout.mobile ? "menu" : "panel-left"),
+                  onClick: Features.layout.toParentMessage(
+                    LayoutMessage.ToggleSidebar(),
+                  ),
                   attributes: [
                     h.Id("navigation-trigger"),
                     h.AriaLabel(
-                      model.mobile
-                        ? model.mobileNavigation
+                      model.layout.mobile
+                        ? model.layout.mobileNavigation
                           ? "Close navigation"
                           : "Open navigation"
-                        : model.sidebar
+                        : model.layout.sidebar
                           ? "Collapse sidebar"
                           : "Expand sidebar",
                     ),
                     h.AriaExpanded(
-                      model.mobile ? model.mobileNavigation : model.sidebar,
+                      model.layout.mobile
+                        ? model.layout.mobileNavigation
+                        : model.layout.sidebar,
                     ),
                     h.AriaControls("main-navigation"),
                   ],
@@ -430,25 +437,28 @@ export function view(model: Model, h: H): Document {
                 model: {
                   ...model.genieState,
                   context: pageContext(model),
-                  mobile: model.mobile,
+                  mobile: model.layout.mobile,
                   filters: applied,
                 },
                 toParentMessage: Features.genie.toParentMessage,
               }),
             ]
           : []),
-        ...(model.mobile && model.mobileNavigation
+        ...(model.layout.mobile && model.layout.mobileNavigation
           ? [
               dialog(h, {
-                model: model.navigationDialog,
-                onMessage: (message) => M.NavigationDialog({ message }),
+                model: model.layout.navigationDialog,
+                onMessage: (message) =>
+                  Features.layout.toParentMessage(
+                    LayoutMessage.GotNavigationDialogMessage({ message }),
+                  ),
                 className: "dialog-panel sheet sidebar-dialog",
                 accessibleTitle: "Sidebar",
                 children: [sidebar(h, model)],
               }),
             ]
           : []),
-        ...(model.tripsState.inspector
+        ...(Option.isSome(model.tripsState.inspector)
           ? [
               h.submodel({
                 slotId: "inspector",
@@ -460,7 +470,7 @@ export function view(model: Model, h: H): Document {
               }),
             ]
           : []),
-        ...(model.savedViewsState.deleting
+        ...(Option.isSome(model.savedViewsState.deleting)
           ? [
               h.submodel({
                 slotId: "deleteDialog",
@@ -470,7 +480,7 @@ export function view(model: Model, h: H): Document {
               }),
             ]
           : []),
-        ...(model.savedViewsState.editor
+        ...(Option.isSome(model.savedViewsState.editor)
           ? [
               h.submodel({
                 slotId: "editor",

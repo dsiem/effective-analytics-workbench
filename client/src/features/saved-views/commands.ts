@@ -37,11 +37,11 @@ export const PersistRecentSavedViews = Command.define(
   "PersistRecentSavedViews",
   {
     args: { ids: RecentIds },
-    messages: [M.Idle],
+    messages: [M.CompletedPersistRecentSavedViews],
     execute: ({ ids }) =>
       Effect.sync(() => {
         writeRecentIds(ids);
-        return M.Idle();
+        return M.CompletedPersistRecentSavedViews();
       }),
   },
 );
@@ -49,17 +49,20 @@ export const RememberRecentSavedView = Command.define(
   "RememberRecentSavedView",
   {
     args: { id: SavedView.fields.id, fallback: RecentIds },
-    messages: [M.Idle],
+    messages: [M.CompletedRememberRecentSavedView],
     execute: ({ id, fallback }) =>
       Effect.sync(() => {
         writeRecentIds(rememberRecent(readRecentIds(fallback), id));
-        return M.Idle();
+        return M.CompletedRememberRecentSavedView();
       }),
   },
 );
 export const FocusSavedViewSearch = Command.define("FocusSavedViewSearch", {
-  messages: [M.Idle],
-  execute: Dom.focus(`#${searchId}`).pipe(Effect.ignore, Effect.as(M.Idle())),
+  messages: [M.CompletedFocusSavedViewSearch],
+  execute: Dom.focus(`#${searchId}`).pipe(
+    Effect.ignore,
+    Effect.as(M.CompletedFocusSavedViewSearch()),
+  ),
 });
 export const LoadSavedViewShortcuts = Command.define("LoadSavedViewShortcuts", {
   args: {
@@ -98,7 +101,7 @@ export const LoadSavedViewShortcuts = Command.define("LoadSavedViewShortcuts", {
       });
     }),
 });
-export const NewSavedView = Command.define("CreateSavedViewDraft", {
+export const CreateSavedViewDraft = Command.define("CreateSavedViewDraft", {
   args: {},
   messages: [M.CreatedSavedView],
   execute: () =>

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { Option } from "effect";
 import { pagePaths } from "@dsiem/analytics-shared/page-paths";
 import {
   pageUrls,
@@ -24,7 +25,11 @@ test("route query values keep their first occurrence while filters keep the last
   const query = "sort=fare&zip=10019&sort=distance&zip=10001";
   const trips = parseLocation("/trips", query);
   assert.deepEqual(trips.route, { _tag: "Trips", sort: "fare" });
-  assert.deepEqual(trips.filters, { zip: "10001" });
+  assert.deepEqual(trips.filters, Option.some({ zip: "10001" }));
+  assert.deepEqual(
+    parseLocation("/trips", "zip=invalid").filters,
+    Option.none(),
+  );
   assert.equal(trips.query, query);
   assert.equal(withTripSort(query, "newest"), "zip=10019&zip=10001");
 

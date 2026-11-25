@@ -1,6 +1,7 @@
 import { DatePicker } from "@foldkit/ui";
 import { Option } from "effect";
 import { Calendar } from "foldkit";
+import { modifyFields } from "foldkit/struct";
 import type { DatasetMetadata } from "@dsiem/analytics-shared/dataset";
 import { calendarDay } from "../../lib/format";
 import type { Model, WeekField } from "./model";
@@ -23,13 +24,13 @@ export function withMetadata(
       DatePicker.init({ id: `analysis-${field}`, today, ...bounds }),
       model.draft[field],
     );
-  return {
-    ...model,
-    datePickers: {
-      baselineWeek: picker("baselineWeek"),
-      comparisonWeek: picker("comparisonWeek"),
-    },
-  };
+  return modifyFields(model, {
+    datePickers: () =>
+      Option.some({
+        baselineWeek: picker("baselineWeek"),
+        comparisonWeek: picker("comparisonWeek"),
+      }),
+  });
 }
 
 export function focusWeek(

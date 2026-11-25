@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Schema } from "effect";
+import { AsyncData } from "foldkit";
 import { GenieContext } from "@dsiem/analytics-shared/genie";
 import type { Overview } from "@dsiem/analytics-shared/overview";
 import {
@@ -33,7 +34,7 @@ function contexts(data: Overview) {
   return [
     overviewContext({
       ...init(),
-      overview: { data, loading: false, error: "" },
+      overview: AsyncData.succeed(data),
     }),
     dailyChartContext("Trips by pickup date", data, "trips"),
   ];
