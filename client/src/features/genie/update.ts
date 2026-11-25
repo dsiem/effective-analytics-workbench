@@ -1,5 +1,5 @@
 import { Dialog } from "@foldkit/ui";
-import { Option } from "effect";
+import { Option, Record } from "effect";
 import { Command } from "foldkit";
 import { modifyFields } from "foldkit/struct";
 import type { GenieContext, GenieMode } from "@dsiem/analytics-shared/genie";
@@ -27,7 +27,13 @@ export function updateGenie(
       model: modifyFields(model, {
         turns: () => message.turns,
         genieMode: () => message.turns.at(-1)?.mode ?? "chat",
-        pollGeneration: (generation) => generation + 1,
+        lastPollGeneration: (generation) => generation + 1,
+        pollGenerations: () =>
+          Object.fromEntries(
+            message.turns
+              .filter((turn) => turn.state === "waiting")
+              .map(({ id }) => [id, model.lastPollGeneration + 1]),
+          ),
         persistenceError: () => message.persistenceError,
       }),
       commands: message.turns.flatMap((turn) =>
@@ -107,7 +113,7 @@ export function updateGenie(
     PolledQuestion: (message) => {
       const turn = model.turns.find(({ id }) => id === message.id);
       if (
-        message.generation !== model.pollGeneration ||
+        message.generation !== model.pollGenerations[message.id] ||
         turn?.state !== "waiting" ||
         turn.operation.conversationId !== message.operation.conversationId ||
         turn.operation.messageId !== message.operation.messageId
@@ -270,11 +276,20 @@ function changeTurn(
   ];
   if (next.state === "retrieving" && current.state !== "retrieving")
     commands.push(GenieCommands.RetrieveQuestion({ turn: next }));
+  const startsPolling = next.state === "waiting" && current.state !== "waiting";
+  const generation = startsPolling
+    ? model.lastPollGeneration + 1
+    : model.lastPollGeneration;
   return {
     model: modifyFields(model, {
       turns: () => turns,
-      pollGeneration: (generation) =>
-        next.state === "waiting" ? generation + 1 : generation,
+      lastPollGeneration: () => generation,
+      pollGenerations: (polls) =>
+        startsPolling
+          ? { ...polls, [next.id]: generation }
+          : next.state === "waiting"
+            ? polls
+            : Record.remove(polls, next.id),
     }),
     commands,
   };

@@ -1,4 +1,15 @@
-import { Clock, Data, Effect, Result, Schema, Stream } from "effect";
+import {
+  Clock,
+  Context,
+  Data,
+  Effect,
+  FiberMap,
+  Layer,
+  Queue,
+  Result,
+  Schema,
+  Stream,
+} from "effect";
 import { genieAccessHeaders } from "@dsiem/analytics-shared/api";
 import { Subscription } from "foldkit";
 import type { GenieAgentPhase } from "@dsiem/analytics-shared/genie";
@@ -7,16 +18,13 @@ import { failure } from "../../lib/command-result";
 import { Message as M, type Message, PollTarget } from "./messages";
 import type { Model } from "./model";
 
-const PollSelection = Schema.Struct({
-  generation: Schema.Int,
-  waiting: Schema.Array(PollTarget),
-});
 const agentVisibilityGraceMs = 30_000;
 class PollDeadlineExceeded extends Data.TaggedError("PollDeadlineExceeded") {}
+type PollMessage = ReturnType<typeof M.PolledQuestion>;
 
-function poll(target: typeof PollTarget.Type, generation: number) {
-  const complete = (outcome: ReturnType<typeof M.PolledQuestion>["outcome"]) =>
-    M.PolledQuestion({ ...target, generation, outcome });
+function poll(target: typeof PollTarget.Type) {
+  const complete = (outcome: PollMessage["outcome"]) =>
+    M.PolledQuestion({ ...target, outcome });
   const pause = (error: string) =>
     complete({ state: "paused", stage: "waiting", error });
   const read = request((client) =>
@@ -35,7 +43,7 @@ function poll(target: typeof PollTarget.Type, generation: number) {
         readonly unresolvedSince: number | undefined;
       }
     | { readonly step: "done" };
-  return Stream.unfold<PollState, Message | undefined, never, ApiClient>(
+  return Stream.unfold<PollState, PollMessage | undefined, never, ApiClient>(
     { step: "first" },
     Effect.fnUntraced(function* (state) {
       if (state.step === "done") return undefined;
@@ -108,31 +116,74 @@ function poll(target: typeof PollTarget.Type, generation: number) {
   );
 }
 
-export const subscriptions = Subscription.make<Model, Message, ApiClient>()(
-  (entry) => ({
-    geniePoll: entry(PollSelection.fields, {
+const makeGeniePolling = Effect.gen(function* () {
+  const fibers = yield* FiberMap.make<string, void, never>();
+  const messages = yield* Queue.unbounded<PollMessage>();
+  // Keep the selection after completion until its message reaches update.
+  let active = new Map<string, number>();
+
+  const sync = Effect.fnUntraced(function* (
+    waiting: ReadonlyArray<typeof PollTarget.Type>,
+  ) {
+    const next = new Map(waiting.map(({ id, generation }) => [id, generation]));
+    for (const [id, generation] of active) {
+      if (next.get(id) !== generation) yield* FiberMap.remove(fibers, id);
+    }
+    for (const target of waiting) {
+      if (active.get(target.id) !== target.generation) {
+        yield* FiberMap.run(
+          fibers,
+          target.id,
+          poll(target).pipe(
+            Stream.runForEach((message) => Queue.offer(messages, message)),
+            Effect.interruptible,
+          ),
+        );
+      }
+    }
+    active = next;
+  }, Effect.uninterruptible);
+  return {
+    sync,
+    messages: Stream.merge(
+      Stream.fromQueue(messages),
+      Stream.fromEffect(FiberMap.join(fibers)).pipe(Stream.drain),
+    ),
+  };
+});
+
+export class GeniePolling extends Context.Service<
+  GeniePolling,
+  Effect.Success<typeof makeGeniePolling>
+>()("app/GeniePolling") {
+  static readonly layer = Layer.effect(this, makeGeniePolling);
+}
+
+export const subscriptions = Subscription.make<
+  Model,
+  Message,
+  ApiClient | GeniePolling
+>()((entry) => ({
+  geniePoll: entry(
+    { waiting: Schema.Array(PollTarget) },
+    {
       modelToDependencies: (model) => ({
-        generation: model.pollGeneration,
-        waiting: model.turns.flatMap((turn) =>
-          turn.state === "waiting"
-            ? [{ id: turn.id, operation: turn.operation }]
-            : [],
-        ),
+        waiting: model.turns.flatMap((turn) => {
+          const generation = model.pollGenerations[turn.id];
+          return turn.state === "waiting" && generation !== undefined
+            ? [{ id: turn.id, operation: turn.operation, generation }]
+            : [];
+        }),
       }),
-      // Each restored turn can finish while the others keep polling.
-      keepAliveEquivalence: (left, right) =>
-        left.generation === right.generation &&
-        (left.waiting.length === 0) === (right.waiting.length === 0),
-      dependenciesToStream: ({
-        generation,
-        waiting,
-      }: typeof PollSelection.Type) =>
-        Stream.mergeAll(
-          waiting.map((turn) => poll(turn, generation)),
-          {
-            concurrency: "unbounded",
-          },
-        ),
-    }),
-  }),
-);
+      dependenciesToStream: ({ waiting }) =>
+        Stream.fromEffect(
+          GeniePolling.use((polling) => polling.sync(waiting)),
+        ).pipe(Stream.drain),
+    },
+  ),
+  geniePollMessages: Subscription.persistentEntry(
+    Stream.unwrap(
+      GeniePolling.use((polling) => Effect.succeed(polling.messages)),
+    ),
+  ),
+}));
