@@ -51,6 +51,7 @@
     "@commitlint/cli": "21.2.4",
     "@commitlint/config-conventional": "21.2.4",
     "@electric-sql/pglite": "0.5.16",
+    "@foldkit/oxlint-plugin": "0.15.4",
     "@playwright/test": "1.65.0",
     "apache-arrow": "21.2.0",
     "oxfmt": "0.79.0",
