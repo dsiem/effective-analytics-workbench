@@ -132,7 +132,7 @@ function composer(h: H, model: Model, enabled: boolean, working: boolean) {
     [h.Class("genie-composer")],
     [
       h.form(
-        [h.OnSubmit(M.SendQuestion({ question: draft }))],
+        [h.OnSubmit(M.SubmittedQuestion())],
         [
           Textarea.view(
             {
@@ -148,7 +148,7 @@ function composer(h: H, model: Model, enabled: boolean, working: boolean) {
                   h.Maxlength(3500),
                   h.OnKeyDownPreventDefault((key, modifiers) =>
                     key === "Enter" && !modifiers.shiftKey
-                      ? Option.some(M.SendQuestion({ question: draft }))
+                      ? Option.some(M.SubmittedQuestion())
                       : Option.none(),
                   ),
                 ]),

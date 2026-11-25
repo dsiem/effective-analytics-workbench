@@ -73,24 +73,8 @@ export function updateGenie(
     SetGenieMode: (message) => ({
       model: modifyFields(model, { genieMode: () => message.mode }),
     }),
-    SendQuestion: (message) => {
-      const question = message.question.trim();
-      if (busy(model) || !question || !context.filters) return { model };
-      return {
-        model,
-        commands: [
-          GenieCommands.CreateQuestion({
-            question,
-            filters: context.filters,
-            context: Option.getOrElse(
-              model.genieSelection,
-              () => context.context,
-            ),
-            ...(model.genieMode === "agent" ? { mode: "agent" as const } : {}),
-          }),
-        ],
-      };
-    },
+    SubmittedQuestion: () => submitQuestion(model, model.genieDraft, context),
+    SendQuestion: ({ question }) => submitQuestion(model, question, context),
     CreatedTurn: (message) => {
       if (busy(model)) return { model };
       const turn = {
@@ -227,6 +211,26 @@ export function updateGenie(
       model: modifyFields(model, { clipboard: () => message.text }),
     }),
   });
+}
+
+function submitQuestion(
+  model: Model,
+  draft: string,
+  { filters, context }: Context,
+): FeatureUpdate<Model, Message> {
+  const question = draft.trim();
+  if (busy(model) || !question || !filters) return { model };
+  return {
+    model,
+    commands: [
+      GenieCommands.CreateQuestion({
+        question,
+        filters,
+        context: Option.getOrElse(model.genieSelection, () => context),
+        ...(model.genieMode === "agent" ? { mode: "agent" } : {}),
+      }),
+    ],
+  };
 }
 
 export function clearSelection(model: Model): FeatureUpdate<Model, Message> {

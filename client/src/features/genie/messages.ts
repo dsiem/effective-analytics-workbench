@@ -49,6 +49,7 @@ export const messages = {
   ClearSelection: {},
   GenieDraft: { value: Schema.String },
   SetGenieMode: { mode: GenieMode },
+  SubmittedQuestion: {},
   SendQuestion: { question: Schema.String },
   CreatedTurn: { id: Schema.String, ...QuestionSnapshot.fields },
   ChangedTurn: { turn: Turn },

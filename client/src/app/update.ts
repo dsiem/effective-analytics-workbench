@@ -35,6 +35,9 @@ import * as Theme from "./theme";
 
 type AppUpdate = Update.Return<Model, Message, ApiClient>;
 
+const genieIsModal = (model: Model) =>
+  model.layout.mobile && showsExplore(model.location.route);
+
 export function init(url: Url): AppUpdate {
   const location = parseLocation(
     url.pathname,
@@ -236,15 +239,20 @@ function updateApplication(model: Model, message: Message): AppUpdate {
             filters,
             context: pageContext(model),
           }),
-        foldOutMessage: (out) => (parent) => ({
-          model:
+        foldOutMessage: (out) => (parent) => {
+          const next =
             out._tag === "Opened"
               ? Features.layout.foldInit(parent, {
                   model: Layout.closeNavigation(parent.layout),
                 }).model
-              : parent,
-          commands: [AppCommands.Focus({ selector: "#genie-composer" })],
-        }),
+              : parent;
+          if (out._tag === "Opened" && genieIsModal(next))
+            return { model: next };
+          return {
+            model: next,
+            commands: [AppCommands.Focus({ selector: "#genie-composer" })],
+          };
+        },
       })(model, message.message);
     },
     GotGpsMessage: (message) => {
@@ -280,10 +288,7 @@ export function update(model: Model, message: Message): AppUpdate {
     (parent) =>
       Features.genie.foldInit(
         parent,
-        presentGenie(
-          parent.genieState,
-          parent.layout.mobile && showsExplore(parent.location.route),
-        ),
+        presentGenie(parent.genieState, genieIsModal(parent)),
       ),
   ]);
 }

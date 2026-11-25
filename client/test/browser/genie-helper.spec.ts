@@ -85,6 +85,62 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+test("pressing Enter sends edits typed before the next render", async ({
+  page,
+}) => {
+  await page.goto(`/?${query}`);
+  const helper = await openHelper(page);
+  const textbox = helper.getByRole("textbox");
+  await textbox.fill("First");
+  await expect(
+    helper.getByRole("button", { name: "Send question" }),
+  ).toBeEnabled();
+
+  const submitted = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/api/genie",
+  );
+  await textbox.evaluate((element) => {
+    if (!(element instanceof HTMLTextAreaElement))
+      throw new Error("Expected a question textarea");
+    element.value = "First last";
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    element.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  expect((await submitted).postDataJSON()).toMatchObject({
+    content: "First last",
+  });
+});
+
+test("the desktop helper focuses its composer after a delayed render", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await page.addInitScript(() => {
+    window.requestAnimationFrame = (callback) =>
+      window.setTimeout(() => callback(performance.now()), 140);
+    window.cancelAnimationFrame = (handle) => window.clearTimeout(handle);
+  });
+  await page.goto(`/?${query}`);
+  const helper = await openHelper(page);
+  await expect(helper.getByRole("textbox")).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(helper).toBeHidden();
+  await expect(
+    page
+      .locator("header")
+      .getByRole("button", { name: "Ask Genie", exact: true }),
+  ).toBeFocused();
+});
+
 test("a denied Genie question keeps the chart and its filters available", async ({
   page,
 }, testInfo) => {
