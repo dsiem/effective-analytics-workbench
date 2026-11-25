@@ -64,14 +64,17 @@ const readGenieAgentAcceptance = <E>(body: Stream.Stream<Uint8Array, E>) =>
   Stream.suspend(() => {
     let accepted: string | undefined;
     const parser = Sse.makeParser((event) => {
-      if (event._tag === "Event" && event.event === "response.created")
-        accepted ??= event.data;
+      if (event._tag === "Event" && event.event === "response.created") {
+        accepted = event.data;
+        // Reset stops feed from parsing the rest of this chunk.
+        parser.reset();
+      }
     });
 
     return body.pipe(
       Stream.decodeText,
       Stream.mapEffect((chunk) => {
-        const cause = parser.feed(chunk);
+        const cause = accepted === undefined ? parser.feed(chunk) : undefined;
         return cause === undefined
           ? Effect.succeed(accepted)
           : Effect.fail(new GenieResponseError({ cause }));
