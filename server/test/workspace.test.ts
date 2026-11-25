@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { formatWithOptions } from "node:util";
 import {
   Cause,
   ConfigProvider,
+  Console,
   Effect,
   Exit,
   Fiber,
@@ -11,6 +13,7 @@ import {
 } from "effect";
 import { FetchHttpClient } from "effect/http";
 import * as TestClock from "effect/testing/TestClock";
+import { withApiErrors } from "../src/api-boundary.js";
 import { OperationTimeout } from "../src/errors.js";
 import { Settings } from "../src/settings.js";
 import { Workspace } from "../src/workspace.js";
@@ -120,6 +123,46 @@ test("workspace transport failures retain the diagnostic cause", async () => {
       assert.equal(result.failure.cause.cause, diagnostic);
     }
   }
+});
+
+test("the API error log excludes malformed workspace response text", async () => {
+  const body = "fixture-body";
+  const messages: unknown[][] = [];
+  const log = (...args: unknown[]) => {
+    messages.push(args);
+  };
+  const response = await Effect.runPromise(
+    Effect.gen(function* () {
+      const service = yield* Workspace;
+      return yield* Effect.flip(withApiErrors(service.request("/api/example")));
+    }).pipe(
+      Effect.provide(workspace),
+      Effect.provideService(
+        FetchHttpClient.Fetch,
+        async () => new Response(body),
+      ),
+      Effect.provideService(Console.Console, { ...console, error: log, log }),
+    ),
+  );
+  assert.deepEqual(response, {
+    error: {
+      code: "workspace_unavailable",
+      message: "The Databricks request could not be completed.",
+    },
+  });
+  assert.doesNotMatch(
+    formatWithOptions({ depth: null }, messages),
+    /fixture-body|workspace-secret/,
+  );
+  assert.deepEqual(
+    messages.map((message) => message.slice(1)),
+    [
+      [
+        "API dependency failed",
+        { service: "workspace", errorTag: "ServiceUnavailable" },
+      ],
+    ],
+  );
 });
 
 for (const stage of ["request", "body"] as const) {

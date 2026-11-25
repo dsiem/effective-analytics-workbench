@@ -12,6 +12,11 @@ import {
 import type { ServiceError } from "./errors.js";
 
 const isUpstreamFailureStatus = Schema.is(UpstreamFailureStatus);
+const upstreamStatusFields = (error: ServiceError) =>
+  error._tag === "UpstreamError" &&
+  isUpstreamFailureStatus(error.upstreamStatus)
+    ? { upstreamStatus: error.upstreamStatus }
+    : {};
 
 type ErrorBody<Code extends string> = {
   error: { code: Code; message: string; upstreamStatus?: number };
@@ -35,10 +40,7 @@ function encodeError(error: ServiceError) {
           ? `${error.service}${serviceErrorSuffixes[error._tag]}`
           : apiErrorCodes[error._tag],
       message: error.message,
-      ...(error._tag === "UpstreamError" &&
-      isUpstreamFailureStatus(error.upstreamStatus)
-        ? { upstreamStatus: error.upstreamStatus }
-        : {}),
+      ...upstreamStatusFields(error),
     },
   };
 }
@@ -50,10 +52,17 @@ export const withApiErrors = <A, E extends ServiceError, R>(
     Effect.tapError((error) => {
       switch (error._tag) {
         case "OperationTimeout":
-          return Effect.logWarning("API dependency timed out", error);
+          return Effect.logWarning("API dependency timed out", {
+            service: error.service,
+            errorTag: error._tag,
+          });
         case "ServiceUnavailable":
         case "UpstreamError":
-          return Effect.logError("API dependency failed", error);
+          return Effect.logError("API dependency failed", {
+            service: error.service,
+            errorTag: error._tag,
+            ...upstreamStatusFields(error),
+          });
         default:
           return Effect.void;
       }
