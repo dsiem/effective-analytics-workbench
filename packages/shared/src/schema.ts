@@ -5,6 +5,8 @@ export const boundedText = (max: number) =>
 
 export const Id = Schema.String.check(Schema.isUUID(4));
 
+export const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 export const Zip = Schema.String.check(Schema.isPattern(/^\d{5}$/));
 export const Day = Schema.String.check(
   Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/),

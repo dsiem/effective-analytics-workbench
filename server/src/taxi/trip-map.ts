@@ -5,7 +5,7 @@ import {
   type GpsEndpoint,
   type GpsSearch,
   mapCellLimit,
-  type TripMap,
+  TripMap,
 } from "@dsiem/analytics-shared/map-dataset";
 import { type TaxiSnapshot, tripWhere } from "./snapshot.js";
 
@@ -33,17 +33,19 @@ export const makeTripMap = (taxi: TaxiSnapshot) =>
           const { totals, cells } = yield* Effect.all(
             {
               totals: read(
-                Schema.Struct({
-                  matching: Schema.NumberFromString,
-                  located: Schema.NumberFromString,
-                }),
+                Schema.toCodecStringTree(
+                  Schema.Struct({
+                    matching: TripMap.fields.matchingTrips,
+                    located: TripMap.fields.locatedTrips,
+                  }),
+                ),
                 sql`SELECT COUNT(*)::DOUBLE AS matching, count_if(${valid})::DOUBLE AS located FROM ${snapshot} ${tripWhere(sql, search)}`,
               ),
               cells: read(
                 Schema.Struct({
                   ...GpsCell.fields,
                   boundary: Schema.fromJsonString(GpsCell.fields.boundary),
-                  total_cells: Schema.Number,
+                  total_cells: TripMap.fields.totalCells,
                 }),
                 sql
                   .arrowStream(sql`WITH bins AS (
