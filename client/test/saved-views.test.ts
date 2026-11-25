@@ -18,6 +18,7 @@ import {
   visibleSavedViews,
 } from "../src/features/saved-views/picker";
 import { updateSavedViews as update } from "../src/features/saved-views/update";
+import { fail, succeed } from "../src/lib/command-result";
 
 const context = { filters: {} };
 const row = (index: number): SavedView => ({
@@ -49,8 +50,7 @@ const result = (
 ) =>
   M.LoadedSavedViews({
     version,
-    data: { rows, nextCursor },
-    error: "",
+    result: succeed({ rows, nextCursor }),
     more,
     pages: 1,
   });
@@ -109,9 +109,8 @@ test("closing and reopening cannot accept a previous session's search or shortcu
     late,
     M.LoadedSavedViewShortcuts({
       version: first.shortcutVersion,
-      data: { rows: [row(1)], recents: [row(1)] },
+      result: succeed({ rows: [row(1)], recents: [row(1)] }),
       recentIds: [row(1).id],
-      error: "",
     }),
   ).model;
   assert.deepEqual(visibleSavedViews(hydrated), []);
@@ -136,8 +135,7 @@ test("a failed continuation keeps results and its retry cursor, and a successful
     pending,
     M.LoadedSavedViews({
       version: pending.searchVersion,
-      data: null,
-      error: "Try again",
+      result: fail("Try again"),
       more: true,
       pages: 1,
     }),
@@ -175,9 +173,8 @@ test("applying a view promotes only its ID and invalidates pending recent hydrat
     applied.model,
     M.LoadedSavedViewShortcuts({
       version: model.browser.shortcutVersion,
-      data: { rows: [row(1)], recents: [row(1)] },
+      result: succeed({ rows: [row(1)], recents: [row(1)] }),
       recentIds: [row(1).id],
-      error: "",
     }),
     context,
   );

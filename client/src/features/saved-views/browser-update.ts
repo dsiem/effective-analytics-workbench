@@ -3,7 +3,6 @@ import { Option, Result } from "effect";
 import { AsyncData, Command, type Update } from "foldkit";
 import { modifyFields } from "foldkit/struct";
 import type { FeatureUpdate } from "../../lib/feature-update";
-import { fromResponse } from "../../lib/request-state";
 import { type Model, PickerMode } from "./browser-model";
 import * as SavedViewsCommands from "./commands";
 import {
@@ -161,12 +160,13 @@ export function updateBrowser(
     LoadedSavedViewShortcuts: (message) => {
       if (message.version !== model.shortcutVersion || !model.picker.isOpen)
         return { model };
+      const loaded = message.result._tag === "Success";
       return {
         model: modifyFields(model, {
-          recentIds: (ids) => (message.data ? message.recentIds : ids),
-          shortcuts: () => fromResponse(message),
+          recentIds: (ids) => (loaded ? message.recentIds : ids),
+          shortcuts: () => message.result,
         }),
-        commands: message.data
+        commands: loaded
           ? [
               SavedViewsCommands.PersistRecentSavedViews({
                 ids: message.recentIds,
@@ -203,31 +203,29 @@ export function updateBrowser(
     LoadedSavedViews: (message) => {
       if (message.version !== model.searchVersion || !model.picker.isOpen)
         return { model };
+      const { result } = message;
+      const page = result._tag === "Success" ? result.data : undefined;
       const previous = AsyncData.getData(model.savedViews);
-      const savedViews = message.data
-        ? AsyncData.succeed({
-            ...message.data,
-            rows: message.more
-              ? mergeSavedViews(
+      const savedViews =
+        result._tag === "Failure"
+          ? AsyncData.settle(model.savedViews, Result.fail(result.error))
+          : page && message.more
+            ? AsyncData.succeed({
+                ...page,
+                rows: mergeSavedViews(
                   Option.getOrUndefined(previous)?.rows ?? [],
-                  message.data.rows,
-                )
-              : message.data.rows,
-          })
-        : message.error
-          ? AsyncData.settle(model.savedViews, Result.fail(message.error))
-          : loadedOrIdle(previous);
+                  page.rows,
+                ),
+              })
+            : result;
       return {
         commands:
-          message.more &&
-          message.data &&
-          !message.data.nextCursor &&
-          model.picker.isOpen
+          message.more && page && !page.nextCursor && model.picker.isOpen
             ? [SavedViewsCommands.FocusSavedViewSearch()]
             : [],
         model: modifyFields(model, {
           savedViewPages: (pages) =>
-            message.data ? (message.more ? pages + 1 : message.pages) : pages,
+            page ? (message.more ? pages + 1 : message.pages) : pages,
           savedViews: () => savedViews,
         }),
       };

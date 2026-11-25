@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Dialog } from "@foldkit/ui";
-import { Effect, Option, Result, Schema, Stream } from "effect";
+import { Effect, Option, Schema, Stream } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { AsyncData, Url } from "foldkit";
@@ -34,6 +34,7 @@ import * as Trips from "../src/features/trips/model";
 import { subscriptions } from "../src/features/trips/subscription";
 import { reloadTrips, updateTrips } from "../src/features/trips/update";
 import { ApiClient } from "../src/lib/api-client";
+import { fail, succeed } from "../src/lib/command-result";
 import { tripSummaryFor } from "./trip-fixture";
 
 const open = (path: string) =>
@@ -243,7 +244,7 @@ test("returning to an Overview filter keeps the fresh summary when the original 
   };
   const loaded = (
     change: ReturnType<typeof init>,
-    result: Result.Result<typeof data, string>,
+    result: ReturnType<typeof OverviewMessage.LoadedOverview>["result"],
   ) =>
     Features.overview.toParentMessage(
       OverviewMessage.LoadedOverview({
@@ -254,8 +255,8 @@ test("returning to an Overview filter keeps the fresh summary when the original 
   story(
     update,
     given(returned.model),
-    message(loaded(returned, Result.succeed(data))),
-    message(loaded(opened, Result.fail("Original load timed out"))),
+    message(loaded(returned, succeed(data))),
+    message(loaded(opened, fail("Original load timed out"))),
     model(({ overviewState }) => {
       assert.deepEqual(overviewState.overview, AsyncData.succeed(data));
     }),
@@ -284,8 +285,7 @@ test("reopening the same trip keeps fresh comments when the original list arrive
       TripMessage.LoadedComments({
         tripId: trip.trip_id,
         generation: model.tripsState.commentLoadGeneration,
-        data: { rows, nextCursor: null },
-        error: "",
+        result: succeed({ rows, nextCursor: null }),
       }),
     );
   const fresh = reply(reopened.model, [note]);
@@ -332,8 +332,7 @@ test("lost comment responses replay the attempted payload until the draft is edi
     TripMessage.LoadedTripDetails({
       tripId: record.trip_id,
       generation: next.model.tripsState.detailLoadGeneration,
-      data: record,
-      error: "",
+      result: succeed(record),
     });
   const submissions: TripCommentInput[] = [];
   send(TripMessage.InspectTrip({ trip }));
@@ -368,8 +367,7 @@ test("trip details ignore an earlier selection and retry independently", () => {
     TripMessage.LoadedTripDetails({
       tripId: record.trip_id,
       generation: model.tripsState.detailLoadGeneration,
-      data: error ? null : record,
-      error,
+      result: error ? fail(error) : succeed(record),
     });
   const failed = send(opened, reply(opened, other, "Details timed out"));
   assert.equal(send(failed, reply(first, trip)), failed);
@@ -413,8 +411,7 @@ test("a standalone trip feature closes its inspector and ignores late comments",
     TripMessage.LoadedComments({
       tripId: trip.trip_id,
       generation: opened.model.commentLoadGeneration,
-      data: { rows: [], nextCursor: null },
-      error: "",
+      result: succeed({ rows: [], nextCursor: null }),
     }),
   );
   assert.ok(Option.isNone(late.model.inspector));
@@ -543,16 +540,14 @@ test("comment counts from an older trip window cannot replace the current rows' 
     refreshed,
     TripMessage.LoadedCommentCounts({
       version: refreshed.commentCounts.version,
-      data: { [trip.trip_id]: 3 },
-      error: "",
+      result: succeed({ [trip.trip_id]: 3 }),
     }),
   ).model;
   const late = updateTrips(
     current,
     TripMessage.LoadedCommentCounts({
       version: initial.commentCounts.version,
-      data: { [trip.trip_id]: 0 },
-      error: "",
+      result: succeed({ [trip.trip_id]: 0 }),
     }),
   ).model;
   assert.equal(late.commentCounts.data?.[trip.trip_id], 3);
@@ -603,8 +598,10 @@ test("comment-count denial needs an explicit retry and uses the current window",
     scrolled.model,
     TripMessage.LoadedCommentCounts({
       version: atTop.model.commentCounts.version,
-      data: null,
-      error: { _tag: "AccessDenied", message: "Permission is required" },
+      result: fail({
+        _tag: "AccessDenied",
+        message: "Permission is required",
+      }),
     }),
   );
   assert.ok(!failed.commands?.some(({ name }) => name === "LoadCommentCounts"));
@@ -695,7 +692,7 @@ test("saved views own editor dismissal and prevent closing an in-flight save", (
   }
   const failed = updateSavedViews(
     saving.model,
-    SavedMessage.SavedViewSaved({ savedView: null, error: "Try again" }),
+    SavedMessage.SavedViewSaved({ result: fail("Try again") }),
     context,
   );
   const closed = updateSavedViews(
@@ -745,7 +742,9 @@ test("saved views keep deletion open during a write and close it after success",
   }
   const deleted = updateSavedViews(
     busy.model,
-    SavedMessage.MutatedSavedView({ removed: true, error: "" }),
+    SavedMessage.MutatedSavedView({
+      result: succeed({ removed: true }),
+    }),
     context,
   );
   assert.ok(Option.isNone(deleted.model.deleting));
@@ -865,7 +864,7 @@ test("overview accepts only the active response and requests selection invalidat
     model,
     OverviewMessage.LoadedOverview({
       generation: model.loadGeneration - 1,
-      result: Result.fail("old failure"),
+      result: fail("old failure"),
     }),
   );
   assert.equal(stale.model, model);
@@ -874,7 +873,7 @@ test("overview accepts only the active response and requests selection invalidat
     model,
     OverviewMessage.LoadedOverview({
       generation: model.loadGeneration,
-      result: Result.fail("Warehouse unavailable"),
+      result: fail("Warehouse unavailable"),
     }),
   );
   assert.deepEqual(

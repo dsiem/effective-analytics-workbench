@@ -44,8 +44,7 @@ export function updateOverview(
         : {
             outMessage: SelectionInvalidated(),
             model: modifyFields(model, {
-              overview: (overview) =>
-                AsyncData.settle(overview, message.result),
+              overview: () => message.result,
             }),
           },
   });

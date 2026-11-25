@@ -2,7 +2,7 @@ import { Effect, Option, Schema, Stream } from "effect";
 import { AsyncData, Subscription } from "foldkit";
 import { Filters } from "@dsiem/analytics-shared/filters";
 import { type ApiClient, request } from "../../lib/api-client";
-import { failure } from "../../lib/command-result";
+import { result } from "../../lib/command-result";
 import { Message as M, type Message } from "./messages";
 import type { Model } from "./model";
 
@@ -32,10 +32,9 @@ export const subscriptions = Subscription.make<
     modelToDependencies: (request) => request,
     dependenciesToStream: ({ generation, filters }) =>
       Stream.fromEffect(
-        request((client) => client.analytics.overview({ query: filters })).pipe(
-          Effect.scoped,
-          Effect.mapError(failure),
-          Effect.result,
+        result(
+          request((client) => client.analytics.overview({ query: filters })),
+        ).pipe(
           Effect.map((result) => M.LoadedOverview({ generation, result })),
         ),
       ),

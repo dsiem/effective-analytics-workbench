@@ -2,11 +2,13 @@ import { Dialog, Menu } from "@foldkit/ui";
 import { Schema } from "effect";
 import { defineMessageUnion } from "foldkit/message";
 import {
+  TripComment,
   TripCommentCounts,
   TripCommentInput,
   TripComments,
 } from "@dsiem/analytics-shared/trip-comments";
 import { Trip, TripSummary } from "@dsiem/analytics-shared/trips";
+import { Completion } from "../../lib/command-result";
 import { Notice } from "../../lib/request-state";
 import { Sort, TripViewport } from "./model";
 
@@ -34,25 +36,25 @@ export const messages = {
   LoadedTripDetails: {
     tripId: TripSummary.fields.trip_id,
     generation: Schema.Int,
-    data: Schema.NullOr(Trip),
-    error: Notice,
+    result: Completion(Trip),
   },
   RetryCommentCounts: {},
   LoadedCommentCounts: {
     version: Schema.Int,
-    data: Schema.NullOr(TripCommentCounts),
-    error: Notice,
+    result: Completion(TripCommentCounts),
   },
   LoadComments: { more: Schema.Boolean },
   LoadedComments: {
     tripId: Schema.String,
     generation: Schema.Int,
-    data: Schema.NullOr(TripComments),
-    error: Notice,
+    result: Completion(TripComments),
   },
   CommentChanged: { body: Schema.String },
   PostComment: {},
-  PostedComment: { input: TripCommentInput, error: Notice },
+  PostedComment: {
+    input: TripCommentInput,
+    result: Completion(TripComment),
+  },
 };
 
 export const Message = defineMessageUnion(messages);

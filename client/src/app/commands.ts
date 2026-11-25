@@ -33,12 +33,12 @@ export const LoadMetadata = Command.define("LoadMetadata", {
     result: result(request((client) => client.analytics.metadata())),
     today: Calendar.today.local,
   }).pipe(
-    Effect.map(({ result, today }) => M.LoadedMetadata({ ...result, today })),
+    Effect.map(({ result, today }) => M.LoadedMetadata({ result, today })),
   ),
 });
 export const LoadUser = Command.define("LoadUser", {
   messages: [M.LoadedUser],
   execute: result(request((client) => client.viewer.current())).pipe(
-    Effect.map(({ data }) => M.LoadedUser({ user: data })),
+    Effect.map((result) => M.LoadedUser({ result })),
   ),
 });

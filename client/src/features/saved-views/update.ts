@@ -1,7 +1,7 @@
 import { type Filters, sameFilters } from "@dsiem/analytics-shared/filters";
 import { Dialog } from "@foldkit/ui";
 import { Option } from "effect";
-import { Command } from "foldkit";
+import { AsyncData, Command } from "foldkit";
 import { modifyFields } from "foldkit/struct";
 import { syncDialog } from "../../lib/dialog";
 import type { FeatureUpdate } from "../../lib/feature-update";
@@ -164,7 +164,9 @@ function updateSavedViewsState(
               SavedViewsCommands.SaveSavedView({ draft: editor.draft }),
             ],
           },
-    SavedViewSaved: ({ savedView, error }) => {
+    SavedViewSaved: ({ result }) => {
+      const savedView = Option.getOrUndefined(AsyncData.getData(result));
+      const error = Option.getOrElse(AsyncData.getError(result), () => "");
       const next = modifyFields(model, {
         editor: (editor) =>
           savedView
@@ -212,8 +214,9 @@ function updateSavedViewsState(
               SavedViewsCommands.DeleteSavedView({ savedView: deleting }),
             ],
           },
-    MutatedSavedView: ({ removed, error }) => {
-      const deleted = removed && !error;
+    MutatedSavedView: ({ result }) => {
+      const deleted = result._tag === "Success" && result.data.removed;
+      const error = Option.getOrElse(AsyncData.getError(result), () => "");
       const removedId = deleted ? deleting?.id : undefined;
       const next = modifyFields(model, {
         savedViewBusy: () => false,

@@ -1,4 +1,4 @@
-import { Notice } from "../../lib/request-state";
+import { Completion } from "../../lib/command-result";
 import { Dialog, Popover } from "@foldkit/ui";
 import { Schema } from "effect";
 import { defineMessageUnion } from "foldkit/message";
@@ -18,9 +18,8 @@ const browserMessages = {
   LoadSavedViewShortcuts: {},
   LoadedSavedViewShortcuts: {
     version: Schema.Number,
-    data: Schema.NullOr(Shortcuts),
+    result: Completion(Shortcuts),
     recentIds: RecentIds,
-    error: Notice,
   },
   CompletedCancelLoadSavedViews: {
     version: Schema.Number,
@@ -28,8 +27,7 @@ const browserMessages = {
     debounce: Schema.Boolean,
   },
   LoadedSavedViews: {
-    data: Schema.NullOr(SavedViewsPage),
-    error: Notice,
+    result: Completion(SavedViewsPage),
     more: Schema.Boolean,
     pages: Schema.Number,
     version: Schema.Number,
@@ -55,13 +53,14 @@ export const Message = defineMessageUnion({
   },
   SaveSavedView: {},
   SavedViewSaved: {
-    savedView: Schema.NullOr(SavedView),
-    error: Notice,
+    result: Completion(SavedView),
   },
   PinSavedView: { savedView: SavedView },
   DeleteSavedView: { savedView: SavedView },
   ConfirmDelete: {},
-  MutatedSavedView: { removed: Schema.Boolean, error: Notice },
+  MutatedSavedView: {
+    result: Completion(Schema.Struct({ removed: Schema.Boolean })),
+  },
   RestoreView: { savedView: SavedView },
 });
 export type Message = typeof Message.Type;

@@ -3,7 +3,7 @@ import { Command } from "foldkit";
 import { Id } from "@dsiem/analytics-shared/schema";
 import { TripSnapshot } from "@dsiem/analytics-shared/trips";
 import { request } from "../../lib/api-client";
-import { result } from "../../lib/command-result";
+import { fail, result } from "../../lib/command-result";
 import { Message as M } from "./messages";
 export const LoadCommentCounts = Command.define("LoadCommentCounts", {
   args: {
@@ -15,15 +15,14 @@ export const LoadCommentCounts = Command.define("LoadCommentCounts", {
     result(
       request((client) => client.tripComments.counts({ query: { tripIds } })),
     ).pipe(
-      Effect.map(({ data, error }) =>
+      Effect.map((result) =>
         M.LoadedCommentCounts({
           version,
-          ...(data && !tripIds.every((id) => Object.hasOwn(data, id))
-            ? {
-                data: null,
-                error: "Some comment counts were missing from the response.",
-              }
-            : { data, error }),
+          result:
+            result._tag === "Success" &&
+            !tripIds.every((id) => Object.hasOwn(result.data, id))
+              ? fail("Some comment counts were missing from the response.")
+              : result,
         }),
       ),
     ),
@@ -38,9 +37,9 @@ export const PostComment = Command.define("PostComment", {
   execute: ({ trip, body, retryId }) =>
     Effect.gen(function* () {
       const input = { trip, body, id: retryId ?? crypto.randomUUID() };
-      const { error } = yield* result(
+      const posted = yield* result(
         request((client) => client.tripComments.add({ payload: input })),
       );
-      return M.PostedComment({ input, error });
+      return M.PostedComment({ input, result: posted });
     }),
 });
