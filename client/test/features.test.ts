@@ -662,14 +662,17 @@ test("analysis links distinguish valid, malformed, and absent run IDs", () => {
   assert.equal(absent.analysisRunsState.invalidLink, false);
 });
 
-test("saved views own editor dismissal and prevent closing an in-flight save", () => {
+test("a saved-view draft accepts an empty title and freezes while saving", () => {
   const context = { filters: {} };
   const created = updateSavedViews(
     SavedViews.init(),
-    SavedMessage.CreatedSavedView({ id: "draft" }),
+    SavedMessage.CreatedSavedView({
+      id: "f9ca0a62-e2bc-4bc6-b27a-8c37cdd7d784",
+    }),
     context,
   );
   assert.equal(created.model.dialogs.savedView.isOpen, true);
+  assert.ok(Schema.is(SavedViews.Model)(created.model));
   const named = updateSavedViews(
     created.model,
     SavedMessage.SavedViewChanged({ field: "title", value: "My view" }),
@@ -681,19 +684,30 @@ test("saved views own editor dismissal and prevent closing an in-flight save", (
     context,
   );
   for (const message of [
+    SavedMessage.SavedViewChanged({ field: "title", value: "Later name" }),
+    SavedMessage.SavedViewChanged({ field: "body", value: "Later finding" }),
     SavedMessage.CloseSavedView(),
     SavedMessage.GotSavedViewDialogMessage({
       message: Dialog.Message.RequestedClose(),
     }),
   ]) {
     const blocked = updateSavedViews(saving.model, message, context);
-    assert.equal(Option.getOrUndefined(blocked.model.editor)?.saving, true);
+    assert.deepEqual(blocked.model.editor, saving.model.editor);
     assert.equal(blocked.model.dialogs.savedView.isOpen, true);
   }
   const failed = updateSavedViews(
     saving.model,
     SavedMessage.SavedViewSaved({ result: fail("Try again") }),
     context,
+  );
+  const retried = updateSavedViews(
+    failed.model,
+    SavedMessage.SavedViewChanged({ field: "body", value: "Revised finding" }),
+    context,
+  );
+  assert.equal(
+    Option.getOrThrow(retried.model.editor).draft.body,
+    "Revised finding",
   );
   const closed = updateSavedViews(
     failed.model,

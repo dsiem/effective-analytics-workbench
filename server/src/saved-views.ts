@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Schema, Struct } from "effect";
 import * as SqlSchema from "effect/sql/SqlSchema";
 import type { Statement } from "effect/sql/Statement";
 import { pageWindow } from "@dsiem/analytics-shared/cursor-page";
@@ -19,6 +19,7 @@ const makeSavedViews = (sql: LakebaseSql) => {
   const columns = sql`id::text AS id, title, body, filters, pinned, version,
       to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at,
       to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS updated_at`;
+  const visible = sql`last_write IS DISTINCT FROM 'delete'`;
   const list = (search: SavedViewSearch) =>
     SqlSchema.findAll({
       Request: Schema.Void,
@@ -30,6 +31,7 @@ const makeSavedViews = (sql: LakebaseSql) => {
       to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_updated_at
       FROM app.saved_views AS saved_views
       WHERE ${sql.and([
+        visible,
         ...(search.cursor
           ? [
               sql`(pinned, updated_at, id) <
@@ -73,59 +75,81 @@ const makeSavedViews = (sql: LakebaseSql) => {
       message:
         "This saved view has been removed. Your draft has not been saved.",
     });
-  const missingWrite = (id: string) =>
-    sql`SELECT id FROM app.saved_views WHERE id = ${id}::uuid`.pipe(
-      Effect.mapError(
-        lakebaseFailure(
-          "Saved views are under lock. You need permission to open them.",
-        ),
-      ),
-      Effect.flatMap((rows) =>
-        Effect.fail(rows.length ? conflict(id) : notFound(id)),
-      ),
-    );
-  const write = (id: string, execute: () => Statement<unknown>) =>
+  const readWrite = <A>(
+    schema: Schema.Decoder<A>,
+    statement: Statement<unknown>,
+  ) =>
     SqlSchema.findAll({
       Request: Schema.Void,
-      Result: SavedView,
-      execute,
+      Result: schema,
+      execute: () => statement,
     })(undefined).pipe(
       Effect.mapError(
         lakebaseFailure(
           "This view is locked for changes. You need permission to save it.",
         ),
       ),
-      Effect.flatMap((rows) =>
-        rows[0] ? Effect.succeed(rows[0]) : missingWrite(id),
-      ),
     );
-  const save = (input: SavedViewInput) =>
-    write(input.id, () =>
-      input.version === null
-        ? sql`INSERT INTO app.saved_views (id,title,body,filters)
-          VALUES (${input.id}::uuid,${input.title},${input.body},${sql.json(input.filters)})
-          ON CONFLICT (id) DO NOTHING RETURNING ${columns}`
-        : sql`UPDATE app.saved_views SET title=${input.title}, body=${input.body},
-          filters=${sql.json(input.filters)}, version=version+1, updated_at=now()
-          WHERE id=${input.id}::uuid AND version=${input.version}
-          RETURNING ${columns}`,
+  const write = (
+    id: string,
+    statement: Statement<unknown>,
+    replay: Statement<unknown>,
+  ) =>
+    Effect.gen(function* () {
+      const [written] = yield* readWrite(SavedView, statement);
+      if (written) return written;
+      // A fresh statement sees a concurrent commit that won the version check.
+      const [current] = yield* readWrite(
+        Schema.Struct({
+          ...SavedView.fields,
+          deleted: Schema.Boolean,
+          replayed: Schema.Boolean,
+        }),
+        sql`SELECT ${columns}, NOT (${visible}) AS deleted,
+          (${replay}) IS TRUE AS replayed FROM app.saved_views WHERE id=${id}::uuid`,
+      );
+      if (current?.replayed)
+        return Struct.omit(current, ["replayed", "deleted"]);
+      return yield* current && !current.deleted ? conflict(id) : notFound(id);
+    });
+  const save = ({ id, title, body, filters, version }: SavedViewInput) => {
+    const sameDraft = sql`title=${title} AND body=${body} AND filters=${sql.json(filters)}::jsonb`;
+    return (
+      version === null
+        ? write(
+            id,
+            sql`INSERT INTO app.saved_views (id,title,body,filters)
+              VALUES (${id}::uuid,${title},${body},${sql.json(filters)})
+              ON CONFLICT (id) DO NOTHING RETURNING ${columns}`,
+            sql`version=1 AND last_write IS NULL AND ${sameDraft}`,
+          )
+        : write(
+            id,
+            sql`UPDATE app.saved_views SET title=${title}, body=${body},
+              filters=${sql.json(filters)}, version=version+1, updated_at=now(), last_write='edit'
+              WHERE id=${id}::uuid AND version=${version}::bigint AND ${visible}
+              RETURNING ${columns}`,
+            sql`version=${version + 1}::bigint AND last_write='edit' AND ${sameDraft}`,
+          )
     ).pipe(Effect.withSpan("savedViews.save"));
-  const pin = (id: string, input: SavedViewPin) =>
+  };
+  const pin = (id: string, { version, pinned }: SavedViewPin) =>
     write(
       id,
-      () => sql`UPDATE app.saved_views SET pinned=${input.pinned},
-      version=version+1, updated_at=now()
-      WHERE id=${id}::uuid AND version=${input.version} RETURNING ${columns}`,
+      sql`UPDATE app.saved_views SET pinned=${pinned}, last_write='pin',
+        version=version+1, updated_at=now()
+        WHERE id=${id}::uuid AND version=${version}::bigint AND ${visible} RETURNING ${columns}`,
+      sql`version=${version + 1}::bigint AND last_write='pin' AND pinned=${pinned}`,
     ).pipe(Effect.withSpan("savedViews.pin"));
   const remove = (id: string, version: number) =>
-    sql`DELETE FROM app.saved_views WHERE id = ${id}::uuid AND version=${version} RETURNING id`.pipe(
-      Effect.mapError(
-        lakebaseFailure(
-          "This view is staying put. You need permission to delete it.",
-        ),
-      ),
-      Effect.flatMap((rows) => (rows.length ? Effect.void : missingWrite(id))),
-    );
+    write(
+      id,
+      // Keep the ID and deleted version reserved. Discard the user's content.
+      sql`UPDATE app.saved_views SET last_write='delete', title='Deleted', body='',
+        filters='{}'::jsonb, pinned=false, updated_at=now()
+        WHERE id=${id}::uuid AND version=${version}::bigint AND ${visible} RETURNING ${columns}`,
+      sql`last_write='delete' AND version=${version}::bigint`,
+    ).pipe(Effect.asVoid, Effect.withSpan("savedViews.remove"));
   return { list, save, pin, remove };
 };
 

@@ -55,6 +55,20 @@ test("bounds saved-view writes and conversational input", () => {
     Schema.decodeUnknownSync(SavedViewInput)(savedView),
     savedView,
   );
+  for (const title of [" ", "\t\n", "\u00a0"]) {
+    assert.throws(() =>
+      Schema.decodeUnknownSync(SavedViewInput)({ ...savedView, title }),
+    );
+    const existing = {
+      ...savedView,
+      title,
+      version: 1,
+      pinned: false,
+      created_at: "2026-01-01",
+      updated_at: "2026-01-01",
+    };
+    assert.deepEqual(Schema.decodeUnknownSync(SavedView)(existing), existing);
+  }
   assert.throws(() =>
     Schema.decodeUnknownSync(SavedViewInput)({
       ...savedView,
