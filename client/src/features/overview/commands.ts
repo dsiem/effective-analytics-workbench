@@ -10,5 +10,5 @@ export const LoadOverview = Command.define("LoadOverview", {
   execute: ({ generation, filters }) =>
     result(
       request((client) => client.analytics.overview({ query: filters })),
-    ).pipe(Effect.map((value) => M.LoadedOverview({ generation, ...value }))),
+    ).pipe(Effect.map((result) => M.LoadedOverview({ generation, result }))),
 });

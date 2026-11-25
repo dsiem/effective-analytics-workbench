@@ -6,7 +6,6 @@ import { AnalysisInput } from "@dsiem/analytics-shared/analysis-runs";
 import type { AnalysisRunLink } from "../../app/route";
 import type { ApiClient } from "../../lib/api-client";
 import { isoDay } from "../../lib/format";
-import { fromResponse } from "../../lib/request-state";
 import * as Commands from "./commands";
 import { focusWeek } from "./dates";
 import { Message as M, type Message } from "./messages";
@@ -266,17 +265,18 @@ export function updateAnalysisRuns(
       ) {
         return { model };
       }
+      const { result } = message;
       if (query === null || model.generation !== message.generation) {
         const next = modifyFields(model, { submission: () => readyToSubmit() });
-        return message.data && query !== null && !selected
+        return result._tag === "Success" && query !== null && !selected
           ? loadHistory(next)
           : { model: next };
       }
-      if (!message.data) {
+      if (result._tag === "Failure") {
         return {
           model: modifyFields(model, {
             submission: () =>
-              readyToSubmit(Option.some(message.requestId), message.error),
+              readyToSubmit(Option.some(message.requestId), result.error),
           }),
         };
       }
@@ -289,7 +289,7 @@ export function updateAnalysisRuns(
         model: closed.model,
         commands: [
           ...(closed.commands ?? []),
-          Commands.OpenAnalysisRun({ id: message.data.id, query }),
+          Commands.OpenAnalysisRun({ id: result.data.id, query }),
         ],
       };
     },
@@ -352,7 +352,7 @@ export function updateAnalysisRuns(
         model: modifyFields(model, {
           selected: () =>
             Option.some(
-              modifyFields(selected, { report: () => fromResponse(message) }),
+              modifyFields(selected, { report: () => message.result }),
             ),
         }),
       };

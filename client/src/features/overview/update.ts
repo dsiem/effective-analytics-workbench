@@ -3,7 +3,6 @@ import { taggedStruct } from "foldkit/schema";
 import { modifyFields } from "foldkit/struct";
 import type { Filters } from "@dsiem/analytics-shared/filters";
 import type { FeatureUpdate } from "../../lib/feature-update";
-import { fromResponse } from "../../lib/request-state";
 import { LoadOverview } from "./commands";
 import { Message as M, type Message } from "./messages";
 import { MetricTabs } from "./metric-tabs";
@@ -52,7 +51,7 @@ export function updateOverview(
         : {
             outMessage: SelectionInvalidated(),
             model: modifyFields(model, {
-              overview: () => fromResponse(message),
+              overview: () => message.result,
             }),
           },
   });

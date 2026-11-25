@@ -28,7 +28,7 @@ export const SubmitAnalysisRun = Command.define("SubmitAnalysisRun", {
           client.analysisRuns.submit({ payload: { input, requestId } }),
         ),
       );
-      return M.AnalysisSubmitted({ ...submitted, requestId, generation });
+      return M.AnalysisSubmitted({ result: submitted, requestId, generation });
     }),
 });
 
@@ -66,9 +66,7 @@ export const LoadAnalysisReport = Command.define("LoadAnalysisReport", {
         client.analysisRuns.result({ params: { id: selection.id } }),
       ),
     ).pipe(
-      Effect.map((loaded) =>
-        M.LoadedAnalysisReport({ ...selection, ...loaded }),
-      ),
+      Effect.map((result) => M.LoadedAnalysisReport({ ...selection, result })),
     ),
 });
 

@@ -101,7 +101,7 @@ function mapPanel(
               selected,
               filters,
               key,
-              loading,
+              activityTag: model.activity._tag,
             }),
           ),
         ],

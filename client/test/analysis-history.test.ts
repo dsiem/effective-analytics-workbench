@@ -12,6 +12,7 @@ import {
   openAnalysisRuns,
   updateAnalysisRuns,
 } from "../src/features/analysis-runs/update";
+import { fail, succeed } from "../src/lib/command-result";
 
 const run: AnalysisRunSummary = {
   id: Schema.decodeUnknownSync(AnalysisRunId)(123),
@@ -20,6 +21,26 @@ const run: AnalysisRunSummary = {
   endedAt: null,
   requestedBy: null,
 };
+
+test("analysis submission completions accept only success and failure", () => {
+  const message = {
+    _tag: "AnalysisSubmitted",
+    requestId: "00000000-0000-4000-8000-000000000001",
+    generation: 1,
+  };
+  const data = { id: run.id };
+  const accepts = Schema.is(M);
+  for (const result of [
+    AsyncData.Idle(),
+    AsyncData.Loading(),
+    AsyncData.Refreshing({ data }),
+    AsyncData.Stale({ data, error: "Try again" }),
+  ]) {
+    assert.equal(accepts({ ...message, result }), false, result._tag);
+  }
+  assert.ok(accepts({ ...message, result: succeed(data) }));
+  assert.ok(accepts({ ...message, result: fail("Try again") }));
+});
 
 test("refreshing history keeps the recent list visible through a failure", () => {
   const opened = openAnalysisRuns(init(), { _tag: "NoRun" }).model;
@@ -89,9 +110,8 @@ test("a completed submission can refresh pending history without accepting older
     reopened.model,
     M.AnalysisSubmitted({
       generation: submitted.model.generation,
-      data: { id: run.id },
+      result: succeed({ id: run.id }),
       requestId: "00000000-0000-4000-8000-000000000001",
-      error: "",
     }),
     "",
   );

@@ -86,18 +86,19 @@ export const LoadSavedViewShortcuts = Command.define("LoadSavedViewShortcuts", {
                 client.savedViews.list({ query: { ids } }),
               ).pipe(Effect.map((page) => page.rows))
             : Effect.succeed([]),
-        }),
+        }).pipe(
+          Effect.map(({ page, recents }) => ({ rows: page.rows, recents })),
+        ),
       );
-      const data = loaded.data
-        ? { rows: loaded.data.page.rows, recents: loaded.data.recents }
-        : null;
       return M.LoadedSavedViewShortcuts({
         version,
-        data,
-        error: loaded.error,
-        recentIds: data
-          ? ids.filter((id) => data.recents.some((row) => row.id === id))
-          : ids,
+        result: loaded,
+        recentIds:
+          loaded._tag === "Success"
+            ? ids.filter((id) =>
+                loaded.data.recents.some((row) => row.id === id),
+              )
+            : ids,
       });
     }),
 });
@@ -117,11 +118,7 @@ export const SaveSavedView = Command.define("SaveSavedView", {
           payload: { ...draft, title: draft.title.trim() },
         }),
       ),
-    ).pipe(
-      Effect.map(({ data, error }) =>
-        M.SavedViewSaved({ savedView: data, error }),
-      ),
-    ),
+    ).pipe(Effect.map((result) => M.SavedViewSaved({ result }))),
 });
 export const LoadSavedViews = Command.define("LoadSavedViews", {
   args: {
@@ -156,8 +153,8 @@ export const LoadSavedViews = Command.define("LoadSavedViews", {
         return { rows, nextCursor: next };
       }),
     ).pipe(
-      Effect.map((value) =>
-        M.LoadedSavedViews({ ...value, more, pages, version }),
+      Effect.map((result) =>
+        M.LoadedSavedViews({ result, more, pages, version }),
       ),
     ),
 });
@@ -171,10 +168,8 @@ export const PinSavedView = Command.define("PinSavedView", {
           params: { id: savedView.id },
           payload: { pinned: !savedView.pinned, version: savedView.version },
         }),
-      ),
-    ).pipe(
-      Effect.map(({ error }) => M.MutatedSavedView({ error, removed: false })),
-    ),
+      ).pipe(Effect.as({ removed: false })),
+    ).pipe(Effect.map((result) => M.MutatedSavedView({ result }))),
 });
 export const DeleteSavedView = Command.define("DeleteSavedView", {
   args: { savedView: SavedView },
@@ -186,8 +181,6 @@ export const DeleteSavedView = Command.define("DeleteSavedView", {
           params: { id: savedView.id },
           query: { version: savedView.version },
         }),
-      ),
-    ).pipe(
-      Effect.map(({ error }) => M.MutatedSavedView({ error, removed: true })),
-    ),
+      ).pipe(Effect.as({ removed: true })),
+    ).pipe(Effect.map((result) => M.MutatedSavedView({ result }))),
 });

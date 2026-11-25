@@ -1,3 +1,4 @@
+import { Completion } from "../../lib/command-result";
 import { Notice } from "../../lib/request-state";
 import { Tabs } from "@foldkit/ui";
 import { Schema } from "effect";
@@ -11,8 +12,7 @@ export const messages = {
   CompletedRefreshGps: {},
   LoadedGps: {
     key: Schema.String,
-    data: Schema.NullOr(MapSummary),
-    error: Notice,
+    result: Completion(MapSummary),
   },
   GpsReady: {
     key: Schema.String,

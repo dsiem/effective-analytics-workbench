@@ -3,7 +3,7 @@ import { AsyncData, Subscription } from "foldkit";
 import { TripCommentCursor } from "@dsiem/analytics-shared/trip-comments";
 import { TripSummary } from "@dsiem/analytics-shared/trips";
 import { type ApiClient, request } from "../../lib/api-client";
-import { failure, result } from "../../lib/command-result";
+import { fail, failure, result } from "../../lib/command-result";
 import type { Notice } from "../../lib/request-state";
 import { Message as M, type Message } from "./messages";
 import { type Model, TripQuery } from "./model";
@@ -79,16 +79,14 @@ function loadDetails({ tripId, generation }: typeof DetailRequest.Type) {
     result(
       request((client) => client.analytics.tripDetails({ query: { tripId } })),
     ).pipe(
-      Effect.map(({ data, error }) =>
+      Effect.map((result) =>
         M.LoadedTripDetails({
           tripId,
           generation,
-          ...(data && data.trip_id !== tripId
-            ? {
-                data: null,
-                error: "Trip details did not match the selected record.",
-              }
-            : { data, error }),
+          result:
+            result._tag === "Success" && result.data.trip_id !== tripId
+              ? fail("Trip details did not match the selected record.")
+              : result,
         }),
       ),
     ),
@@ -108,7 +106,7 @@ function loadComments({
         }),
       ),
     ).pipe(
-      Effect.map((read) => M.LoadedComments({ tripId, generation, ...read })),
+      Effect.map((result) => M.LoadedComments({ tripId, generation, result })),
     ),
   );
 }

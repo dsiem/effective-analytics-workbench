@@ -7,7 +7,6 @@ import { tripCommentCountLimit } from "@dsiem/analytics-shared/trip-comments";
 import type { TripSummary } from "@dsiem/analytics-shared/trips";
 import { syncDialog } from "../../lib/dialog";
 import type { FeatureUpdate } from "../../lib/feature-update";
-import { fromResponse } from "../../lib/request-state";
 import * as TripsCommands from "./commands";
 import { Message as M, type Message } from "./messages";
 import {
@@ -194,15 +193,18 @@ function updateTripsState(
       const counts = model.commentCounts;
       if (counts.phase._tag !== "Loading" || message.version !== counts.version)
         return { model };
+      const { result } = message;
       return countComments(
         modifyFields(model, {
           commentCounts: (counts) =>
             modifyFields(counts, {
               data: (data) =>
-                message.data ? Struct.assign(data, message.data) : data,
+                result._tag === "Success"
+                  ? Struct.assign(data, result.data)
+                  : data,
               phase: () =>
-                message.error
-                  ? CommentCountPhase.Failed({ error: message.error })
+                result._tag === "Failure"
+                  ? CommentCountPhase.Failed({ error: result.error })
                   : CommentCountPhase.Idle(),
             }),
         }),
@@ -274,7 +276,7 @@ function updateTripsState(
           inspector: () =>
             Option.some({
               ...inspector,
-              details: fromResponse(message),
+              details: message.result,
             }),
         }),
       };
@@ -295,7 +297,7 @@ function updateTripsState(
       )
         return { model };
       const { data, read } = inspector.comments;
-      const page = message.data;
+      const page = Option.getOrUndefined(AsyncData.getData(message.result));
       return {
         model: modifyFields(model, {
           inspector: () =>
@@ -303,7 +305,10 @@ function updateTripsState(
               ...inspector,
               comments: {
                 read: Option.none(),
-                error: message.error,
+                error: Option.getOrElse(
+                  AsyncData.getError(message.result),
+                  () => "",
+                ),
                 data:
                   page && Option.isSome(read.value.cursor)
                     ? Option.some({
@@ -366,20 +371,22 @@ function updateTripsState(
       };
     },
     PostedComment: (message) => {
+      const { result } = message;
+      const failed = result._tag === "Failure";
       const key = message.input.trip.trip_id;
       const drafts = { ...model.commentDrafts };
       if (drafts[key]?.state === "posting") {
-        if (message.error) drafts[key] = { state: "retry", ...message.input };
+        if (failed) drafts[key] = { state: "retry", ...message.input };
         else delete drafts[key];
       }
       const selectedId = Option.getOrUndefined(model.inspector)?.trip.trip_id;
       const next = modifyFields(model, {
         postingTripId: Option.none,
         commentDrafts: () => drafts,
-        posted: () => (message.error ? "" : key),
-        postError: () => (selectedId === key ? message.error : ""),
+        posted: () => (failed ? "" : key),
+        postError: () => (selectedId === key && failed ? result.error : ""),
       });
-      if (message.error) return { model: next };
+      if (failed) return { model: next };
       const counted = countComments(
         modifyFields(next, {
           commentCounts: invalidateCommentCounts,

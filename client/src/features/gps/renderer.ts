@@ -17,7 +17,7 @@ import {
   setWorkerUrl,
 } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
-import { failure } from "../../lib/command-result";
+import { fail, failure, succeed } from "../../lib/command-result";
 import { mapColors } from "../../lib/map-colors";
 import { activityBucket, pickedIndex, type MapResource } from "./dataset";
 import { mapLoads } from "./load";
@@ -100,9 +100,10 @@ export function mountGpsMap(
       map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left");
       map.touchZoomRotate.disableRotation();
       map.keyboard.disableRotation();
+      const isPending = () =>
+        data.activityTag === "Loading" || data.activityTag === "Refreshing";
       const interaction = () => {
-        const enabled =
-          live && !!resource && !data.loading && rendered === data;
+        const enabled = live && !!resource && !isPending() && rendered === data;
         element.inert = !enabled;
         for (const handler of [
           map.dragPan,
@@ -119,7 +120,7 @@ export function mountGpsMap(
       };
       const deck = new MapLibreOverlay({
         onAfterRender: () => {
-          if (!resource || data.loading || rendered === data) return;
+          if (!resource || isPending() || rendered === data) return;
           rendered = data;
           interaction();
           Queue.offerUnsafe(
@@ -276,8 +277,7 @@ export function mountGpsMap(
                   queue,
                   M.LoadedGps({
                     key,
-                    data: null,
-                    error: failure(result.failure),
+                    result: fail(failure(result.failure)),
                   }),
                 );
                 return;
@@ -285,7 +285,10 @@ export function mountGpsMap(
               resource = result.success;
               Queue.offerUnsafe(
                 queue,
-                M.LoadedGps({ key, data: resource.summary, error: "" }),
+                M.LoadedGps({
+                  key,
+                  result: succeed(resource.summary),
+                }),
               );
               try {
                 redraw();

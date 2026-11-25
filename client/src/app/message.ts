@@ -1,4 +1,4 @@
-import { Notice } from "../lib/request-state";
+import { Completion } from "../lib/command-result";
 import { Schema } from "effect";
 import { Calendar } from "foldkit";
 import { defineMessageUnion } from "foldkit/message";
@@ -27,11 +27,12 @@ export const Message = defineMessageUnion({
     themePreference: Theme.ThemePreference,
   },
   LoadedMetadata: {
-    data: Schema.NullOr(DatasetMetadata),
-    error: Notice,
+    result: Completion(DatasetMetadata),
     today: Calendar.CalendarDate,
   },
-  LoadedUser: { user: Schema.NullOr(CurrentUser) },
+  LoadedUser: {
+    result: Completion(Schema.NullOr(CurrentUser)),
+  },
   GotFiltersMessage: { message: Filters.Message },
   GotOverviewMessage: { message: Overview.Message },
   GotTripsMessage: { message: Trips.Message },
