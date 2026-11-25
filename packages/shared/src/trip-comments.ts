@@ -39,10 +39,7 @@ export const TripCommentCountSearch = Schema.Struct({
   ),
 });
 export type TripCommentCountSearch = typeof TripCommentCountSearch.Type;
-export const TripCommentCounts = Schema.Record(
-  Schema.String,
-  Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-);
+export const TripCommentCounts = Schema.Record(Schema.String, Schema.Natural);
 
 export const TripComments = CursorPage(TripComment, TripCommentCursor);
 export type TripComments = typeof TripComments.Type;

@@ -134,7 +134,7 @@ const Table = Schema.Struct({
     }),
   ),
   preview_rows: Schema.Array(Schema.Array(Schema.NullOr(Schema.String))),
-  total_row_count: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  total_row_count: Schema.optionalKey(Schema.NullOr(Schema.Natural)),
 });
 
 const decodeTable = Schema.decodeUnknownOption(Table);

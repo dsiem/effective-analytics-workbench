@@ -55,7 +55,7 @@ const Result = Schema.Struct({
     manifest: Schema.optionalKey(
       Schema.Struct({
         truncated: Schema.optionalKey(Schema.Boolean),
-        total_row_count: Schema.optionalKey(Schema.Number),
+        total_row_count: Schema.optionalKey(Schema.Natural),
         schema: Schema.Struct({ columns: Schema.Array(Column) }),
       }),
     ),
@@ -64,7 +64,7 @@ const Result = Schema.Struct({
         data_array: Schema.optionalKey(
           Schema.Array(Schema.Array(Schema.NullOr(Schema.String))),
         ),
-        next_chunk_index: Schema.optionalKey(Schema.Number),
+        next_chunk_index: Schema.optionalKey(Schema.Natural),
       }),
     ),
   }),
