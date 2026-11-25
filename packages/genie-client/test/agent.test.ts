@@ -152,8 +152,14 @@ test("an Agent turn absent from history has an unresolved outcome", async () => 
   assert.equal(unavailable.state, "unresolved");
 });
 
-test("Agent keeps the report text when a table row count is negative or fractional", async () => {
-  for (const total_row_count of [-1, 0.5]) {
+test("Agent keeps the report text when its table metadata is inconsistent", async () => {
+  for (const table of [
+    { preview_rows: [["1"]], total_row_count: -1 },
+    { preview_rows: [["1"]], total_row_count: 0.5 },
+    { preview_rows: [["1"]], total_row_count: 0 },
+    { preview_rows: [["1"], []] },
+    { preview_rows: [["1", "2"]], total_row_count: null },
+  ]) {
     const report = {
       ...assistant("report", "Query summary"),
       content: [
@@ -164,8 +170,7 @@ test("Agent keeps the report text when a table row count is negative or fraction
             status: "available",
             sql: "SELECT 1",
             columns: [{ name: "one" }],
-            preview_rows: [["1"]],
-            total_row_count,
+            ...table,
           },
         },
       ],
