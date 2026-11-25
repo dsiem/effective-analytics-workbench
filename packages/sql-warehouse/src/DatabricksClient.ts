@@ -21,6 +21,8 @@ import {
   UnsupportedSqlFragment,
 } from "./internal/protocol.js";
 
+export { isStatementTimeout } from "./internal/protocol.js";
+
 /** Ordinary statements use inline JSON. Both the default result and .raw collect named rows. */
 export interface DatabricksClient extends Client.Base {
   /** Streams inline JSON_ARRAY chunks as named rows. Each SQL value is a string or null. */

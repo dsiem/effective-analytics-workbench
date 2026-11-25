@@ -298,6 +298,7 @@ test("a rejected submission can retry while a gateway timeout preserves its unce
       JSON.parse(JSON.stringify(encoded)),
     );
     assert.equal(decoded.isRetryable, retryable);
+    assert.equal(DatabricksClient.isStatementTimeout(decoded), status === 504);
     if (status === 504) {
       assert.deepEqual(decoded.reason.cause, {
         reason: "StatementTimeoutError",

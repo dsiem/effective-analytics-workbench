@@ -5,6 +5,7 @@ import * as SqlSchema from "effect/sql/SqlSchema";
 import { DatabricksClient } from "@dsiem/sql-warehouse";
 import { makeAdmission } from "./admission.js";
 import {
+  OperationTimeout,
   permissionDenied,
   type ServiceUnavailable,
   unavailable,
@@ -57,13 +58,21 @@ const makeWarehouse = Effect.gen(function* () {
   }) => {
     const run = <A>(operation: Effect.Effect<A, unknown>) =>
       operation.pipe(
-        Effect.mapError((cause) =>
-          isSqlError(cause) &&
-          cause.reason._tag === "AuthorizationError" &&
-          cause.reason.operation !== "download"
-            ? permissionDenied(errors.deniedMessage)
-            : errors.unavailable(cause),
-        ),
+        Effect.mapError((cause) => {
+          if (isSqlError(cause)) {
+            if (DatabricksClient.isStatementTimeout(cause))
+              return new OperationTimeout({
+                service: "warehouse",
+                message: "The warehouse query timed out. Try again.",
+              });
+            if (
+              cause.reason._tag === "AuthorizationError" &&
+              cause.reason.operation !== "download"
+            )
+              return permissionDenied(errors.deniedMessage);
+          }
+          return errors.unavailable(cause);
+        }),
         admit.effect,
       );
     const read = <A>(
