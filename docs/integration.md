@@ -70,22 +70,22 @@ from a listed row can use its summary while details load.
    [Snapshot table and filters](../server/src/taxi/snapshot.ts) ·
    [Warehouse service](../server/src/warehouse.ts) · [SQL adapter](../packages/sql-warehouse/README.md)
 3. Provide `ApiClient.layer` once in Foldkit's `Runtime.makeApplication`.
-   `LoadOverview` calls the generated client and returns a `LoadedOverview`
-   message. The command scopes the request through response decoding, so the
-   deadline can interrupt a wait for either headers or the body. Keep the
+   The Overview subscription calls the generated client and emits a
+   `LoadedOverview` message. Its scope covers response decoding, so leaving
+   Overview or changing filters interrupts the request. Keep the
    server deadline below the browser deadline when the UI needs to display the
    server's typed timeout. [Browser runtime](../client/src/main.ts) ·
-   [API client](../client/src/lib/api-client.ts) · [Overview command](../client/src/features/overview/commands.ts) ·
+   [API client](../client/src/lib/api-client.ts) · [Overview subscription](../client/src/features/overview/subscription.ts) ·
    [Deadline tests](../client/test/api-client.test.ts)
-4. Capture the filters and a new request generation when issuing the command.
-   Carry the generation back in the completion message and apply it only if it
-   matches the current model. This handles a slow reply for an earlier request,
-   even when the user has returned to the same filters.
+4. Derive the subscription input from the active filters and pending load's
+   generation. Include that generation in the completion message. Apply the
+   result only if its generation matches the current model. A slow reply can
+   arrive after the user returns to the same filters.
    [Overview update](../client/src/features/overview/update.ts) · [Feature tests](../client/test/features.test.ts)
 
 The API groups endpoints by feature. The HTTP boundary maps service failures to
 stable codes. Use those codes in a command when the next action depends on the
-failure. The Overview command only needs a display message. The Genie submit
+failure. Overview only needs a display message. The Genie submit
 command uses the code and upstream status to distinguish rejection from
 uncertain acceptance.
 [Server error mapping](../server/src/api-boundary.ts) · [Genie commands](../client/src/features/genie/commands.ts)

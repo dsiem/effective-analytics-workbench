@@ -8,8 +8,7 @@ export const messages = {
   GotMetricTabsMessage: { message: Tabs.Message },
   LoadedOverview: {
     generation: Schema.Int,
-    data: Schema.NullOr(Overview),
-    error: Notice,
+    result: Schema.Result(Overview, Notice),
   },
 };
 

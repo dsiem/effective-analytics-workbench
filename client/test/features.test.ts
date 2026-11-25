@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Dialog } from "@foldkit/ui";
-import { Effect, Option, Schema, Stream } from "effect";
+import { Effect, Option, Result, Schema, Stream } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { AsyncData, Url } from "foldkit";
@@ -70,20 +70,6 @@ function runRequest(
     ),
   );
 }
-
-const respond = (
-  load: ReturnType<typeof init>,
-  name: string,
-  response: Response,
-) => runRequest(load, name, async () => response);
-
-const originalTimeout = () =>
-  Response.json(
-    {
-      error: { code: "warehouse_timeout", message: "Original load timed out" },
-    },
-    { status: 504 },
-  );
 
 const trip = {
   trip_id: "trip-1",
@@ -236,7 +222,7 @@ test("returning to a filter ignores batches and errors from its original stream"
   );
 });
 
-test("returning to an Overview filter keeps the fresh summary when the original load fails", async () => {
+test("returning to an Overview filter keeps the fresh summary when the original load fails", () => {
   const opened = open("/?zip=10001");
   const visit = (zip: string) =>
     navigatedTo({ path: "/", query: `zip=${zip}` });
@@ -255,13 +241,21 @@ test("returning to an Overview filter keeps the fresh summary when the original 
     zones: [],
     queriedAt: "2026-11-17T09:00:00Z",
   };
-  const fresh = await respond(returned, "LoadOverview", Response.json(data));
-  const stale = await respond(opened, "LoadOverview", originalTimeout());
+  const loaded = (
+    change: ReturnType<typeof init>,
+    result: Result.Result<typeof data, string>,
+  ) =>
+    Features.overview.toParentMessage(
+      OverviewMessage.LoadedOverview({
+        generation: change.model.overviewState.loadGeneration,
+        result,
+      }),
+    );
   story(
     update,
     given(returned.model),
-    message(fresh),
-    message(stale),
+    message(loaded(returned, Result.succeed(data))),
+    message(loaded(opened, Result.fail("Original load timed out"))),
     model(({ overviewState }) => {
       assert.deepEqual(overviewState.overview, AsyncData.succeed(data));
     }),
@@ -866,13 +860,12 @@ test("Genie resumes restored reads without replaying conversation submissions", 
 });
 
 test("overview accepts only the active response and requests selection invalidation", () => {
-  const model = reloadOverview(Overview.init(), {}).model;
+  const model = reloadOverview(Overview.init()).model;
   const stale = updateOverview(
     model,
     OverviewMessage.LoadedOverview({
       generation: model.loadGeneration - 1,
-      data: null,
-      error: "old failure",
+      result: Result.fail("old failure"),
     }),
   );
   assert.equal(stale.model, model);
@@ -881,8 +874,7 @@ test("overview accepts only the active response and requests selection invalidat
     model,
     OverviewMessage.LoadedOverview({
       generation: model.loadGeneration,
-      data: null,
-      error: "Warehouse unavailable",
+      result: Result.fail("Warehouse unavailable"),
     }),
   );
   assert.deepEqual(

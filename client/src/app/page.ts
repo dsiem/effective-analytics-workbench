@@ -50,7 +50,7 @@ export function loadPage(model: Model): PageUpdate {
       filters
         ? Features.overview.foldInit(
             clearGenieSelection(model).model,
-            reloadOverview(model.overviewState, filters),
+            reloadOverview(model.overviewState),
           )
         : { model },
     Trips: ({ sort }) =>
