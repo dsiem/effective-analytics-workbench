@@ -67,6 +67,7 @@ const server = supervise(
     [
       ...envFile,
       "--conditions=development",
+      "--conditions=workbench-source",
       "--import",
       "tsx",
       "--watch",

@@ -1,10 +1,11 @@
 import { fileURLToPath, URL } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "vite";
+import { defaultClientConditions, defineConfig } from "vite";
 export default defineConfig({
   root: "client",
   plugins: [tailwindcss()],
   resolve: {
+    conditions: [...defaultClientConditions, "workbench-source"],
     alias: { "@": fileURLToPath(new URL("./client/src", import.meta.url)) },
   },
   server: {
