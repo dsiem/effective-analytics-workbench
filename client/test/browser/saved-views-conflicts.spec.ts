@@ -18,12 +18,17 @@ for (const removed of [false, true]) {
   }) => {
     let current: SavedView | null = original;
     let submitted: unknown;
-    await page.route("**/api/saved-views", (route) => {
+    let releaseSave = () => {};
+    const pendingSave = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    await page.route("**/api/saved-views", async (route) => {
       if (route.request().method() === "GET")
         return route.fulfill({
           json: { rows: current ? [current] : [], nextCursor: null },
         });
       submitted = route.request().postDataJSON();
+      await pendingSave;
       return route.fulfill({
         status: removed ? 404 : 409,
         json: {
@@ -53,12 +58,20 @@ for (const removed of [false, true]) {
     await dialog
       .getByRole("button", { name: "Save view", exact: true })
       .click();
+    const title = dialog.getByRole("textbox", { name: "View name" });
+    const finding = dialog.getByRole("textbox", { name: "Finding (optional)" });
+    try {
+      await expect(title).not.toBeEditable();
+      await expect(finding).not.toBeEditable();
+    } finally {
+      releaseSave();
+    }
     await expect(dialog.getByRole("alert")).toContainText(
       removed ? "removed" : "changed",
     );
-    await expect(
-      dialog.getByRole("textbox", { name: "Finding (optional)" }),
-    ).toHaveValue("My unsaved draft");
+    await expect(title).toBeEditable();
+    await expect(finding).toBeEditable();
+    await expect(finding).toHaveValue("My unsaved draft");
     expect(submitted).toEqual({
       id: original.id,
       title: original.title,

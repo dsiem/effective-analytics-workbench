@@ -104,6 +104,12 @@ databricks bundle run setup_lakebase -t dev
 Use the same target as your deployment. The command updates the selected
 Lakebase database and can be rerun independently of taxi demo setup.
 
+When upgrading an existing installation, run setup before starting the app
+version that supports saved-view retries. Setup adds the `last_write` column
+and preserves existing views. Switch all app instances to the new version
+before accepting saved-view writes. Older instances do not recognize deleted
+views retained for retry detection.
+
 For a standalone database, supply its connection settings in your shell or in
 `.env` and run `npm run db:setup`.
 

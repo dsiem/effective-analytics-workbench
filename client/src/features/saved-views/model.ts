@@ -5,7 +5,7 @@ import { SavedView, SavedViewInput } from "@dsiem/analytics-shared/saved-views";
 import { Filters } from "@dsiem/analytics-shared/filters";
 import * as Browser from "./browser-model";
 export const SavedViewEditor = Schema.Struct({
-  draft: SavedViewInput,
+  draft: Schema.Struct({ ...SavedViewInput.fields, title: Schema.String }),
   saving: Schema.Boolean,
   error: Notice,
 });

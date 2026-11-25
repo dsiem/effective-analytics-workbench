@@ -54,7 +54,11 @@ function editor(h: H, model: Model) {
             value: draft.title,
             onInput: (value) => M.SavedViewChanged({ field: "title", value }),
             placeholder: "e.g. Midtown fare review",
-            attributes: [h.Required(true), h.Maxlength(160)],
+            attributes: [
+              h.Required(true),
+              h.Maxlength(160),
+              h.Readonly(saving),
+            ],
           }),
           h.div(
             [],
@@ -76,6 +80,7 @@ function editor(h: H, model: Model) {
                       ...attributes.textarea,
                       h.Class("input mt-2 min-h-28"),
                       h.Maxlength(10000),
+                      h.Readonly(saving),
                     ]),
                 },
                 h,

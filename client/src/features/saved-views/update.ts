@@ -142,14 +142,15 @@ function updateSavedViewsState(
           }),
       }),
     }),
-    SavedViewChanged: ({ field, value }) => ({
-      model: modifyFields(model, {
-        editor: Option.map((editor) => {
-          const draft = { ...editor.draft, [field]: value };
-          return modifyFields(editor, { draft: () => draft });
+    SavedViewChanged: ({ field, value }) => {
+      if (!editor || editor.saving) return { model };
+      const draft = { ...editor.draft, [field]: value };
+      return {
+        model: modifyFields(model, {
+          editor: () => Option.some({ ...editor, draft }),
         }),
-      }),
-    }),
+      };
+    },
     SaveSavedView: () =>
       !editor || editor.saving || !editor.draft.title.trim()
         ? { model }
