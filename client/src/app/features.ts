@@ -1,5 +1,5 @@
 import { Option } from "effect";
-import { Update } from "foldkit";
+import { Command, Update } from "foldkit";
 import { Message } from "./message";
 import type { Model } from "./model";
 
@@ -14,6 +14,8 @@ function feature<Key extends keyof Model, ChildMessage>(
     read: (parent: Model) => Option.some(parent[key]),
     write,
     toParentMessage,
+    mapCommand: <R>(command: Command.Command<ChildMessage, never, R>) =>
+      Command.mapMessage(command, toParentMessage),
     foldInit: <R>(
       parent: Model,
       child: Update.Return<Model[Key], ChildMessage, R>,
@@ -25,10 +27,19 @@ function feature<Key extends keyof Model, ChildMessage>(
   };
 }
 
-export const filters = feature("filtersState", Message.Filters);
-export const overview = feature("overviewState", Message.Overview);
-export const trips = feature("tripsState", Message.Trips);
-export const savedViews = feature("savedViewsState", Message.SavedViews);
-export const genie = feature("genieState", Message.Genie);
-export const gps = feature("gpsState", Message.Gps);
-export const analysisRuns = feature("analysisRunsState", Message.AnalysisRuns);
+export const filters = feature("filtersState", Message.GotFiltersMessage);
+export const overview = feature("overviewState", Message.GotOverviewMessage);
+export const trips = feature("tripsState", Message.GotTripsMessage);
+export const savedViews = feature(
+  "savedViewsState",
+  Message.GotSavedViewsMessage,
+);
+export const genie = feature("genieState", Message.GotGenieMessage);
+export const gps = feature("gpsState", Message.GotGpsMessage);
+export const analysisRuns = feature(
+  "analysisRunsState",
+  Message.GotAnalysisRunsMessage,
+);
+export const layout = feature("layout", Message.GotLayoutMessage);
+export const navigation = feature("location", Message.GotNavigationMessage);
+export const theme = feature("theme", Message.GotThemeMessage);

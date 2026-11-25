@@ -1,4 +1,5 @@
 import { Dialog } from "@foldkit/ui";
+import { Option } from "effect";
 import { dateField } from "../../ui/date-field";
 import { dialog } from "../../ui/dialog";
 import { field } from "../../ui/field";
@@ -19,14 +20,15 @@ export function analysisForm(h: H<Message>, model: Model) {
       label,
       calendarLabel,
       value: model.draft[key],
-      model: model.datePickers?.[key] ?? null,
+      model: Option.map(model.datePickers, (pickers) => pickers[key]),
       onInput: (value) => M.AnalysisFieldChanged({ field: key, value }),
-      onMessage: (message) => M.AnalysisDatePicker({ field: key, message }),
+      onMessage: (message) =>
+        M.GotAnalysisDatePickerMessage({ id: key, message }),
     });
 
   return dialog(h, {
     model: model.dialog,
-    onMessage: (message) => M.AnalysisFormDialog({ message }),
+    onMessage: (message) => M.GotAnalysisFormDialogMessage({ message }),
     className: "dialog-panel analysis-dialog",
     children: [
       h.div(
@@ -87,7 +89,7 @@ export function analysisForm(h: H<Message>, model: Model) {
               button(h, {
                 label: busy
                   ? "Starting…"
-                  : model.submission.retryId
+                  : Option.isSome(model.submission.retryId)
                     ? "Retry submission"
                     : "Run analysis",
                 type: "submit",

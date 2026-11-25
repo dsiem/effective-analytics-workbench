@@ -1,6 +1,6 @@
 import { Notice } from "../../lib/request-state";
 import { Dialog } from "@foldkit/ui";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 import {
   GenieAgentPhase,
   GenieContext,
@@ -79,7 +79,7 @@ export const Model = Schema.Struct({
   genieExpanded: Schema.Boolean,
   genieDraft: Schema.String,
   genieMode: GenieMode,
-  genieSelection: Schema.NullOr(GenieContext),
+  genieSelection: Schema.Option(GenieContext),
   turns: History,
   pollGeneration: Schema.Int,
   persistenceError: Schema.String,
@@ -109,7 +109,7 @@ export const init = (): Model => ({
   genieExpanded: false,
   genieDraft: "",
   genieMode: "chat",
-  genieSelection: null,
+  genieSelection: Option.none(),
   turns: [],
   pollGeneration: 0,
   persistenceError: "",

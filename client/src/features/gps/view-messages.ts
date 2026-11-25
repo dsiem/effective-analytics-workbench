@@ -3,7 +3,6 @@ import { defineMessageUnion } from "foldkit/message";
 import { analysisRequest } from "../../domain/analysis";
 import { messages } from "./messages";
 export const Message = defineMessageUnion({
-  Idle: {},
   ...messages,
   Analyze: analysisRequest,
   Reload: {},

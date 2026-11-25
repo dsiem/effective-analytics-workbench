@@ -1,5 +1,5 @@
-import { Dialog, Menu, Tooltip } from "@foldkit/ui";
 import { Schema } from "effect";
+import { AsyncData } from "foldkit";
 import { CurrentUser } from "@dsiem/analytics-shared/current-user";
 import { DatasetMetadata } from "@dsiem/analytics-shared/dataset";
 import * as AnalysisRuns from "../features/analysis-runs/model";
@@ -9,20 +9,16 @@ import * as Gps from "../features/gps/model";
 import * as Overview from "../features/overview/model";
 import * as SavedViews from "../features/saved-views/model";
 import * as Trips from "../features/trips/model";
-import { request } from "../lib/request-state";
+import { Notice } from "../lib/request-state";
+import * as Layout from "./layout";
 import { Location, pageUrls } from "./route";
-import { ThemePreference } from "./theme";
+import * as Theme from "./theme";
 export const Model = Schema.Struct({
   location: Location,
-  sidebar: Schema.Boolean,
-  themePreference: ThemePreference,
-  themeMenu: Menu.Model,
-  mobile: Schema.Boolean,
-  mobileNavigation: Schema.Boolean,
-  tooltips: Schema.Record(Schema.String, Tooltip.Model),
-  navigationDialog: Dialog.Model,
-  metadata: request(DatasetMetadata),
-  user: Schema.NullOr(CurrentUser),
+  layout: Layout.Model,
+  theme: Theme.Model,
+  metadata: AsyncData.Schema(DatasetMetadata, Notice).schema,
+  user: Schema.Option(CurrentUser),
   filtersState: Filters.Model,
   overviewState: Overview.Model,
   tripsState: Trips.Model,

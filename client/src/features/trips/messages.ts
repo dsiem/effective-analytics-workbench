@@ -13,7 +13,7 @@ import { Sort, TripViewport } from "./model";
 export const messages = {
   CloseTrip: {},
   ResetTrips: {},
-  InspectorDialog: { message: Dialog.Message },
+  GotInspectorDialogMessage: { message: Dialog.Message },
   TripBatchReceived: {
     generation: Schema.Int,
     rows: Schema.Array(TripSummary),
@@ -27,7 +27,7 @@ export const messages = {
   },
   TripsScrolled: { viewport: TripViewport, generation: Schema.Int },
   SortTrips: { sort: Sort },
-  SortMenu: { message: Menu.Message },
+  GotSortMenuMessage: { message: Menu.Message },
   InspectTrip: { trip: TripSummary },
   InspectComments: { trip: TripSummary },
   RetryTripDetails: {},
@@ -55,5 +55,5 @@ export const messages = {
   PostedComment: { input: TripCommentInput, error: Notice },
 };
 
-export const Message = defineMessageUnion({ Idle: {}, ...messages });
+export const Message = defineMessageUnion(messages);
 export type Message = typeof Message.Type;

@@ -1,11 +1,16 @@
-import { Command } from "foldkit";
+import { AsyncData, Command } from "foldkit";
+import { taggedStruct } from "foldkit/schema";
+import { modifyFields } from "foldkit/struct";
 import type { Filters } from "@dsiem/analytics-shared/filters";
 import type { FeatureUpdate } from "../../lib/feature-update";
-import { pending } from "../../lib/request-state";
+import { fromResponse } from "../../lib/request-state";
 import { LoadOverview } from "./commands";
 import { Message as M, type Message } from "./messages";
 import { MetricTabs } from "./metric-tabs";
 import type { Model } from "./model";
+
+const SelectionInvalidated = taggedStruct("SelectionInvalidated");
+export type Out = typeof SelectionInvalidated.Type;
 
 export function reloadOverview(
   model: Model,
@@ -13,7 +18,10 @@ export function reloadOverview(
 ): FeatureUpdate<Model, Message> {
   const generation = model.loadGeneration + 1;
   return {
-    model: { ...model, loadGeneration: generation, overview: pending },
+    model: modifyFields(model, {
+      loadGeneration: () => generation,
+      overview: () => AsyncData.Loading(),
+    }),
     commands: [LoadOverview({ generation, filters })],
   };
 }
@@ -22,40 +30,30 @@ export function updateOverview(
   model: Model,
   message: Message,
 ): FeatureUpdate<Model, Message, Out> {
-  switch (message._tag) {
-    case "Idle":
-      return { model };
-    case "MetricTabs": {
-      const changed = MetricTabs.update(model.metricTabs, message.message);
+  return M.match<FeatureUpdate<Model, Message, Out>>(message, {
+    GotMetricTabsMessage: ({ message }) => {
+      const changed = MetricTabs.update(model.metricTabs, message);
       return {
-        model: {
-          ...model,
-          metricTabs: changed.model,
-          series: changed.outMessage?.value ?? model.series,
-        },
+        model: modifyFields(model, {
+          metricTabs: () => changed.model,
+          series: (series) => changed.outMessage?.value ?? series,
+        }),
         commands: (changed.commands ?? []).map((command) =>
-          Command.mapMessage(command, (message) => M.MetricTabs({ message })),
+          Command.mapMessage(command, (message) =>
+            M.GotMetricTabsMessage({ message }),
+          ),
         ),
-        ...(changed.outMessage
-          ? { outMessage: { _tag: "SelectionInvalidated" as const } }
-          : {}),
+        ...(changed.outMessage ? { outMessage: SelectionInvalidated() } : {}),
       };
-    }
-    case "LoadedOverview":
-      return message.generation !== model.loadGeneration
+    },
+    LoadedOverview: (message) =>
+      message.generation !== model.loadGeneration
         ? { model }
         : {
-            outMessage: { _tag: "SelectionInvalidated" },
-            model: {
-              ...model,
-              overview: {
-                data: message.data,
-                error: message.error,
-                loading: false,
-              },
-            },
-          };
-  }
+            outMessage: SelectionInvalidated(),
+            model: modifyFields(model, {
+              overview: () => fromResponse(message),
+            }),
+          },
+  });
 }
-
-export type Out = { readonly _tag: "SelectionInvalidated" };

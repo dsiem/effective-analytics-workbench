@@ -1,4 +1,4 @@
-import { Schedule, Schema, Stream } from "effect";
+import { Option, Schedule, Schema, Stream } from "effect";
 import { Subscription } from "foldkit";
 import type { ApiClient } from "../../lib/api-client";
 import { loadStatus } from "./commands";
@@ -8,13 +8,13 @@ import { type Model, Selection, watchedRun } from "./model";
 export const subscriptions = Subscription.make<Model, Message, ApiClient>()(
   (entry) => ({
     analysisRun: entry(
-      { selection: Schema.NullOr(Selection) },
+      { selection: Schema.Option(Selection) },
       {
         modelToDependencies: (model) => ({ selection: watchedRun(model) }),
         dependenciesToStream: ({ selection }) =>
-          selection
+          Option.isSome(selection)
             ? Stream.fromEffectSchedule(
-                loadStatus(selection),
+                loadStatus(selection.value),
                 Schedule.spaced("3 seconds"),
               )
             : Stream.empty,

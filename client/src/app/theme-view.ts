@@ -1,22 +1,23 @@
 import { childAttributes, inertHtml } from "foldkit/html";
 import { icon } from "../ui/icons";
-import { Message as M } from "./message";
+import * as Features from "./features";
 import type { Model } from "./model";
-import { ThemeMenu, ThemePreference } from "./theme";
+import { Message, ThemeMenu, ThemePreference } from "./theme";
 import type { H } from "./view-types";
 
 const icons = { Dark: "moon", Light: "sun", System: "monitor" } as const;
 
 // Follow Foldkit's own theme selector: a Menu submodel owns focus and dismissal.
 export const themeSelector = (h: H, model: Model) => {
-  const collapsed = !model.sidebar && !model.mobile;
+  const collapsed = !model.layout.sidebar && !model.layout.mobile;
   return h.submodel({
     slotId: "theme-menu",
-    model: model.themeMenu,
+    model: model.theme.menu,
     view: ThemeMenu.view,
-    toParentMessage: (message) => M.ThemeMenu({ message }),
+    toParentMessage: (message) =>
+      Features.theme.toParentMessage(Message.GotThemeMenuMessage({ message })),
     viewInputs: {
-      ariaLabel: `Theme: ${model.themePreference}`,
+      ariaLabel: `Theme: ${model.theme.preference}`,
       items: ThemePreference.literals,
       anchor: {
         placement: collapsed ? "right-end" : "top-start",
@@ -27,11 +28,11 @@ export const themeSelector = (h: H, model: Model) => {
       buttonContent: h.span(
         [h.Class("appearance-content")],
         [
-          icon(h, icons[model.themePreference]),
+          icon(h, icons[model.theme.preference]),
           h.span([h.Class("sidebar-label")], ["Appearance"]),
           h.span(
             [h.Class("appearance-value sidebar-label")],
-            [model.themePreference],
+            [model.theme.preference],
           ),
           h.span(
             [h.Class("appearance-chevron sidebar-label")],
@@ -41,7 +42,7 @@ export const themeSelector = (h: H, model: Model) => {
       ),
       buttonClassName: "btn btn-ghost appearance-trigger",
       buttonAttributes: childAttributes([
-        inertHtml.Attribute("title", `Appearance: ${model.themePreference}`),
+        inertHtml.Attribute("title", `Appearance: ${model.theme.preference}`),
       ]),
       itemsClassName: "action-menu",
       backdropClassName: "action-menu-backdrop",
@@ -53,7 +54,7 @@ export const themeSelector = (h: H, model: Model) => {
           [
             icon(h, icons[preference]),
             h.span([h.Class("flex-1")], [preference]),
-            ...(preference === model.themePreference
+            ...(preference === model.theme.preference
               ? [icon(h, "check"), h.span([h.Class("sr-only")], ["(selected)"])]
               : []),
           ],

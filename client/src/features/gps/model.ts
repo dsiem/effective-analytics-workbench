@@ -1,18 +1,19 @@
 import { Tabs } from "@foldkit/ui";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
+import { AsyncData } from "foldkit";
 import {
   GpsEndpoint,
   MapCellSummary,
   MapSummary,
 } from "@dsiem/analytics-shared/map-dataset";
-import { empty, Notice, request } from "../../lib/request-state";
+import { Notice } from "../../lib/request-state";
 export const Model = Schema.Struct({
   endpoint: GpsEndpoint,
   endpointTabs: Tabs.Model,
-  activity: request(MapSummary),
+  activity: AsyncData.Schema(MapSummary, Notice).schema,
   revision: Schema.Int,
-  selected: Schema.NullOr(Schema.String),
-  selectedCell: Schema.NullOr(MapCellSummary),
+  selected: Schema.Option(Schema.String),
+  selectedCell: Schema.Option(MapCellSummary),
   renderedKey: Schema.String,
   mapError: Notice,
 });
@@ -30,10 +31,10 @@ export const frameKey = (
 export const init = (): Model => ({
   endpoint: "pickup",
   endpointTabs: Tabs.init({ id: "gps-endpoint" }),
-  activity: empty,
+  activity: AsyncData.Idle(),
   revision: 0,
-  selected: null,
-  selectedCell: null,
+  selected: Option.none(),
+  selectedCell: Option.none(),
   renderedKey: "",
   mapError: "",
 });

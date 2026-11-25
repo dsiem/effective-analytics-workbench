@@ -1,5 +1,7 @@
 import { Dialog } from "@foldkit/ui";
+import { Option } from "effect";
 import { Command } from "foldkit";
+import { modifyFields } from "foldkit/struct";
 import type { GenieContext, GenieMode } from "@dsiem/analytics-shared/genie";
 import type { Filters } from "@dsiem/analytics-shared/filters";
 import type { ApiClient } from "../../lib/api-client";
@@ -19,74 +21,77 @@ export function updateGenie(
   message: Message,
   context: Context,
 ): FeatureUpdate<Model, Message, Out> {
-  switch (message._tag) {
-    case "Idle":
-      return { model };
-    case "RestoredConversation":
-      return {
-        model: {
-          ...model,
-          turns: message.turns,
-          genieMode: message.turns.at(-1)?.mode ?? "chat",
-          pollGeneration: model.pollGeneration + 1,
-          persistenceError: message.persistenceError,
-        },
-        commands: message.turns.flatMap((turn) =>
-          turn.state === "retrieving"
-            ? [GenieCommands.RetrieveQuestion({ turn })]
-            : [],
-        ),
-      };
-    case "CloseGenie":
-      return { model: { ...model, genieOpen: false } };
-    case "GenieDialog": {
+  return M.match<FeatureUpdate<Model, Message, Out>>(message, {
+    MountedPanelReturnFocus: () => ({ model }),
+    RestoredConversation: (message) => ({
+      model: modifyFields(model, {
+        turns: () => message.turns,
+        genieMode: () => message.turns.at(-1)?.mode ?? "chat",
+        pollGeneration: (generation) => generation + 1,
+        persistenceError: () => message.persistenceError,
+      }),
+      commands: message.turns.flatMap((turn) =>
+        turn.state === "retrieving"
+          ? [GenieCommands.RetrieveQuestion({ turn })]
+          : [],
+      ),
+    }),
+    CloseGenie: () => ({
+      model: modifyFields(model, { genieOpen: () => false }),
+    }),
+    GotGenieDialogMessage: (message) => {
       const changed = Dialog.update(model.helperDialog, message.message);
       return {
-        model: {
-          ...model,
-          helperDialog: changed.model,
-          genieOpen:
-            changed.outMessage?._tag === "Closed" ? false : model.genieOpen,
-        },
+        model: modifyFields(model, {
+          helperDialog: () => changed.model,
+          genieOpen: (open) =>
+            changed.outMessage?._tag === "Closed" ? false : open,
+        }),
         commands: (changed.commands ?? []).map((command) =>
-          Command.mapMessage(command, (message) => M.GenieDialog({ message })),
+          Command.mapMessage(command, (message) =>
+            M.GotGenieDialogMessage({ message }),
+          ),
         ),
       };
-    }
-    case "OpenGenie":
-      return {
-        model: {
-          ...model,
-          genieOpen: true,
-          genieSelection: message.context ?? model.genieSelection,
-          genieDraft: message.question ?? model.genieDraft,
-        },
-        outMessage: { _tag: "Opened" },
-      };
-    case "ExpandGenie":
-      return { model: { ...model, genieExpanded: !model.genieExpanded } };
-    case "ClearSelection":
-      return { model: { ...model, genieSelection: null } };
-    case "GenieDraft":
-      return { model: { ...model, genieDraft: message.value } };
-    case "SetGenieMode":
-      return { model: { ...model, genieMode: message.mode } };
-    case "SendQuestion": {
+    },
+    OpenGenie: (message) => ({
+      model: modifyFields(model, {
+        genieOpen: () => true,
+        genieSelection: (selection) =>
+          message.context === null ? selection : Option.some(message.context),
+        genieDraft: (draft) => message.question ?? draft,
+      }),
+      outMessage: { _tag: "Opened" },
+    }),
+    ExpandGenie: () => ({
+      model: modifyFields(model, { genieExpanded: (expanded) => !expanded }),
+    }),
+    ClearSelection: () => clearSelection(model),
+    GenieDraft: (message) => ({
+      model: modifyFields(model, { genieDraft: () => message.value }),
+    }),
+    SetGenieMode: (message) => ({
+      model: modifyFields(model, { genieMode: () => message.mode }),
+    }),
+    SendQuestion: (message) => {
       const question = message.question.trim();
       if (busy(model) || !question || !context.filters) return { model };
       return {
         model,
         commands: [
-          GenieCommands.CreateTurn({
+          GenieCommands.CreateQuestion({
             question,
             filters: context.filters,
-            context: model.genieSelection ?? context.context,
+            context: Option.getOrElse(
+              model.genieSelection,
+              () => context.context,
+            ),
             ...(model.genieMode === "agent" ? { mode: "agent" as const } : {}),
           }),
         ],
       };
-    }
-    case "CreatedTurn": {
+    },
+    CreatedTurn: (message) => {
       if (busy(model)) return { model };
       const turn = {
         id: message.id,
@@ -98,21 +103,24 @@ export function updateGenie(
       };
       const turns = [...model.turns, turn];
       return {
-        model: { ...model, turns, genieDraft: "" },
+        model: modifyFields(model, {
+          turns: () => turns,
+          genieDraft: () => "",
+        }),
         commands: [
-          GenieCommands.PersistTurns({ turns }),
+          GenieCommands.PersistConversation({ turns }),
           GenieCommands.SubmitQuestion({
             turn,
             conversation: conversationFor(model.turns, turn.mode ?? "chat"),
           }),
         ],
       };
-    }
-    case "ChangedTurn": {
+    },
+    ChangedTurn: (message) => {
       const current = model.turns.find((turn) => turn.id === message.turn.id);
       return current ? changeTurn(model, current, message.turn) : { model };
-    }
-    case "PolledQuestion": {
+    },
+    PolledQuestion: (message) => {
       const turn = model.turns.find(({ id }) => id === message.id);
       if (
         message.generation !== model.pollGeneration ||
@@ -125,14 +133,14 @@ export function updateGenie(
       const { outcome } = message;
       if (outcome.state === "waiting") {
         return {
-          model: {
-            ...model,
-            turns: model.turns.map((current) =>
-              current.id === turn.id
-                ? { ...turn, phase: outcome.phase }
-                : current,
-            ),
-          },
+          model: modifyFields(model, {
+            turns: (turns) =>
+              turns.map((current) =>
+                current.id === turn.id
+                  ? { ...turn, phase: outcome.phase }
+                  : current,
+              ),
+          }),
         };
       }
       return changeTurn(model, turn, {
@@ -140,8 +148,8 @@ export function updateGenie(
         operation: turn.operation,
         ...message.outcome,
       });
-    }
-    case "StopTurn": {
+    },
+    StopTurn: (message) => {
       const turn = model.turns.find(({ id }) => id === message.id);
       const operation = turn && stoppableOperation(turn);
       if (!turn || !operation) return { model };
@@ -158,8 +166,8 @@ export function updateGenie(
           GenieCommands.StopQuestion({ turn: stopping }),
         ],
       };
-    }
-    case "ResumeTurn": {
+    },
+    ResumeTurn: (message) => {
       if (busy(model)) return { model };
       const turn = model.turns.find(({ id }) => id === message.id);
       return turn?.state === "paused"
@@ -169,8 +177,8 @@ export function updateGenie(
             state: turn.stage,
           })
         : { model };
-    }
-    case "RetryInChat": {
+    },
+    RetryInChat: (message) => {
       if (busy(model)) return { model };
       const original = model.turns.find(({ id }) => id === message.id);
       if (original?.state !== "agent-mode-unavailable") return { model };
@@ -184,35 +192,49 @@ export function updateGenie(
         turn,
       ];
       return {
-        model: { ...model, turns, genieMode: "chat" },
+        model: modifyFields(model, {
+          turns: () => turns,
+          genieMode: () => "chat",
+        }),
         commands: [
-          GenieCommands.PersistTurns({ turns }),
+          GenieCommands.PersistConversation({ turns }),
           GenieCommands.SubmitQuestion({
             turn,
             conversation: conversationFor(model.turns, "chat"),
           }),
         ],
       };
-    }
-    case "EditQuestion":
-      return {
-        model: { ...model, genieDraft: message.question },
-        outMessage: { _tag: "FocusComposer" },
-      };
-    case "NewConversation":
-      return busy(model)
+    },
+    EditQuestion: (message) => ({
+      model: modifyFields(model, { genieDraft: () => message.question }),
+      outMessage: { _tag: "FocusComposer" },
+    }),
+    NewConversation: () =>
+      busy(model)
         ? { model }
         : {
-            model: { ...model, turns: [] },
-            commands: [GenieCommands.PersistTurns({ turns: [] })],
-          };
-    case "Persisted":
-      return { model: { ...model, persistenceError: message.error } };
-    case "CopySql":
-      return { model, commands: [GenieCommands.CopySql({ sql: message.sql })] };
-    case "CopiedSql":
-      return { model: { ...model, clipboard: message.text } };
-  }
+            model: modifyFields(model, { turns: () => [] }),
+            commands: [GenieCommands.PersistConversation({ turns: [] })],
+          },
+    Persisted: (message) => ({
+      model: modifyFields(model, { persistenceError: () => message.error }),
+    }),
+    CopySql: (message) => ({
+      model,
+      commands: [GenieCommands.CopySql({ sql: message.sql })],
+    }),
+    CopiedSql: (message) => ({
+      model: modifyFields(model, { clipboard: () => message.text }),
+    }),
+  });
+}
+
+export function clearSelection(model: Model): FeatureUpdate<Model, Message> {
+  return {
+    model: Option.isNone(model.genieSelection)
+      ? model
+      : modifyFields(model, { genieSelection: () => Option.none() }),
+  };
 }
 
 function conversationFor(turns: ReadonlyArray<Turn>, mode: GenieMode) {
@@ -240,19 +262,16 @@ function changeTurn(
 ): FeatureUpdate<Model, Message> {
   const turns = model.turns.map((turn) => (turn.id === next.id ? next : turn));
   const commands: Command.Command<Message, never, ApiClient>[] = [
-    GenieCommands.PersistTurns({ turns }),
+    GenieCommands.PersistConversation({ turns }),
   ];
   if (next.state === "retrieving" && current.state !== "retrieving")
     commands.push(GenieCommands.RetrieveQuestion({ turn: next }));
   return {
-    model: {
-      ...model,
-      turns,
-      pollGeneration:
-        next.state === "waiting"
-          ? model.pollGeneration + 1
-          : model.pollGeneration,
-    },
+    model: modifyFields(model, {
+      turns: () => turns,
+      pollGeneration: (generation) =>
+        next.state === "waiting" ? generation + 1 : generation,
+    }),
     commands,
   };
 }
@@ -275,9 +294,11 @@ export function presentGenie(
     model:
       dialog.model === model.helperDialog
         ? model
-        : { ...model, helperDialog: dialog.model },
+        : modifyFields(model, { helperDialog: () => dialog.model }),
     commands: (dialog.commands ?? []).map((command) =>
-      Command.mapMessage(command, (message) => M.GenieDialog({ message })),
+      Command.mapMessage(command, (message) =>
+        M.GotGenieDialogMessage({ message }),
+      ),
     ),
   };
 }

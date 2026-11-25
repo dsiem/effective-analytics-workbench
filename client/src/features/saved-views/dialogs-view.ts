@@ -1,4 +1,5 @@
 import { Dialog, Textarea } from "@foldkit/ui";
+import { Option } from "effect";
 import { defineView } from "foldkit/submodel";
 import { filterSummary } from "../../domain/filter-summary";
 import { dialog } from "../../ui/dialog";
@@ -17,7 +18,7 @@ const close = (h: H, label = "Close") =>
     variant: "ghost",
   });
 function editor(h: H, model: Model) {
-  const editor = model.editor;
+  const editor = Option.getOrUndefined(model.editor);
   if (!editor) return null;
   const { draft, saving } = editor;
   const name =
@@ -26,7 +27,7 @@ function editor(h: H, model: Model) {
       : "Edit saved view";
   return dialog(h, {
     model: model.dialogs.savedView,
-    onMessage: (message) => M.SavedViewDialog({ message }),
+    onMessage: (message) => M.GotSavedViewDialogMessage({ message }),
     className: "dialog-panel overflow-y-auto",
     children: [
       close(h),
@@ -121,7 +122,7 @@ function editor(h: H, model: Model) {
 function deleteDialog(h: H, model: Model) {
   return dialog(h, {
     model: model.dialogs.delete,
-    onMessage: (message) => M.DeleteDialog({ message }),
+    onMessage: (message) => M.GotDeleteDialogMessage({ message }),
     className: "dialog-panel overflow-y-auto",
     children: [
       h.div(
@@ -134,7 +135,7 @@ function deleteDialog(h: H, model: Model) {
           h.p(
             [h.Class("muted text-sm mt-2")],
             [
-              `“${model.deleting?.title ?? ""}” will be removed from saved views.`,
+              `“${Option.getOrUndefined(model.deleting)?.title ?? ""}” will be removed from saved views.`,
             ],
           ),
         ],

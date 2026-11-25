@@ -5,7 +5,7 @@ import { defineMessageUnion } from "foldkit/message";
 import { Overview } from "@dsiem/analytics-shared/overview";
 
 export const messages = {
-  MetricTabs: { message: Tabs.Message },
+  GotMetricTabsMessage: { message: Tabs.Message },
   LoadedOverview: {
     generation: Schema.Int,
     data: Schema.NullOr(Overview),
@@ -13,5 +13,5 @@ export const messages = {
   },
 };
 
-export const Message = defineMessageUnion({ Idle: {}, ...messages });
+export const Message = defineMessageUnion(messages);
 export type Message = typeof Message.Type;

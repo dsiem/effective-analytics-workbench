@@ -1,4 +1,5 @@
 import type { DatePicker } from "@foldkit/ui";
+import { Option } from "effect";
 import { dateField } from "../../ui/date-field";
 import { field } from "../../ui/field";
 import type { H } from "../../ui/primitives";
@@ -32,7 +33,7 @@ export function filterFields<Message>(
         id: `pickup-${key}`,
         label,
         value: options.draft[key],
-        model: options.datePickers?.[key] ?? null,
+        model: Option.map(options.datePickers, (pickers) => pickers[key]),
         onInput: (value) => options.onChange(key, value),
         onMessage: (message) => options.onDateMessage(key, message),
       }),

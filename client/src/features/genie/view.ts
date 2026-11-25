@@ -101,7 +101,7 @@ function scope(h: H, model: Model, context: Model["context"]) {
               h.h3([h.Class("text-sm font-medium")], [context.title]),
             ],
           ),
-          ...(model.genieSelection
+          ...(Option.isSome(model.genieSelection)
             ? [
                 button(h, {
                   label: icon(h, "x"),
@@ -208,7 +208,7 @@ function composer(h: H, model: Model, enabled: boolean, working: boolean) {
 }
 
 function genie(h: H, model: Model, floating = false) {
-  const context = model.genieSelection ?? model.context;
+  const context = Option.getOrElse(model.genieSelection, () => model.context);
   const enabled = model.filters !== null;
   const working = busy(model);
   const content: Child[] = [
@@ -222,7 +222,7 @@ function genie(h: H, model: Model, floating = false) {
   if (model.mobile)
     return dialog(h, {
       model: model.helperDialog,
-      onMessage: (message) => M.GenieDialog({ message }),
+      onMessage: (message) => M.GotGenieDialogMessage({ message }),
       className: classes,
       children: content,
     });

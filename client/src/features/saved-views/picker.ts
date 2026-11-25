@@ -1,3 +1,5 @@
+import { Option } from "effect";
+import { AsyncData } from "foldkit";
 import type { SavedView } from "@dsiem/analytics-shared/saved-views";
 import type { Model } from "./browser-model";
 
@@ -7,8 +9,8 @@ export const searchText = (model: Model) =>
   model.pickerMode._tag === "Search" ? model.pickerMode.query : "";
 
 export function shortcutGroups(model: Model) {
-  const data = model.shortcuts.data;
-  if (!data || model.shortcuts.loading || model.shortcuts.error) return [];
+  if (!AsyncData.isSuccess(model.shortcuts)) return [];
+  const { data } = model.shortcuts;
   const pinned = data.rows.filter((row) => row.pinned).slice(0, 5);
   const used = new Set(pinned.map((row) => row.id));
   const recent = model.recentIds.flatMap((id) => {
@@ -35,7 +37,7 @@ export function shortcutGroups(model: Model) {
 export const visibleSavedViews = (model: Model) =>
   model.pickerMode._tag === "Quick"
     ? shortcutGroups(model).flatMap((group) => group.rows)
-    : (model.savedViews.data?.rows ?? []);
+    : (Option.getOrUndefined(AsyncData.getData(model.savedViews))?.rows ?? []);
 
 export const rememberRecent = (ids: readonly string[], id: string) =>
   [id, ...ids.filter((entry) => entry !== id)].slice(0, 5);

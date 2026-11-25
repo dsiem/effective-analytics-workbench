@@ -1,3 +1,5 @@
+import { Option } from "effect";
+import { AsyncData } from "foldkit";
 import type {
   GpsEndpoint,
   MapSummary,
@@ -36,7 +38,8 @@ function tripCoverage(h: H, endpoint: GpsEndpoint, data: MapSummary | null) {
   );
 }
 
-function selectedArea(h: H, selected: Model["selectedCell"]) {
+function selectedArea(h: H, selection: Model["selectedCell"]) {
+  const selected = Option.getOrUndefined(selection);
   const metric = (label: string, value: string) =>
     h.div(
       [],
@@ -104,7 +107,7 @@ function selectedArea(h: H, selected: Model["selectedCell"]) {
 }
 
 function busiestAreas(h: H, model: Model) {
-  const data = model.activity.data;
+  const data = Option.getOrUndefined(AsyncData.getData(model.activity));
   return card(
     h,
     [
@@ -119,7 +122,9 @@ function busiestAreas(h: H, model: Model) {
                 h.Key(cell.id),
                 h.Class("gps-area"),
                 h.OnClick(M.GpsSelect({ id: cell.id })),
-                h.AriaPressed(String(cell.id === model.selected)),
+                h.AriaPressed(
+                  String(cell.id === Option.getOrUndefined(model.selected)),
+                ),
                 h.AriaLabel(
                   `Area ${index + 1}, ${number(cell.trips)} ${endpointName(model.endpoint)}`,
                 ),
@@ -163,16 +168,21 @@ function busiestAreas(h: H, model: Model) {
 }
 
 export function mapInsights(h: H, model: Model) {
+  const updating = AsyncData.isPending(model.activity);
   return h.aside(
     [
       h.Class("gps-insights"),
       h.AriaLabel("GPS map insights"),
-      h.AriaBusy(model.activity.loading),
+      h.AriaBusy(updating),
     ],
-    model.activity.loading
+    updating
       ? [card(h, [h.p([h.Class("muted text-sm")], ["Updating map…"])], "p-5")]
       : [
-          tripCoverage(h, model.endpoint, model.activity.data),
+          tripCoverage(
+            h,
+            model.endpoint,
+            Option.getOrNull(AsyncData.getData(model.activity)),
+          ),
           selectedArea(h, model.selectedCell),
           busiestAreas(h, model),
           h.p(

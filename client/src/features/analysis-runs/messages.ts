@@ -12,11 +12,11 @@ import {
 import { Id } from "@dsiem/analytics-shared/schema";
 import { Selection, WeekField } from "./model";
 
-const messages = {
+export const Message = defineMessageUnion({
   OpenAnalysisForm: {},
   CloseAnalysisForm: {},
-  AnalysisFormDialog: { message: Dialog.Message },
-  AnalysisDatePicker: { field: WeekField, message: DatePicker.Message },
+  GotAnalysisFormDialogMessage: { message: Dialog.Message },
+  GotAnalysisDatePickerMessage: { id: WeekField, message: DatePicker.Message },
   AnalysisFieldChanged: {
     field: Schema.Literals(["baselineWeek", "comparisonWeek", "minimumTrips"]),
     value: Schema.String,
@@ -46,8 +46,7 @@ const messages = {
     error: Notice,
   },
   ReuseAnalysisInputs: { input: AnalysisInput },
-  ReuseTooltip: { message: Tooltip.Message },
-};
-
-export const Message = defineMessageUnion({ Idle: {}, ...messages });
+  GotReuseTooltipMessage: { message: Tooltip.Message },
+  CompletedOpenAnalysisRun: {},
+});
 export type Message = typeof Message.Type;

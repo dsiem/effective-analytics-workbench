@@ -1,13 +1,11 @@
 import { Schema, Struct } from "effect";
 import { Filters } from "@dsiem/analytics-shared/filters";
-export const filtersFromQuery = (query: string | URLSearchParams) => {
-  const parsed = Schema.decodeUnknownOption(Filters)(
+export const filtersFromQuery = (query: string | URLSearchParams) =>
+  Schema.decodeUnknownOption(Filters)(
     Object.fromEntries(
       typeof query === "string" ? new URLSearchParams(query) : query,
     ),
   );
-  return parsed._tag === "Some" ? parsed.value : null;
-};
 export const filterError =
   "Check the dates and five-digit ZIP code. The start date must be on or before the end date.";
 const filterKeys = Struct.keys(Filters.fields);

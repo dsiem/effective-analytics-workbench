@@ -1,19 +1,23 @@
-import { Dialog } from "@foldkit/ui";
-import { Option } from "effect";
-import { Command } from "foldkit";
+import { Dialog, Menu } from "@foldkit/ui";
+import { Option, Struct } from "effect";
+import { AsyncData, Command } from "foldkit";
+import { modifyFields } from "foldkit/struct";
 import type { Filters } from "@dsiem/analytics-shared/filters";
 import { tripCommentCountLimit } from "@dsiem/analytics-shared/trip-comments";
+import type { TripSummary } from "@dsiem/analytics-shared/trips";
 import { syncDialog } from "../../lib/dialog";
 import type { FeatureUpdate } from "../../lib/feature-update";
-import { pending } from "../../lib/request-state";
+import { fromResponse } from "../../lib/request-state";
 import * as TripsCommands from "./commands";
 import { Message as M, type Message } from "./messages";
 import {
+  CommentCountPhase,
   emptyCommentCounts,
   type Model,
   type Sort,
   previewRows,
   SortMenu,
+  TripPreview,
   tripWindow,
 } from "./model";
 
@@ -34,16 +38,17 @@ function countComments(
   if (!tripIds.length) return { model };
   const version = counts.version + 1;
   const previousError =
-    counts.phase._tag === "Failed" ? counts.phase.error : null;
+    counts.phase._tag === "Failed"
+      ? Option.some(counts.phase.error)
+      : Option.none();
   return {
-    model: {
-      ...model,
-      commentCounts: {
-        ...counts,
-        version,
-        phase: { _tag: "Loading", previousError },
-      },
-    },
+    model: modifyFields(model, {
+      commentCounts: (counts) =>
+        modifyFields(counts, {
+          version: () => version,
+          phase: () => CommentCountPhase.Loading({ previousError }),
+        }),
+    }),
     commands: [TripsCommands.LoadCommentCounts({ tripIds, version })],
   };
 }
@@ -52,42 +57,78 @@ function invalidateCommentCounts(
   counts: Model["commentCounts"],
 ): Model["commentCounts"] {
   const reset = emptyCommentCounts(counts.version);
-  const error =
-    counts.phase._tag === "Failed"
-      ? counts.phase.error
-      : counts.phase._tag === "Loading"
-        ? counts.phase.previousError
-        : null;
-  return error ? { ...reset, phase: { _tag: "Failed", error } } : reset;
+  const previousError = CommentCountPhase.match(counts.phase, {
+    Failed: ({ error }) => Option.some(error),
+    Loading: ({ previousError }) => previousError,
+    Idle: () => Option.none(),
+  });
+  return Option.isSome(previousError)
+    ? {
+        ...reset,
+        phase: CommentCountPhase.Failed({ error: previousError.value }),
+      }
+    : reset;
 }
 
 function resetList(model: Model): Model {
-  return {
-    ...model,
-    viewport: null,
-    preview: { _tag: "Idle" },
-    loadGeneration: model.loadGeneration + 1,
-    commentCounts: emptyCommentCounts(model.commentCounts.version),
-    inspector: null,
-  };
+  return modifyFields(model, {
+    viewport: Option.none,
+    preview: () => TripPreview.Idle(),
+    loadGeneration: (generation) => generation + 1,
+    commentCounts: ({ version }) => emptyCommentCounts(version),
+    inspector: Option.none,
+  });
 }
 
 function comments(model: Model, more = false): FeatureUpdate<Model, Message> {
-  if (!model.inspector) return { model };
-  const thread = model.inspector.comments;
+  if (Option.isNone(model.inspector)) return { model };
+  const inspector = model.inspector.value;
+  const thread = inspector.comments;
+  const cursor = more
+    ? Option.flatMapNullishOr(thread.data, ({ nextCursor }) => nextCursor)
+    : Option.none();
   return {
-    model: {
-      ...model,
-      commentLoadGeneration: model.commentLoadGeneration + 1,
-      inspector: {
-        ...model.inspector,
-        comments: {
-          ...thread,
-          error: "",
-          read: { cursor: more ? (thread.data?.nextCursor ?? null) : null },
-        },
-      },
-    },
+    model: modifyFields(model, {
+      commentLoadGeneration: (generation) => generation + 1,
+      inspector: () =>
+        Option.some({
+          ...inspector,
+          comments: {
+            ...thread,
+            error: "",
+            read: Option.some({ cursor }),
+          },
+        }),
+    }),
+  };
+}
+
+function inspect(
+  model: Model,
+  trip: TripSummary,
+  focusSelector: string,
+): FeatureUpdate<Model, Message> {
+  return {
+    model: modifyFields(model, {
+      inspectorDialog: (dialog) =>
+        modifyFields(dialog, {
+          maybeFocusSelector: () => Option.some(focusSelector),
+        }),
+      inspector: () =>
+        Option.some({
+          trip,
+          details: AsyncData.Loading(),
+          comments: {
+            data: Option.none(),
+            error: "",
+            read: Option.some({ cursor: Option.none() }),
+          },
+        }),
+      detailLoadGeneration: (generation) => generation + 1,
+      commentLoadGeneration: (generation) => generation + 1,
+      postError: () => "",
+      posted: () => "",
+    }),
   };
 }
 
@@ -95,30 +136,27 @@ function updateTripsState(
   model: Model,
   message: Message,
 ): FeatureUpdate<Model, Message, Out> {
-  switch (message._tag) {
-    case "Idle":
-      return { model };
-    case "ResetTrips":
-      return { model: resetList(model) };
-    case "CloseTrip":
-      return { model: { ...model, inspector: null } };
-    case "InspectorDialog": {
+  return M.match<FeatureUpdate<Model, Message, Out>>(message, {
+    ResetTrips: () => ({ model: resetList(model) }),
+    CloseTrip: () => ({
+      model: modifyFields(model, { inspector: Option.none }),
+    }),
+    GotInspectorDialogMessage: (message) => {
       const changed = Dialog.update(model.inspectorDialog, message.message);
       return {
-        model: {
-          ...model,
-          inspectorDialog: changed.model,
-          inspector:
-            changed.outMessage?._tag === "Closed" ? null : model.inspector,
-        },
+        model: modifyFields(model, {
+          inspectorDialog: () => changed.model,
+          inspector: (inspector) =>
+            changed.outMessage?._tag === "Closed" ? Option.none() : inspector,
+        }),
         commands: (changed.commands ?? []).map((command) =>
           Command.mapMessage(command, (message) =>
-            M.InspectorDialog({ message }),
+            M.GotInspectorDialogMessage({ message }),
           ),
         ),
       };
-    }
-    case "TripBatchReceived": {
+    },
+    TripBatchReceived: (message) => {
       const { preview } = model;
       if (
         message.generation !== model.loadGeneration ||
@@ -126,9 +164,13 @@ function updateTripsState(
       )
         return { model };
       const rows = preview.rows.concat(message.rows);
-      return countComments({ ...model, preview: { ...preview, rows } });
-    }
-    case "TripPreviewFinished": {
+      return countComments(
+        modifyFields(model, {
+          preview: () => TripPreview.Loading({ query: preview.query, rows }),
+        }),
+      );
+    },
+    TripPreviewFinished: (message) => {
       const { preview } = model;
       if (
         message.generation !== model.loadGeneration ||
@@ -137,175 +179,183 @@ function updateTripsState(
         return { model };
       const { result } = message;
       return {
-        model: {
-          ...model,
-          preview:
+        model: modifyFields(model, {
+          preview: () =>
             result._tag === "Complete"
-              ? { _tag: "Ready", rows: preview.rows, hasMore: result.hasMore }
-              : { _tag: "Failed", rows: preview.rows, error: result.error },
-        },
+              ? TripPreview.Ready({
+                  rows: preview.rows,
+                  hasMore: result.hasMore,
+                })
+              : TripPreview.Failed({ rows: preview.rows, error: result.error }),
+        }),
       };
-    }
-    case "LoadedCommentCounts": {
+    },
+    LoadedCommentCounts: (message) => {
       const counts = model.commentCounts;
       if (counts.phase._tag !== "Loading" || message.version !== counts.version)
         return { model };
-      return countComments({
-        ...model,
-        commentCounts: {
-          ...counts,
-          data: { ...counts.data, ...message.data },
-          phase: message.error
-            ? { _tag: "Failed", error: message.error }
-            : { _tag: "Idle" },
-        },
-      });
-    }
-    case "RetryCommentCounts":
+      return countComments(
+        modifyFields(model, {
+          commentCounts: (counts) =>
+            modifyFields(counts, {
+              data: (data) =>
+                message.data ? Struct.assign(data, message.data) : data,
+              phase: () =>
+                message.error
+                  ? CommentCountPhase.Failed({ error: message.error })
+                  : CommentCountPhase.Idle(),
+            }),
+        }),
+      );
+    },
+    RetryCommentCounts: () => {
       return model.commentCounts.phase._tag === "Failed"
         ? countComments(model, true)
         : { model };
-    case "TripsScrolled": {
+    },
+    TripsScrolled: (message) => {
       const { generation, viewport } = message;
       if (generation !== model.loadGeneration || model.preview._tag === "Idle")
         return { model };
-      return countComments({ ...model, viewport });
-    }
-    case "SortTrips":
-      return { model, outMessage: { _tag: "SortChanged", sort: message.sort } };
-    case "SortMenu": {
+      return countComments(
+        modifyFields(model, { viewport: () => Option.some(viewport) }),
+      );
+    },
+    SortTrips: (message) => ({
+      model,
+      outMessage: { _tag: "SortChanged", sort: message.sort },
+    }),
+    GotSortMenuMessage: (message) => {
       const changed = SortMenu.update(model.sortMenu, message.message);
       const sort = changed.outMessage?.value;
       return {
-        model: { ...model, sortMenu: changed.model },
+        model: modifyFields(model, { sortMenu: () => changed.model }),
         commands:
           changed.commands?.map((command) =>
-            Command.mapMessage(command, (message) => M.SortMenu({ message })),
+            Command.mapMessage(command, (message) =>
+              M.GotSortMenuMessage({ message }),
+            ),
           ) ?? [],
         ...(sort === undefined
           ? {}
           : { outMessage: { _tag: "SortChanged", sort } }),
       };
-    }
-    case "InspectTrip":
-    case "InspectComments":
+    },
+    InspectTrip: (message) =>
+      inspect(model, message.trip, "#trip-details-dialog-title"),
+    InspectComments: (message) =>
+      inspect(model, message.trip, "#trip-comments-heading"),
+    RetryTripDetails: () => {
+      const inspector = Option.getOrUndefined(model.inspector);
+      if (!inspector || !AsyncData.hasError(inspector.details))
+        return { model };
       return {
-        model: {
-          ...model,
-          inspectorDialog: {
-            ...model.inspectorDialog,
-            maybeFocusSelector: Option.some(
-              message._tag === "InspectComments"
-                ? "#trip-comments-heading"
-                : "#trip-details-dialog-title",
-            ),
-          },
-          inspector: {
-            trip: message.trip,
-            details: pending,
-            comments: { data: null, error: "", read: { cursor: null } },
-          },
-          detailLoadGeneration: model.detailLoadGeneration + 1,
-          commentLoadGeneration: model.commentLoadGeneration + 1,
-          postError: "",
-          posted: "",
-        },
+        model: modifyFields(model, {
+          inspector: () =>
+            Option.some({
+              ...inspector,
+              details: AsyncData.Loading(),
+            }),
+          detailLoadGeneration: (generation) => generation + 1,
+        }),
       };
-    case "RetryTripDetails": {
-      const { inspector } = model;
-      if (!inspector?.details.error) return { model };
-      return {
-        model: {
-          ...model,
-          inspector: { ...inspector, details: pending },
-          detailLoadGeneration: model.detailLoadGeneration + 1,
-        },
-      };
-    }
-    case "LoadedTripDetails": {
-      const { data, error, generation, tripId } = message;
-      const { inspector } = model;
+    },
+    LoadedTripDetails: (message) => {
+      const { generation, tripId } = message;
+      const inspector = Option.getOrUndefined(model.inspector);
       if (
         generation !== model.detailLoadGeneration ||
         tripId !== inspector?.trip.trip_id ||
-        !inspector.details.loading
+        !AsyncData.isPending(inspector.details)
       )
         return { model };
       return {
-        model: {
-          ...model,
-          inspector: { ...inspector, details: { data, error, loading: false } },
-        },
+        model: modifyFields(model, {
+          inspector: () =>
+            Option.some({
+              ...inspector,
+              details: fromResponse(message),
+            }),
+        }),
       };
-    }
-    case "LoadComments":
-      return model.inspector?.comments.read
+    },
+    LoadComments: (message) => {
+      return Option.exists(model.inspector, ({ comments }) =>
+        Option.isSome(comments.read),
+      )
         ? { model }
         : comments(model, message.more);
-    case "LoadedComments": {
-      const { inspector } = model;
+    },
+    LoadedComments: (message) => {
+      const inspector = Option.getOrUndefined(model.inspector);
       if (
         message.generation !== model.commentLoadGeneration ||
         message.tripId !== inspector?.trip.trip_id ||
-        !inspector.comments.read
+        Option.isNone(inspector.comments.read)
       )
         return { model };
       const { data, read } = inspector.comments;
+      const page = message.data;
       return {
-        model: {
-          ...model,
-          inspector: {
-            ...inspector,
-            comments: {
-              read: null,
-              error: message.error,
-              data:
-                message.data && read.cursor
-                  ? {
-                      ...message.data,
-                      rows: [...(data?.rows ?? []), ...message.data.rows],
-                    }
-                  : (message.data ?? data),
-            },
-          },
-        },
+        model: modifyFields(model, {
+          inspector: () =>
+            Option.some({
+              ...inspector,
+              comments: {
+                read: Option.none(),
+                error: message.error,
+                data:
+                  page && Option.isSome(read.value.cursor)
+                    ? Option.some({
+                        ...page,
+                        rows: [
+                          ...(Option.getOrUndefined(data)?.rows ?? []),
+                          ...page.rows,
+                        ],
+                      })
+                    : Option.orElse(Option.fromNullishOr(page), () => data),
+              },
+            }),
+        }),
       };
-    }
-    case "CommentChanged": {
-      const id = model.inspector?.trip.trip_id;
+    },
+    CommentChanged: (message) => {
+      const id = Option.getOrUndefined(model.inspector)?.trip.trip_id;
       if (!id || model.commentDrafts[id]?.body === message.body)
         return { model };
       return {
-        model: {
-          ...model,
-          commentDrafts: {
-            ...model.commentDrafts,
+        model: modifyFields(model, {
+          commentDrafts: (drafts) => ({
+            ...drafts,
             [id]: { state: "editing", body: message.body },
-          },
-          postError: "",
-          posted: "",
-        },
+          }),
+          postError: () => "",
+          posted: () => "",
+        }),
       };
-    }
-    case "PostComment": {
-      const selection = model.inspector?.trip;
+    },
+    PostComment: () => {
+      const inspector = Option.getOrUndefined(model.inspector);
+      const selection = inspector?.trip;
       const draft = selection && model.commentDrafts[selection.trip_id];
       const trip =
         draft?.state === "retry"
           ? draft.trip
-          : (model.inspector?.details.data ?? selection);
-      if (!trip || !draft?.body.trim() || model.postingTripId) return { model };
+          : inspector && AsyncData.isSuccess(inspector.details)
+            ? inspector.details.data
+            : selection;
+      if (!trip || !draft?.body.trim() || Option.isSome(model.postingTripId))
+        return { model };
       return {
-        model: {
-          ...model,
-          postingTripId: trip.trip_id,
-          commentDrafts: {
-            ...model.commentDrafts,
+        model: modifyFields(model, {
+          postingTripId: () => Option.some(trip.trip_id),
+          commentDrafts: (drafts) => ({
+            ...drafts,
             [trip.trip_id]: { state: "posting", body: draft.body },
-          },
-          postError: "",
-          posted: "",
-        },
+          }),
+          postError: () => "",
+          posted: () => "",
+        }),
         commands: [
           TripsCommands.PostComment({
             trip,
@@ -314,30 +364,31 @@ function updateTripsState(
           }),
         ],
       };
-    }
-    case "PostedComment": {
+    },
+    PostedComment: (message) => {
       const key = message.input.trip.trip_id;
       const drafts = { ...model.commentDrafts };
       if (drafts[key]?.state === "posting") {
         if (message.error) drafts[key] = { state: "retry", ...message.input };
         else delete drafts[key];
       }
-      const next = {
-        ...model,
-        postingTripId: null,
-        commentDrafts: drafts,
-        posted: message.error ? "" : key,
-        postError: model.inspector?.trip.trip_id === key ? message.error : "",
-      };
-      if (message.error) return { model: next };
-      const counted = countComments({
-        ...next,
-        commentCounts: invalidateCommentCounts(next.commentCounts),
+      const selectedId = Option.getOrUndefined(model.inspector)?.trip.trip_id;
+      const next = modifyFields(model, {
+        postingTripId: Option.none,
+        commentDrafts: () => drafts,
+        posted: () => (message.error ? "" : key),
+        postError: () => (selectedId === key ? message.error : ""),
       });
-      if (model.inspector?.trip.trip_id !== key) return counted;
+      if (message.error) return { model: next };
+      const counted = countComments(
+        modifyFields(next, {
+          commentCounts: invalidateCommentCounts,
+        }),
+      );
+      if (selectedId !== key) return counted;
       return { ...counted, model: comments(counted.model).model };
-    }
-  }
+    },
+  });
 }
 
 export type Out = {
@@ -351,10 +402,10 @@ export function reloadTrips(
 ): FeatureUpdate<Model, Message> {
   const reset = resetList(model);
   return {
-    model: {
-      ...reset,
-      preview: { _tag: "Loading", query: { filters, sort }, rows: [] },
-    },
+    model: modifyFields(reset, {
+      preview: () =>
+        TripPreview.Loading({ query: { filters, sort }, rows: [] }),
+    }),
   };
 }
 
@@ -365,21 +416,34 @@ export function updateTrips(
   const result = updateTripsState(model, message);
   const dialog = syncDialog(
     result.model.inspectorDialog,
-    result.model.inspector !== null,
+    Option.isSome(result.model.inspector),
   );
   return {
     ...result,
     model:
       dialog.model === result.model.inspectorDialog
         ? result.model
-        : { ...result.model, inspectorDialog: dialog.model },
+        : modifyFields(result.model, { inspectorDialog: () => dialog.model }),
     commands: [
       ...(result.commands ?? []),
       ...(dialog.commands ?? []).map((command) =>
         Command.mapMessage(command, (message) =>
-          M.InspectorDialog({ message }),
+          M.GotInspectorDialogMessage({ message }),
         ),
       ),
     ],
   };
+}
+
+export function resetTrips(current: Model): FeatureUpdate<Model, Message> {
+  const { model, commands } = updateTrips(current, M.ResetTrips());
+  return commands ? { model, commands } : { model };
+}
+
+export function closeSortMenu(current: Model): FeatureUpdate<Model, Message> {
+  const { model, commands } = updateTrips(
+    current,
+    M.GotSortMenuMessage({ message: Menu.Message.Closed() }),
+  );
+  return commands ? { model, commands } : { model };
 }

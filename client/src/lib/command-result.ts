@@ -1,7 +1,6 @@
 import { Effect, Schema, type Scope } from "effect";
 import { ApiError } from "@dsiem/analytics-shared/api";
 import { AccessDenied, type Notice } from "./request-state";
-import { Idle } from "./idle";
 
 export const failure = (cause: unknown): Notice => {
   if (!Schema.is(ApiError)(cause))
@@ -20,5 +19,3 @@ export const result = <A, E, R>(effect: Effect.Effect<A, E, R | Scope.Scope>) =>
       onFailure: (error) => ({ data: null, error: failure(error) }),
     }),
   );
-export const done = (effect: Effect.Effect<unknown>) =>
-  effect.pipe(Effect.as(Idle()));

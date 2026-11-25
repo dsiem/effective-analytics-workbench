@@ -5,25 +5,12 @@ import { defineMessageUnion } from "foldkit/message";
 import { SavedView, SavedViewsPage } from "@dsiem/analytics-shared/saved-views";
 import { RecentIds, Shortcuts } from "./browser-model";
 
-const messages = {
-  CloseSavedView: {},
-  CloseDelete: {},
-  SavedViewDialog: { message: Dialog.Message },
-  DeleteDialog: { message: Dialog.Message },
-  SavedViewsPicker: { message: Popover.Message },
-  ClearView: {},
-  NewSavedView: {},
-  CreatedSavedView: { id: Schema.String },
-  EditSavedView: { savedView: SavedView },
-  SavedViewChanged: {
-    field: Schema.Literals(["title", "body"]),
-    value: Schema.String,
-  },
-  SaveSavedView: {},
-  SavedViewSaved: {
-    savedView: Schema.NullOr(SavedView),
-    error: Notice,
-  },
+const browserMessages = {
+  GotSavedViewsPickerMessage: { message: Popover.Message },
+  MovedSavedViewPickerFocus: { id: Schema.String },
+  CompletedPersistRecentSavedViews: {},
+  CompletedRememberRecentSavedView: {},
+  CompletedFocusSavedViewSearch: {},
   LoadSavedViews: { more: Schema.Boolean },
   SavedViewSearchChanged: { value: Schema.String },
   BrowseSavedViews: {},
@@ -47,12 +34,34 @@ const messages = {
     pages: Schema.Number,
     version: Schema.Number,
   },
+};
+
+export const BrowserMessage = defineMessageUnion(browserMessages);
+export type BrowserMessage = typeof BrowserMessage.Type;
+
+export const Message = defineMessageUnion({
+  ...browserMessages,
+  CloseSavedView: {},
+  CloseDelete: {},
+  GotSavedViewDialogMessage: { message: Dialog.Message },
+  GotDeleteDialogMessage: { message: Dialog.Message },
+  ClearView: {},
+  NewSavedView: {},
+  CreatedSavedView: { id: Schema.String },
+  EditSavedView: { savedView: SavedView },
+  SavedViewChanged: {
+    field: Schema.Literals(["title", "body"]),
+    value: Schema.String,
+  },
+  SaveSavedView: {},
+  SavedViewSaved: {
+    savedView: Schema.NullOr(SavedView),
+    error: Notice,
+  },
   PinSavedView: { savedView: SavedView },
   DeleteSavedView: { savedView: SavedView },
   ConfirmDelete: {},
   MutatedSavedView: { removed: Schema.Boolean, error: Notice },
   RestoreView: { savedView: SavedView },
-};
-
-export const Message = defineMessageUnion({ Idle: {}, ...messages });
+});
 export type Message = typeof Message.Type;

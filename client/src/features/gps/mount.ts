@@ -3,7 +3,6 @@ import { Command, Mount } from "foldkit";
 import { GpsEndpoint } from "@dsiem/analytics-shared/map-dataset";
 import { Filters } from "@dsiem/analytics-shared/filters";
 import { ApiClient } from "../../lib/api-client";
-import { done } from "../../lib/command-result";
 import { Message as M } from "./messages";
 
 export const gpsHostId = "gps-density-map";
@@ -27,15 +26,14 @@ const inputsByHost = new WeakMap<
 >();
 export const RefreshGps = Command.define("RefreshGps", {
   args: MapData.fields,
-  messages: [M.Idle],
+  messages: [M.CompletedRefreshGps],
   execute: (data) =>
-    done(
-      Effect.gen(function* () {
-        const host = document.getElementById(gpsHostId);
-        const inputs = host && inputsByHost.get(host);
-        if (inputs) yield* SubscriptionRef.set(inputs, data);
-      }),
-    ),
+    Effect.gen(function* () {
+      const host = document.getElementById(gpsHostId);
+      const inputs = host && inputsByHost.get(host);
+      if (inputs) yield* SubscriptionRef.set(inputs, data);
+      return M.CompletedRefreshGps();
+    }),
 });
 export const GpsMount = Mount.defineStream("GpsMap", {
   args: MapData.fields,

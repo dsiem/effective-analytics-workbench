@@ -1,5 +1,5 @@
 import { type Calendar, DatePicker, Input } from "@foldkit/ui";
-import { Option } from "effect";
+import { Match, Option } from "effect";
 import type { ChildAttribute } from "foldkit/html";
 import { calendarDay } from "../lib/format";
 import { icon } from "./icons";
@@ -29,8 +29,8 @@ function calendarView<Message>(
     );
   const minimum = model.calendar.maybeMinDate;
   const maximum = model.calendar.maybeMaxDate;
-  switch (attributes._tag) {
-    case "Days": {
+  return Match.valueTags(attributes, {
+    Days: (attributes) => {
       const current = model.calendar.viewYear * 12 + model.calendar.viewMonth;
       return h.div(
         [...attributes.root, h.Class("calendar")],
@@ -93,9 +93,9 @@ function calendarView<Message>(
           ),
         ],
       );
-    }
-    case "Months":
-      return h.div(
+    },
+    Months: (attributes) =>
+      h.div(
         [...attributes.root, h.Class("calendar")],
         [
           h.div(
@@ -121,9 +121,9 @@ function calendarView<Message>(
             ),
           ),
         ],
-      );
-    case "Years":
-      return h.div(
+      ),
+    Years: (attributes) =>
+      h.div(
         [...attributes.root, h.Class("calendar")],
         [
           h.div(
@@ -172,8 +172,8 @@ function calendarView<Message>(
             ),
           ),
         ],
-      );
-  }
+      ),
+  });
 }
 
 /** Editable ISO date plus a bounded Foldkit calendar; no native-picker defaults. */
@@ -184,12 +184,12 @@ export function dateField<Message>(
     readonly label: string;
     readonly calendarLabel: string;
     readonly value: string;
-    readonly model: DatePicker.Model | null;
+    readonly model: Option.Option<DatePicker.Model>;
     readonly onInput: (value: string) => Message;
     readonly onMessage: (message: DatePicker.Message) => Message;
   },
 ) {
-  const picker = options.model;
+  const picker = Option.getOrUndefined(options.model);
   return Input.view(
     {
       id: options.id,

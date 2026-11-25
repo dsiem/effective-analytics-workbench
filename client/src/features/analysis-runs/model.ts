@@ -1,6 +1,7 @@
 import { DatePicker, Dialog, Tooltip } from "@foldkit/ui";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 import { AsyncData } from "foldkit";
+import { defineTaggedUnion } from "foldkit/schema";
 import {
   AnalysisRun,
   AnalysisRunId,
@@ -9,7 +10,7 @@ import {
   RouteReliabilityReport,
 } from "@dsiem/analytics-shared/analysis-runs";
 import { Id } from "@dsiem/analytics-shared/schema";
-import { Notice, request } from "../../lib/request-state";
+import { Notice } from "../../lib/request-state";
 
 export const Draft = Schema.Struct({
   baselineWeek: Schema.String,
@@ -24,27 +25,31 @@ export const Selection = Schema.Struct({
   generation: Schema.Int,
 });
 
-const Ready = Schema.TaggedStruct("Ready", {
-  retryId: Schema.NullOr(Id),
-  error: Notice,
+export const Submission = defineTaggedUnion({
+  Ready: { retryId: Schema.Option(Id), error: Notice },
+  Submitting: { generation: Schema.Int },
 });
-const Submission = Schema.Union([
-  Ready,
-  Schema.TaggedStruct("Submitting", { generation: Schema.Int }),
-]);
 
 export const readyToSubmit = (
-  retryId: string | null = null,
+  retryId: Option.Option<typeof Id.Type> = Option.none(),
   error: Notice = "",
-) => Ready.make({ retryId, error });
+) => Submission.Ready({ retryId, error });
 
 export const initReuseTooltip = () => Tooltip.init({ id: "reuse-inputs" });
+
+const SelectedRun = Schema.Struct({
+  ...Selection.fields,
+  detail: AsyncData.Schema(AnalysisRun, Notice).schema,
+  report: AsyncData.Schema(RouteReliabilityReport, Notice).schema,
+  observedAt: Schema.Int,
+});
+export type SelectedRun = typeof SelectedRun.Type;
 
 export const Model = Schema.Struct({
   dialog: Dialog.Model,
   reuseTooltip: Tooltip.Model,
   draft: Draft,
-  datePickers: Schema.NullOr(
+  datePickers: Schema.Option(
     Schema.Struct({
       baselineWeek: DatePicker.Model,
       comparisonWeek: DatePicker.Model,
@@ -55,14 +60,7 @@ export const Model = Schema.Struct({
   invalidLink: Schema.Boolean,
   historyGeneration: Schema.Int,
   recent: AsyncData.Schema(Schema.Array(AnalysisRunSummary), Notice).schema,
-  selected: Schema.NullOr(
-    Schema.Struct({
-      ...Selection.fields,
-      detail: request(AnalysisRun),
-      report: request(RouteReliabilityReport),
-      observedAt: Schema.Int,
-    }),
-  ),
+  selected: Schema.Option(SelectedRun),
 });
 export type Model = typeof Model.Type;
 
@@ -79,26 +77,28 @@ export const init = (): Model => ({
   }),
   reuseTooltip: initReuseTooltip(),
   draft: defaultDraft,
-  datePickers: null,
+  datePickers: Option.none(),
   submission: readyToSubmit(),
   generation: 0,
   invalidLink: false,
   historyGeneration: 0,
   recent: AsyncData.Idle(),
-  selected: null,
+  selected: Option.none(),
 });
 
 export const isActive = (state: AnalysisRunState) =>
   state === "queued" || state === "running";
 
-export const watchedRun = (model: Model): typeof Selection.Type | null => {
-  const selected = model.selected;
-  if (
-    selected &&
-    (selected.detail.loading ||
-      (selected.detail.data && isActive(selected.detail.data.state)))
-  ) {
-    return { id: selected.id, generation: selected.generation };
-  }
-  return null;
-};
+export const watchedRun = (
+  model: Model,
+): Option.Option<typeof Selection.Type> =>
+  model.selected.pipe(
+    Option.filter(
+      ({ detail }) =>
+        AsyncData.isPending(detail) ||
+        AsyncData.getData(detail).pipe(
+          Option.exists((run) => isActive(run.state)),
+        ),
+    ),
+    Option.map(({ id, generation }) => ({ id, generation })),
+  );
