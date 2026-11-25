@@ -1,5 +1,4 @@
-import { format, parseISO } from "date-fns";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 import { Calendar } from "foldkit";
 export const number = (value: number) =>
   new Intl.NumberFormat("en-US").format(Math.round(value));
@@ -14,14 +13,31 @@ export const money = (value: number, digits = 0) =>
     currency: "USD",
     maximumFractionDigits: digits,
   }).format(value);
+// Calendar dates deliberately carry neither a time nor a timezone.
+export const calendarDay = Schema.decodeUnknownOption(
+  Calendar.CalendarDateFromIsoString,
+);
+export const isoDay = (date: Calendar.CalendarDate) =>
+  `${String(date.year).padStart(4, "0")}-${String(date.month).padStart(2, "0")}-${String(date.day).padStart(2, "0")}`;
+
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const formatDay = (value: string | undefined) =>
+  Option.match(calendarDay(value), {
+    onNone: () => "",
+    onSome: (date) => dateFormatter.format(new Date(isoDay(date))),
+  });
+
 export const dateLabel = (filters: {
   readonly from?: string;
   readonly to?: string;
 }) => {
-  const from = filters.from
-    ? format(parseISO(filters.from), "MMM d, yyyy")
-    : "";
-  const to = filters.to ? format(parseISO(filters.to), "MMM d, yyyy") : "";
+  const from = formatDay(filters.from);
+  const to = formatDay(filters.to);
   return from
     ? to
       ? `${from} – ${to}`
@@ -30,10 +46,3 @@ export const dateLabel = (filters: {
       ? `Through ${to}`
       : "All dates";
 };
-
-// Calendar dates deliberately carry neither a time nor a timezone.
-export const calendarDay = Schema.decodeUnknownOption(
-  Calendar.CalendarDateFromIsoString,
-);
-export const isoDay = (date: Calendar.CalendarDate) =>
-  `${String(date.year).padStart(4, "0")}-${String(date.month).padStart(2, "0")}-${String(date.day).padStart(2, "0")}`;
