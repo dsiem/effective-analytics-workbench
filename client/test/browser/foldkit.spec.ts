@@ -80,22 +80,12 @@ test("overview charts and browser history work through the runtime", async ({
       .locator("circle title")
       .first(),
   ).toHaveText("01-01: $200.00");
-  await page.screenshot({
-    path: "test-results/overview-revenue.png",
-    fullPage: true,
-    animations: "disabled",
-  });
   await page.getByRole("link", { name: "Trip explorer", exact: true }).click();
   await expect(
     page.getByRole("table", { name: "Matching trips", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("1 trip", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Find by trip ID")).toHaveCount(0);
-  await page.screenshot({
-    path: "test-results/trips-table.png",
-    fullPage: true,
-    animations: "disabled",
-  });
   await expect(page.getByRole("button", { name: /Export/ })).toHaveCount(0);
   await page.getByRole("link", { name: "Trip overview", exact: true }).click();
   await page.goBack();
@@ -710,10 +700,6 @@ test("changing the trip sort starts a fresh query and keeps the filters", async 
   await page.keyboard.press("Tab");
   await expect(sort).toHaveValue("fare");
   await expect.poll(() => searches.at(-1)?.get("sort")).toBe("fare");
-  await page.screenshot({
-    path: "test-results/foldkit-sort.png",
-    fullPage: true,
-  });
 });
 
 test("trip inspector shows recorded endpoints, payment and the full charge", async ({
@@ -760,9 +746,4 @@ test("trip inspector shows recorded endpoints, payment and the full charge", asy
   await expect(
     panel.getByText("yellow_tripdata_2016-01.csv.gz", { exact: true }),
   ).toBeVisible();
-  await page.screenshot({
-    path: "test-results/enriched-trip.png",
-    fullPage: true,
-    animations: "disabled",
-  });
 });

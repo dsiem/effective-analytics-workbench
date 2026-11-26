@@ -143,7 +143,7 @@ for (const storage of ["invalid", "blocked"] as const) {
 
 test("Appearance stays in the sidebar when expanded or collapsed", async ({
   page,
-}, info) => {
+}) => {
   await page.goto("/trips");
   const theme = page.getByRole("button", {
     name: "Theme: System",
@@ -169,14 +169,13 @@ test("Appearance stays in the sidebar when expanded or collapsed", async ({
     .boundingBox();
   const menu = await page.getByRole("menu").boundingBox();
   expect(menu?.x).toBeGreaterThan((sidebar?.x ?? 0) + (sidebar?.width ?? 0));
-  await page.screenshot({ path: info.outputPath("collapsed-appearance.png") });
   await page.keyboard.press("Escape");
   await expect(theme).toBeFocused();
 });
 
 test("mobile Appearance menu closes before the navigation drawer and survives resizing", async ({
   page,
-}, info) => {
+}) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/trips");
   const opener = page.getByRole("button", {
@@ -197,7 +196,6 @@ test("mobile Appearance menu closes before the navigation drawer and survives re
   await expect(drawer).toBeVisible();
   await dark.click();
   await expect(page.getByRole("menu")).toBeFocused();
-  await page.screenshot({ path: info.outputPath("mobile-appearance.png") });
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).not.toBeVisible();
   await expect(drawer).toBeVisible();

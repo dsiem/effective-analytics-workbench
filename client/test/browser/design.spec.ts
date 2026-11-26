@@ -70,6 +70,7 @@ async function capture(
   name: string,
   fullPage = true,
 ) {
+  if (process.env.CAPTURE_TEST_SCREENSHOTS !== "1") return;
   const path = info.outputPath(`${name}.png`);
   await page.screenshot({ path, fullPage, animations: "disabled" });
   await info.attach(name, { path, contentType: "image/png" });

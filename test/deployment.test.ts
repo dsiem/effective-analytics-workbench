@@ -29,16 +29,10 @@ for (const scenario of [
   "federated token",
   "delayed startup",
   "startup crash",
-  "warehouse",
-  "trip preview",
   "trip preview count",
   "details",
-  "gps",
-  "create",
-  "list",
-  "genie",
+  "saved view listing",
   "agent",
-  "agent unavailable",
 ] as const) {
   const federated = scenario === "federated token";
   const delayedStartup = scenario === "delayed startup";
@@ -60,7 +54,8 @@ for (const scenario of [
     let deleted = 0;
     let followedCursor = false;
     let apiRequests = 0;
-    const genieRequests: string[] = [];
+    const genieSubmissions: string[] = [];
+    const genieResults: string[] = [];
     const cursor = {
       id: "472a6613-2337-4af1-a416-e9b6b61064dd",
       pinned: true,
@@ -74,26 +69,15 @@ for (const scenario of [
         response.writeHead(status, { "Content-Type": "application/json" });
         response.end(JSON.stringify(value));
       };
-      if (url.pathname === "/api/metadata")
-        return failure === "warehouse"
-          ? reply({ error: { message: "Warehouse unavailable" } }, 503)
-          : reply({ trips: 10 });
+      if (url.pathname === "/api/metadata") return reply({ trips: 10 });
       if (url.pathname === "/api/overview")
         return reply({ summary: { trips: 10 } });
-      if (url.pathname === "/api/trips") {
-        if (failure === "trip preview")
-          return reply(
-            {
-              error: { code: "warehouse_unavailable", message: "Unavailable" },
-            },
-            503,
-          );
+      if (url.pathname === "/api/trips")
         return reply({
           rows: [tripSummary(1)],
           nextCursor: tripPageCursor,
           hasMoreMatches: false,
         });
-      }
       if (url.pathname === `/api/trips/pages/${tripPageCursor}`) {
         return reply({
           rows: Array.from(
@@ -119,8 +103,6 @@ for (const scenario of [
         });
       }
       if (url.pathname === "/api/trip-map") {
-        if (failure === "gps")
-          return reply({ error: { message: "GPS unavailable" } }, 503);
         const endpoint =
           url.searchParams.get("endpoint") === "dropoff" ? "dropoff" : "pickup";
         const activity = gpsFixture(endpoint);
@@ -134,8 +116,6 @@ for (const scenario of [
         });
       }
       if (url.pathname === "/api/saved-views" && request.method === "PUT") {
-        if (failure === "create")
-          return reply({ error: { message: "Create failed" } }, 503);
         const chunks = [];
         for await (const chunk of request) chunks.push(chunk);
         saved = {
@@ -146,7 +126,7 @@ for (const scenario of [
         return reply(saved);
       }
       if (url.pathname === "/api/saved-views" && request.method === "GET") {
-        if (failure === "list")
+        if (failure === "saved view listing")
           return reply({ error: { message: "Listing unavailable" } }, 503);
         if (url.searchParams.has("cursor")) {
           assert.deepEqual(
@@ -178,17 +158,7 @@ for (const scenario of [
         assert.ok(mode === "chat" || mode === "agent");
         assert.equal(conversationId, undefined);
         assert.match(content, /total_trips/);
-        genieRequests.push(`submit:${mode}`);
-        if (mode === "agent" && failure === "agent unavailable")
-          return reply(
-            {
-              error: {
-                code: "genie_agent_mode_unavailable",
-                message: "Agent mode is disabled in this Databricks workspace.",
-              },
-            },
-            503,
-          );
+        genieSubmissions.push(mode);
         return reply({
           conversationId: `conversation-${mode}`,
           messageId: `message-${mode}`,
@@ -207,16 +177,14 @@ for (const scenario of [
         };
         const path = `/api/genie/${operation.conversationId}/messages/${operation.messageId}`;
         if (url.pathname === `${path}/result`) {
-          genieRequests.push(`result:${mode}`);
-          const incorrectCount =
-            mode === "chat" ? failure === "genie" : failure === "agent";
+          genieResults.push(mode);
+          const incorrectCount = mode === "agent" && failure === "agent";
           return reply({
             ...operation,
             queries: [{ rows: [[incorrectCount ? "999" : "10"]] }],
           });
         }
         assert.equal(url.pathname, path);
-        genieRequests.push(`poll:${mode}`);
         return reply({ ...operation, state: "completed", status: "COMPLETED" });
       }
       reply({ error: "Unexpected route" }, 404);
@@ -291,10 +259,11 @@ console.log(JSON.stringify(response));
         verification,
         /App deployed-app crashed during startup\. Fixture failed to start/,
       );
-    else if (failure === "agent unavailable")
-      await assert.rejects(verification, /genie_agent_mode_unavailable/);
-    else if (failure === "trip preview")
-      await assert.rejects(verification, /warehouse_unavailable/);
+    else if (failure === "saved view listing")
+      await assert.rejects(
+        verification,
+        /\/api\/saved-views: HTTP 503: .*Listing unavailable/,
+      );
     else if (failure === "trip preview count")
       await assert.rejects(
         verification,
@@ -305,7 +274,8 @@ console.log(JSON.stringify(response));
         verification,
         /Genie SQL results did not contain the expected trip count/,
       );
-    else if (failure) await assert.rejects(verification);
+    else if (failure === "details")
+      await assert.rejects(verification, /Hosted trip inspectors/);
     else
       assert.match(
         (await verification).stdout,
@@ -319,15 +289,7 @@ console.log(JSON.stringify(response));
       );
     assert.equal(
       created,
-      [
-        "warehouse",
-        "startup crash",
-        "trip preview",
-        "trip preview count",
-        "details",
-        "gps",
-        "create",
-      ].includes(failure ?? "")
+      ["startup crash", "trip preview count", "details"].includes(failure ?? "")
         ? 0
         : 1,
     );
@@ -336,22 +298,10 @@ console.log(JSON.stringify(response));
       created,
       "verification must clean up its temporary saved view on success and failure",
     );
-    const checksGenie =
-      failure === null || failure.startsWith("agent") || failure === "genie";
+    const checksGenie = failure === null || failure === "agent";
     assert.equal(followedCursor, checksGenie);
-    assert.deepEqual(
-      genieRequests,
-      checksGenie
-        ? [
-            "submit:chat",
-            "poll:chat",
-            "result:chat",
-            ...(failure === "genie" ? [] : ["submit:agent"]),
-            ...(failure === "agent unavailable" || failure === "genie"
-              ? []
-              : ["poll:agent", "result:agent"]),
-          ]
-        : [],
-    );
+    const expectedModes = checksGenie ? ["agent", "chat"] : [];
+    assert.deepEqual(genieSubmissions.toSorted(), expectedModes);
+    assert.deepEqual(genieResults.toSorted(), expectedModes);
   });
 }

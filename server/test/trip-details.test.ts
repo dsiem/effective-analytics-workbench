@@ -394,32 +394,57 @@ test("trip continuations check cumulative counts when Databricks omits offsets",
   );
 });
 
-test("warehouse trip details load by ID, preserve enrichment and reject invalid rows", async (t) => {
-  const statements: string[] = [];
+function postgresTripQuery(statement: string) {
+  return statement
+    .replaceAll("`", '"')
+    .replaceAll('"custom"."taxi"."trips"', "trips")
+    .replace(/:p(\d+)/g, (_marker, index: string) => "$" + index)
+    .replaceAll(
+      "timestampdiff(SECOND,tpep_pickup_datetime,tpep_dropoff_datetime)",
+      "EXTRACT(EPOCH FROM tpep_dropoff_datetime - tpep_pickup_datetime)",
+    )
+    .replaceAll("named_struct(", "json_build_object(")
+    .replace(", map('ignoreNullFields', 'false'))", ")::text")
+    .replaceAll("double('Infinity')", "'Infinity'::float8");
+}
+
+const getTripDetails = (id: string) =>
+  runTrips(Effect.flatMap(Analytics, (analytics) => analytics.tripDetails(id)));
+
+test("warehouse trip details return the requested trip and its enrichment", async (t) => {
+  const db = await PGlite.create();
+  t.after(() => db.close());
+  await db.exec(`
+    CREATE DOMAIN STRING AS text;
+    CREATE DOMAIN DOUBLE AS float8;
+    CREATE TABLE trips AS
+      SELECT trip_id, vendor_id AS VendorID,
+        timestamp '2016-01-01 10:00:00' AS tpep_pickup_datetime,
+        timestamp '2016-01-01 10:10:00' AS tpep_dropoff_datetime,
+        '10001'::text AS pickup_zip, NULL::text AS dropoff_zip,
+        2::float8 AS trip_distance, NULL::float8 AS fare_amount,
+        'yellow_tripdata_2016-01.csv.gz'::text AS source_file,
+        1 AS passenger_count, 1 AS RatecodeID, 'N'::text AS store_and_fwd_flag,
+        2 AS payment_type, true AS pickup_coordinates_valid,
+        -73.99 AS pickup_longitude, 40.75 AS pickup_latitude,
+        false AS dropoff_coordinates_valid,
+        0 AS dropoff_longitude, 0 AS dropoff_latitude,
+        0 AS tip_amount, 0 AS tolls_amount, 0.5 AS extra, 0.5 AS mta_tax,
+        0.3 AS improvement_surcharge, 11.3 AS total_amount
+      FROM (VALUES ('other-trip', 1), ('trip-1', 2)) AS rows(trip_id, vendor_id)
+  `);
   t.mock.method(
     globalThis,
     "fetch",
     warehouseFetch(async (statement, _, parameters) => {
-      statements.push(statement);
-      const id = parameters[0]?.value;
-      assert.match(statement, /WHERE trip_id = :p1 LIMIT 1$/);
-      assert.equal(parameters[0]?.type, "STRING");
-      if (id !== "trip-1" && id !== "invalid-duration") return [];
-      return [
-        {
-          ...tripRow(id),
-          fare: null,
-          duration: id === "invalid-duration" ? "Infinity" : 10,
-          details: JSON.stringify(details),
-        },
-      ];
+      const { rows } = await db.query<Record<string, string | number | null>>(
+        postgresTripQuery(statement),
+        parameters.map(({ value }) => value),
+      );
+      return rows;
     }),
   );
-  const get = (id: string) =>
-    runTrips(
-      Effect.flatMap(Analytics, (analytics) => analytics.tripDetails(id)),
-    );
-  assert.deepEqual(await get("trip-1"), {
+  assert.deepEqual(await getTripDetails("trip-1"), {
     trip_id: "trip-1",
     pickup_at: "2016-01-01 10:00:00",
     dropoff_at: "2016-01-01 10:10:00",
@@ -430,9 +455,23 @@ test("warehouse trip details load by ID, preserve enrichment and reject invalid 
     duration: 10,
     details,
   });
-  assert.match(statements[0] ?? "", /AS details\b/i);
-  await assert.rejects(get("missing-trip"), TripNotFound);
-  await assert.rejects(get("invalid-duration"), ServiceUnavailable);
+  assert.equal((await getTripDetails("other-trip")).details.vendor_id, 1);
+  await assert.rejects(getTripDetails("missing-trip"), TripNotFound);
+});
+
+test("warehouse trip details reject nonfinite durations", async (t) => {
+  t.mock.method(
+    globalThis,
+    "fetch",
+    warehouseFetch(async () => [
+      {
+        ...tripRow("invalid-duration"),
+        duration: "Infinity",
+        details: JSON.stringify(details),
+      },
+    ]),
+  );
+  await assert.rejects(getTripDetails("invalid-duration"), ServiceUnavailable);
 });
 
 test("trip pages preserve warehouse order across ties and nulls", async (t) => {
@@ -462,18 +501,9 @@ test("trip pages preserve warehouse order across ties and nulls", async (t) => {
       queryCount++;
       assert.doesNotMatch(statement, /COUNT\s*\(/i);
       fetchLimit = parameters.find(({ name }) => name === limit)?.value;
-      const values = parameters.map((param) => param.value);
-      const query = statement
-        .replaceAll("`", '"')
-        .replaceAll('"custom"."taxi"."trips"', "trips")
-        .replace(/:p(\d+)/g, (_marker, index: string) => "$" + index)
-        .replace(
-          "timestampdiff(SECOND,tpep_pickup_datetime,tpep_dropoff_datetime)",
-          "EXTRACT(EPOCH FROM tpep_dropoff_datetime - tpep_pickup_datetime)",
-        );
       const { rows } = await db.query<Record<string, string | number | null>>(
-        query,
-        values,
+        postgresTripQuery(statement),
+        parameters.map(({ value }) => value),
       );
       return rows;
     }),
