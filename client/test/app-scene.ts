@@ -28,21 +28,17 @@ export function withDataset(href: string) {
   ).model;
 }
 
-export function navigated(href: string) {
-  const { pathname, search } = url(href);
-  return Subscription.emit(
-    Features.navigation.toParentMessage(
-      NavigationMessage.Navigated({ path: pathname, query: search.slice(1) }),
-    ),
-  );
-}
-
 export function followNavigation(href: string) {
+  const { pathname, search } = url(href);
   return [
     Command.resolve(
       Navigate({ href, external: false }),
       NavigationMessage.CompletedNavigate(),
     ),
-    navigated(href),
+    Subscription.emit(
+      Features.navigation.toParentMessage(
+        NavigationMessage.Navigated({ path: pathname, query: search.slice(1) }),
+      ),
+    ),
   ] as const;
 }

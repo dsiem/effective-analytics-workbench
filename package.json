@@ -18,7 +18,7 @@
     "lint": "npm run build --workspaces --if-present && oxlint --deny-warnings .",
     "format": "oxfmt --write .",
     "test": "npm run test --workspaces --if-present && node --conditions=development --conditions=workbench-source --import tsx --test server/test/*.test.ts test/*.test.ts client/test/*.test.ts",
-    "test:scene": "node --conditions=development --import tsx --test client/test/*.scene.test.ts",
+    "test:scene": "npm run build --workspace @dsiem/genie-client && node --conditions=development --import tsx --test client/test/*.scene.test.ts",
     "test:dist": "node --test server/test/built/*.test.mjs test/built/*.test.mjs",
     "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build && npm run test:dist",
     "db:setup": "npm run build --workspace @dsiem/sql-warehouse && node --env-file-if-exists=.env --import tsx scripts/setup-lakebase.ts",

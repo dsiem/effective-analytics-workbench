@@ -186,6 +186,43 @@ test("opening a saved view applies its filters in place and identifies the activ
   await expect(trigger).toContainText("All trips");
 });
 
+test("reopening the applied saved view clears unapplied edits at the same URL", async ({
+  page,
+}) => {
+  const href = "/trips?from=2016-01-10&to=2016-01-20&zip=11430";
+  await page.goto(href);
+  const form = page.getByRole("form", { name: "Filters" });
+  const zip = form.getByLabel("Pickup ZIP code");
+  const pending = form.getByText("Unapplied changes", { exact: true });
+  await zip.fill("10002");
+  await expect(pending).toBeVisible();
+  await form.getByRole("button", { name: "Saved views", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Saved views" })
+    .getByRole("button", { name: "Open saved view for Airport pickups" })
+    .click();
+  await expect(zip).toHaveValue("11430");
+  await expect(pending).toBeHidden();
+  await expect(form.getByRole("button", { name: "Save view" })).toBeEnabled();
+  await expect(page).toHaveURL(href);
+});
+
+test("reset clears unapplied edits when All trips is already applied", async ({
+  page,
+}) => {
+  await page.goto("/trips");
+  const form = page.getByRole("form", { name: "Filters" });
+  const zip = form.getByLabel("Pickup ZIP code");
+  const pending = form.getByText("Unapplied changes", { exact: true });
+  await zip.fill("10002");
+  await expect(pending).toBeVisible();
+  await form.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(zip).toHaveValue("");
+  await expect(pending).toBeHidden();
+  await expect(form.getByRole("button", { name: "Save view" })).toBeEnabled();
+  await expect(page).toHaveURL("/trips");
+});
+
 test("view chooser supports keyboard dismissal and returns focus to its trigger", async ({
   page,
 }) => {

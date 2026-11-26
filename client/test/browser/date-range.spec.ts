@@ -46,6 +46,25 @@ for (const timezoneId of ["Europe/Berlin", "America/Los_Angeles"]) {
   });
 }
 
+test("typing reversed dates shows a visible error and leaves the applied filters in place", async ({
+  page,
+}) => {
+  await openTrips(page);
+  const form = page.getByRole("form", { name: "Filters" });
+  await form.getByLabel("Pickup start date").fill("2016-02-20");
+  await form.getByLabel("Pickup end date").fill("2016-01-10");
+  await form.getByRole("button", { name: "Apply", exact: true }).click();
+  const alert = form.getByRole("alert");
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText(
+    "start date must be on or before the end date",
+  );
+  await expect(page).toHaveURL("/trips?zip=10001");
+  await expect(
+    page.getByRole("heading", { name: "Trip records" }),
+  ).toBeVisible();
+});
+
 test("date fields fit a mobile screen and apply a range", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await openTrips(page);

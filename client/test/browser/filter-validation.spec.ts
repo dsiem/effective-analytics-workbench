@@ -1,52 +1,50 @@
 import { expect, test } from "@playwright/test";
 
-for (const [path, search] of [
-  ["/", "from=2016-02-01&to=2016-01-01"],
-  ["/trips", "from=2016-02-30"],
-  ["/trip-map", "zip=invalid"],
-  ["/genie", "zip=invalid"],
+const invalidQueries = [
+  "from=2016-02-01&to=2016-01-01",
+  "from=2016-02-30",
+  "zip=invalid",
+];
+const dataEndpoints = new Set([
+  "/api/overview",
+  "/api/trip-map",
+  "/api/trips",
+  "/api/saved-views",
+  "/api/genie",
+]);
+
+for (const [path, endpointAfterClear] of [
+  ["/", "/api/overview"],
+  ["/trips", "/api/trips"],
+  ["/trip-map", "/api/trip-map"],
+  ["/genie", null],
 ] as const) {
-  test(`${path} shows invalid filters (${search}) without querying unfiltered data`, async ({
-    page,
-  }) => {
-    const dataRequests: string[] = [];
-    await page.route("**/api/**", (route) => {
-      const url = new URL(route.request().url());
-      if (
-        [
-          "/api/overview",
-          "/api/trip-map",
-          "/api/trips",
-          "/api/saved-views",
-          "/api/genie",
-        ].includes(url.pathname)
-      )
-        dataRequests.push(url.pathname);
-      return route.continue();
+  for (const search of invalidQueries) {
+    test(`${path} shows invalid filters (${search}) without querying unfiltered data`, async ({
+      page,
+    }) => {
+      const dataRequests: string[] = [];
+      page.on("request", (request) => {
+        const { pathname } = new URL(request.url());
+        if (dataEndpoints.has(pathname)) dataRequests.push(pathname);
+      });
+      await page.goto(`${path}?${search}`);
+      const invalid = page.getByRole("heading", {
+        name: "Invalid Explore filters",
+      });
+      await expect(invalid).toBeVisible();
+      await expect(page.getByRole("alert")).toContainText(
+        "start date must be on or before the end date",
+      );
+      expect(dataRequests).toEqual([]);
+      await page.getByRole("button", { name: "Clear invalid filters" }).click();
+      await expect(invalid).toBeHidden();
+      await expect(page).toHaveURL(path);
+      if (endpointAfterClear) {
+        await expect.poll(() => dataRequests).toContain(endpointAfterClear);
+      }
     });
-    await page.goto(`${path}?${search}`);
-    await expect(
-      page.getByRole("heading", { name: "Invalid Explore filters" }),
-    ).toBeVisible();
-    await expect(page.getByRole("alert")).toContainText(
-      "start date must be on or before the end date",
-    );
-    expect(dataRequests).toEqual([]);
-    await page.getByRole("button", { name: "Clear invalid filters" }).click();
-    await expect(
-      page.getByRole("heading", { name: "Invalid Explore filters" }),
-    ).not.toBeVisible();
-    await expect(page).toHaveURL(path);
-    if (path !== "/genie") {
-      const expected =
-        path === "/trips"
-          ? "/api/trips"
-          : path === "/trip-map"
-            ? "/api/trip-map"
-            : "/api/overview";
-      await expect.poll(() => dataRequests).toContain(expected);
-    }
-  });
+  }
 }
 
 test("navigation preserves invalid filters until corrected and Apply can repair them", async ({
