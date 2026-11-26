@@ -30,6 +30,10 @@ test("a denied report still lets the user reuse the completed run’s inputs", a
   await page.goto("/analysis?run=123");
   await expect(page.getByRole("alert")).toHaveText(message);
   await expect(page.getByRole("heading", { name: "Run #123" })).toBeVisible();
+  await expect(
+    page.getByText("Minimum trips per week", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("75", { exact: true })).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("report-permission.png"),
     animations: "disabled",

@@ -77,7 +77,7 @@ async function fixture(page: Page, getRows: () => SavedView[]) {
   });
 }
 
-test("a compact picker searches 1,000 views globally and supports arrows, Enter and Escape", async ({
+test("the picker can replace a pending search and open the new result by keyboard", async ({
   page,
 }) => {
   const rows = makeViews();
@@ -101,23 +101,28 @@ test("a compact picker searches 1,000 views globally and supports arrows, Enter 
   const search = views.getByRole("searchbox", {
     name: "Search all saved views",
   });
-  for (const query of ["winter exceptions", "flight delays", "2016-02 11430"]) {
-    const response = page.waitForResponse(
-      (response) => new URL(response.url()).searchParams.get("q") === query,
-    );
-    await search.fill(query);
-    await response;
-    await expect(search).toHaveAttribute("aria-busy", "false");
-    await expect(
-      views.getByRole("button", { name: /^Open saved view for/ }),
-    ).toHaveCount(1);
-    await expect(views).toContainText("Pickup ZIP 11430");
-  }
-  await search.press("ArrowDown");
+  const firstSearch = (url: URL) =>
+    url.pathname === "/api/saved-views" &&
+    url.searchParams.get("q") === "Finding";
+  await page.route(firstSearch, () => {
+    // Leave the first request pending while the user changes the search.
+  });
+  await Promise.all([
+    page.waitForRequest((request) => firstSearch(new URL(request.url()))),
+    search.fill("Finding"),
+  ]);
+  await search.fill("flight delays");
   const targetButton = views.getByRole("button", {
     name: "Open saved view for JFK winter exceptions",
     exact: true,
   });
+  await expect(targetButton).toBeVisible();
+  await expect(
+    views.getByRole("button", { name: /^Open saved view for/ }),
+  ).toHaveCount(1);
+  await expect(targetButton).toContainText("Pickup ZIP 11430");
+  await expect(search).toHaveAttribute("aria-busy", "false");
+  await search.press("ArrowDown");
   await expect(targetButton).toBeFocused();
   await targetButton.press("ArrowUp");
   await expect(search).toBeFocused();
