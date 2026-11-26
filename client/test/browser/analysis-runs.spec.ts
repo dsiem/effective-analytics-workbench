@@ -271,6 +271,55 @@ test("analysis retries safely and a run link resumes monitoring and reuses input
   expect(submissions).toHaveLength(2);
 });
 
+test("a late submission refreshes the reopened history and keeps the user on it", async ({
+  page,
+}) => {
+  const run = {
+    id: 123,
+    state: "running",
+    startedAt: null,
+    endedAt: null,
+    requestedBy: null,
+  };
+  let acceptSubmission = () => {};
+  const pending = new Promise<void>((resolve) => {
+    acceptSubmission = resolve;
+  });
+  let accepted = false;
+  await page.route("**/api/analysis-runs", async (route) => {
+    if (route.request().method() === "POST") {
+      await pending;
+      accepted = true;
+      return route.fulfill({ status: 202, json: { id: run.id } });
+    }
+    return route.fulfill({ json: accepted ? [run] : [] });
+  });
+
+  await page.goto("/trips");
+  await page.getByRole("link", { name: "Analysis runs", exact: true }).click();
+  await page.getByRole("button", { name: "New run", exact: true }).click();
+  await page.getByLabel("Baseline week starts").fill("2016-01-04");
+  await page.getByLabel("Comparison week starts").fill("2016-01-11");
+  await Promise.all([
+    page.waitForRequest(
+      (request) =>
+        new URL(request.url()).pathname === "/api/analysis-runs" &&
+        request.method() === "POST",
+    ),
+    page.getByRole("button", { name: "Run analysis", exact: true }).click(),
+  ]);
+  await page.goBack();
+  await expect(page).toHaveURL("/trips");
+  await page.goForward();
+  await expect(
+    page.getByRole("heading", { name: "Recent runs" }),
+  ).toBeVisible();
+
+  acceptSubmission();
+  await expect(page.getByRole("link", { name: /Run #123/ })).toBeVisible();
+  await expect(page).toHaveURL("/analysis");
+});
+
 test("a phone can return from the end of a long report and reopen it from history", async ({
   page,
 }) => {
