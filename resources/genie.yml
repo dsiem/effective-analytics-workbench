@@ -32,12 +32,6 @@ resources:
           "data_sources": {
             "tables": [
               {
-                "identifier": "${var.data_catalog}.${var.data_schema}.trip_quality",
-                "description": [
-                  "Ingestion counts for each selected monthly source file. Rejected counts include pickups outside the snapshot date range."
-                ]
-              },
-              {
                 "identifier": "${var.data_catalog}.${var.data_schema}.trips"
               }
             ]

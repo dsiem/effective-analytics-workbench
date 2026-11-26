@@ -18,6 +18,4 @@ BEGIN
   EXECUTE IMMEDIATE grant_sql;
   SET grant_sql = 'GRANT SELECT ON TABLE `' || :catalog || '`.`' || :schema || '`.`route_reliability_runs` TO `' || :app_service_principal_id || '`';
   EXECUTE IMMEDIATE grant_sql;
-  SET grant_sql = 'GRANT SELECT ON TABLE `' || :catalog || '`.`' || :schema || '`.`trip_quality` TO `' || :app_service_principal_id || '`';
-  EXECUTE IMMEDIATE grant_sql;
 END;
