@@ -47,10 +47,7 @@ test("Genie displays the applied Records scope and uses it for the entire questi
     given(open("/trips?from=2016-01-10&to=2016-01-20&zip=10001")),
     click(role("button", { name: "Ask Genie" })),
     Mount.resolve(PanelReturnFocus, Message.MountedPanelReturnFocus()),
-    Command.resolve(
-      Focus({ selector: "#genie-composer" }),
-      AppMessage.CompletedFocus(),
-    ),
+    Command.resolve(Focus, AppMessage.CompletedFocus()),
     expect(context).toContainText("Jan 10, 2016 – Jan 20, 2016"),
     expect(context).toContainText("Pickup ZIP 10001"),
     expect(context).toContainText("Applied filters included."),

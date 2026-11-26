@@ -291,7 +291,7 @@ test("same-name views expose different dates, remain selectable on mobile, and r
   rows[999] = {
     ...viewAt(rows, 999),
     title: "Midtown review",
-    filters: { zip: "10019", from: "2016-01-08", to: "2016-01-14" },
+    filters: { zip: "10001", from: "2016-01-08", to: "2016-01-14" },
   };
   await fixture(page, () => rows);
   await page.setViewportSize({ width: 360, height: 800 });
@@ -314,14 +314,22 @@ test("same-name views expose different dates, remain selectable on mobile, and r
     exact: true,
   });
   await expect(matches).toHaveCount(2);
-  await expect(matches.nth(0)).toContainText("Pickup ZIP 10001");
-  await expect(matches.nth(1)).toContainText("Pickup ZIP 10019");
+  const firstDates = "Jan 1, 2016 – Jan 7, 2016";
+  const secondDates = "Jan 8, 2016 – Jan 14, 2016";
+  const first = matches.filter({ hasText: firstDates });
+  const second = matches.filter({ hasText: secondDates });
+  await expect(first.getByText(firstDates, { exact: true })).toBeVisible();
+  await expect(first).toHaveAccessibleDescription(new RegExp(firstDates));
+  await expect(second.getByText(secondDates, { exact: true })).toBeVisible();
+  await expect(second).toHaveAccessibleDescription(new RegExp(secondDates));
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
   await page.screenshot({ path: "test-results/saved-views-search-mobile.png" });
-  await matches.nth(1).click();
-  await expect(page).toHaveURL(/from=2016-01-08&to=2016-01-14&zip=10019/);
+  await second.click();
+  await expect(page).toHaveURL(
+    "/trips?from=2016-01-08&to=2016-01-14&zip=10001",
+  );
 });
