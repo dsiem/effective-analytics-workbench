@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("a denied report still lets the user reuse the completed run’s inputs", async ({
   page,
-}, testInfo) => {
+}) => {
   const message = "This report is under lock. You need permission to read it.";
   await page.route("**/api/analysis-runs/123", (route) =>
     route.fulfill({
@@ -29,15 +29,14 @@ test("a denied report still lets the user reuse the completed run’s inputs", a
   );
   await page.goto("/analysis?run=123");
   await expect(page.getByRole("alert")).toHaveText(message);
+  await expect(
+    page.getByRole("alert").locator('svg[aria-hidden="true"]'),
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Run #123" })).toBeVisible();
   await expect(
     page.getByText("Minimum trips per week", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText("75", { exact: true })).toBeVisible();
-  await page.screenshot({
-    path: testInfo.outputPath("report-permission.png"),
-    animations: "disabled",
-  });
   await page.getByRole("button", { name: "Reuse these inputs" }).click();
   const form = page.getByRole("dialog", { name: "New analysis run" });
   await expect(form.getByLabel("Baseline week starts")).toHaveValue(
@@ -247,10 +246,6 @@ test("analysis retries safely and a run link resumes monitoring and reuses input
   await expect(reuse).toHaveAccessibleDescription(
     "Same question, different week?",
   );
-  await page.screenshot({
-    path: test.info().outputPath("reuse-inputs.png"),
-    animations: "disabled",
-  });
   await page.keyboard.press("Escape");
   await expect(tooltip).toBeHidden();
   await page.getByRole("button", { name: "New run", exact: true }).focus();

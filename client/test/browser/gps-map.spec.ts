@@ -200,11 +200,6 @@ for (const width of [390, 1440])
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBeLessThanOrEqual(width);
-    await page.screenshot({
-      path: `test-results/gps-${width}-light.png`,
-      fullPage: true,
-      animations: "disabled",
-    });
     if (width < 768)
       await page
         .getByRole("button", { name: "Open navigation", exact: true })
@@ -219,11 +214,9 @@ for (const width of [390, 1440])
         .getByRole("button", { name: "Close navigation", exact: true })
         .click();
     await ready(page);
-    await page.screenshot({
-      path: `test-results/gps-${width}-dark.png`,
-      fullPage: true,
-      animations: "disabled",
-    });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
   });
 
 test("picking the second map cell selects its own identity and tooltip", async ({

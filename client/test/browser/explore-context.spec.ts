@@ -86,10 +86,6 @@ test("Explore applies changes before saving, and saved views reopen on the curre
       exact: true,
     }),
   ).toBeVisible();
-  await page.screenshot({
-    path: "test-results/explore-saved-views.png",
-    fullPage: true,
-  });
   await views
     .getByRole("button", { name: `Open saved view for ${savedView.title}` })
     .click();
@@ -150,10 +146,6 @@ test("Genie sends the applied Records filters when a draft ZIP differs", async (
   await page
     .getByRole("textbox", { name: "Ask a question about taxi data" })
     .fill("Count trips");
-  await page.screenshot({
-    path: "test-results/explore-context-genie.png",
-    fullPage: true,
-  });
   await page
     .getByRole("button", { name: "Send question", exact: true })
     .click();
@@ -191,9 +183,5 @@ test("context and saved-view actions fit a narrow mobile viewport", async ({
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
-    await page.screenshot({
-      path: `test-results/explore-context-${path}-mobile.png`,
-      fullPage: true,
-    });
   }
 });

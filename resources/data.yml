@@ -3,7 +3,7 @@ resources:
     data:
       name: ${var.data_schema}
       catalog_name: ${var.data_catalog}
-      comment: NYC taxi source, quality checks, and enriched trips.
+      comment: Raw and enriched NYC taxi trips and route analysis results.
   volumes:
     taxi_sources:
       name: taxi_sources

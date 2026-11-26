@@ -77,11 +77,6 @@ test("all saved views remain reachable beyond 200 and pinning a later saved view
     name: "Load more views",
     exact: true,
   });
-  await more.scrollIntoViewIfNeeded();
-  await page.screenshot({
-    path: "test-results/saved-views-pagination-load-more-mobile.png",
-    animations: "disabled",
-  });
   for (let shown = 24; shown < 201;) {
     await more.click();
     shown = Math.min(shown + 24, 201);
@@ -119,10 +114,6 @@ test("all saved views remain reachable beyond 200 and pinning a later saved view
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  await page.screenshot({
-    path: "test-results/saved-views-pagination-mobile.png",
-    animations: "disabled",
-  });
 });
 
 test("a failed next page keeps existing saved views visible and can be retried", async ({

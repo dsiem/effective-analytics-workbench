@@ -78,10 +78,6 @@ test("date fields fit a mobile screen and apply a range", async ({ page }) => {
   }
   await page.getByLabel("Pickup start date").fill("2016-01-31");
   await page.getByLabel("Pickup end date").fill("2016-02-01");
-  await page.screenshot({
-    path: "test-results/date-range-mobile.png",
-    animations: "disabled",
-  });
   await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(page).toHaveURL(
     /\/trips\?from=2016-01-31&to=2016-02-01&zip=10001$/,
@@ -90,7 +86,7 @@ test("date fields fit a mobile screen and apply a range", async ({ page }) => {
 
 test("calendars open within the dataset and disable out-of-range dates before selection", async ({
   page,
-}, info) => {
+}) => {
   await openTrips(page);
   const start = page.getByLabel("Pickup start date", { exact: true });
   await expect(start).toHaveValue("");
@@ -148,10 +144,6 @@ test("calendars open within the dataset and disable out-of-range dates before se
   );
   await expect(start).toHaveValue("");
   await expect(calendar).toBeVisible();
-  await page.screenshot({
-    path: info.outputPath("bounded-start-calendar.png"),
-    animations: "disabled",
-  });
   await calendar.getByRole("button", { name: /January 3, 2016/ }).click();
   await expect(start).toHaveValue("2016-01-03");
   await expect(calendar).not.toBeVisible();

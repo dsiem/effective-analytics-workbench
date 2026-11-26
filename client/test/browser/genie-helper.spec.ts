@@ -143,7 +143,7 @@ test("the desktop helper focuses its composer after a delayed render", async ({
 
 test("a denied Genie question keeps the chart and its filters available", async ({
   page,
-}, testInfo) => {
+}) => {
   const message = "Even Genie needs permission to send this question.";
   await page.route("**/api/genie", (route) =>
     route.fulfill({
@@ -165,10 +165,6 @@ test("a denied Genie question keeps the chart and its filters available", async 
   await expect(
     helper.getByRole("alert").locator('svg[aria-hidden="true"]'),
   ).toBeVisible();
-  await page.screenshot({
-    path: testInfo.outputPath("genie-permission.png"),
-    animations: "disabled",
-  });
   await helper.getByRole("button", { name: "Close Genie" }).click();
   await expect(
     page.getByRole("img", { name: "Trips by pickup date" }),
@@ -228,15 +224,7 @@ test("explains a selected chart in place with its actual data, filters, SQL, and
   await helper.getByText("View generated SQL", { exact: true }).click();
   await expect(helper.locator("pre")).toContainText("SELECT pickup_zip");
   await expect(helper).toContainText("bounded preview");
-  await page.screenshot({
-    path: "test-results/genie-helper-expanded.png",
-    animations: "disabled",
-  });
   await helper.getByRole("button", { name: "Minimize Genie" }).click();
-  await page.screenshot({
-    path: "test-results/genie-helper-desktop.png",
-    animations: "disabled",
-  });
   await helper.getByRole("button", { name: "Close Genie" }).click();
   await expect(
     chart.getByRole("button", {
@@ -446,9 +434,5 @@ for (const width of [360, 768, 1024]) {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
-    await page.screenshot({
-      path: `test-results/genie-helper-${width}.png`,
-      animations: "disabled",
-    });
   });
 }

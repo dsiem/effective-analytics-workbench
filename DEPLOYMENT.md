@@ -61,11 +61,10 @@ includes pickup and drop-off coordinates. To list the files, run
 `LIST '/Volumes/samples/databricks/datasets/nyctaxi/tripdata/yellow/'` in
 Databricks SQL. Reruns reuse trip IDs, including when you change the range.
 
-## Release an app update
+Open the `seed_trip_snapshot` task output to see ingestion counts by source
+file. Rejected counts include pickups outside the selected date range.
 
-If your deployment predates the `trips` and `trip_quality` tables, rerun
-`databricks bundle run setup_taxi_demo -t dev`. The command preserves trip IDs
-and grants the app access to both tables.
+## Release an app update
 
 For routine updates, deploy the bundle and start the app.
 
@@ -131,6 +130,13 @@ visibility, focus, browser history, and requests from the running app.
 npm run check
 npx playwright install chromium webkit
 npm run test:browser
+```
+
+To save screenshots for visual review, run the design tests with capture
+enabled. Playwright saves the images in `test-results/`.
+
+```sh
+CAPTURE_TEST_SCREENSHOTS=1 npm run test:browser -- design.spec.ts
 ```
 
 ### Check hosted APIs

@@ -121,11 +121,6 @@ for (const width of [1440, 360]) {
     await expect(field).toBeInViewport({ ratio: 1 });
     const compactHeight = (await field.boundingBox())?.height ?? 0;
     expect(compactHeight).toBeLessThanOrEqual(40);
-    await page.screenshot({
-      path: `test-results/compact-trip-inspector-${width}.png`,
-      fullPage: false,
-      animations: "disabled",
-    });
     const fare = panel.locator("summary").filter({ hasText: "Fare breakdown" });
     const source = panel
       .locator("summary")
@@ -237,10 +232,6 @@ for (const width of [1440, 360]) {
     expect(box).not.toBeNull();
     expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(width);
     expect(box?.height ?? 0).toBeLessThanOrEqual(width === 360 ? 56 : 44);
-    await page.screenshot({
-      path: `test-results/compact-trip-rows-${width}.png`,
-      fullPage: true,
-    });
   });
 }
 
@@ -388,10 +379,6 @@ test("denied comment access leaves trip records, details and navigation usable",
   await expect(
     page.getByRole("alert").locator('svg[aria-hidden="true"]'),
   ).toBeVisible();
-  await page.screenshot({
-    path: "test-results/partial-access.png",
-    animations: "disabled",
-  });
   await table
     .getByRole("button", { name: /^Details and comments for trip/ })
     .first()
@@ -456,10 +443,6 @@ for (const width of [1440, 360]) {
     await expect(
       panel.getByRole("button", { name: "Post comment", exact: true }),
     ).toBeDisabled();
-    await page.screenshot({
-      path: test.info().outputPath("first-comment.png"),
-      animations: "disabled",
-    });
     await panel
       .getByRole("textbox", { name: "Add a comment", exact: true })
       .fill("Check this fare against nearby trips.");
@@ -479,11 +462,6 @@ for (const width of [1440, 360]) {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
-    await page.screenshot({
-      path: `test-results/trip-comments-${width}.png`,
-      fullPage: true,
-      animations: "disabled",
-    });
     await page.keyboard.press("Escape");
     await expect(inspect.first()).toBeFocused();
     await expect(

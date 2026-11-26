@@ -205,11 +205,6 @@ test("sidebar collapses to icons, keeps filters, persists, and supports the keyb
   await expect(navigation).toBeVisible();
   const expanded = await navigation.boundingBox();
   expect(expanded?.width).toBeGreaterThan(200);
-  await page.screenshot({
-    path: "test-results/foldkit-desktop.png",
-    fullPage: true,
-    animations: "disabled",
-  });
 
   await page
     .getByRole("button", { name: "Collapse sidebar", exact: true })
@@ -226,11 +221,6 @@ test("sidebar collapses to icons, keeps filters, persists, and supports the keyb
   });
   await trips.hover();
   await expect(page.getByRole("tooltip")).toHaveText("Trip explorer");
-  await page.screenshot({
-    path: "test-results/foldkit-collapsed.png",
-    fullPage: true,
-    animations: "disabled",
-  });
   await trips.focus();
   await expect(page.getByRole("tooltip")).toHaveText("Trip explorer");
   await page.keyboard.press("Escape");
@@ -274,11 +264,6 @@ test("mobile sidebar traps focus, closes on navigation and Escape, and leaves de
       drawer.evaluate((element) => element.contains(document.activeElement)),
     )
     .toBe(true);
-  await page.screenshot({
-    path: "test-results/foldkit-mobile-sidebar.png",
-    fullPage: true,
-    animations: "disabled",
-  });
 
   await drawer.getByRole("link", { name: "Trip map", exact: true }).click();
   await expect(page).toHaveURL(/\/trip-map\?zip=10001$/);
@@ -330,11 +315,6 @@ test("saved view dialog has labelled fields, keyboard dismissal, and restores fo
     dialog.getByRole("button", { name: "Save view", exact: true }),
   ).toBeEnabled();
   await expect(dialog).toContainText("ZIP 10001");
-  await page.screenshot({
-    path: "test-results/foldkit-saved-view-dialog.png",
-    fullPage: true,
-    animations: "disabled",
-  });
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
   await expect(trigger).toBeFocused();
@@ -355,11 +335,6 @@ for (const width of [360, 390, 768, 1024, 1440]) {
         () => document.documentElement.scrollWidth <= window.innerWidth,
       ),
     ).toBe(true);
-    await page.screenshot({
-      path: `test-results/foldkit-${width}.png`,
-      fullPage: true,
-      animations: "disabled",
-    });
   });
 }
 
@@ -385,11 +360,6 @@ test("sidebar shows the proxy user and keeps the profile available when collapse
   await expect(
     page.getByText("Databricks sample data", { exact: true }),
   ).toHaveCount(0);
-  await page.screenshot({
-    path: "test-results/sidebar-current-user.png",
-    fullPage: true,
-    animations: "disabled",
-  });
   await page
     .getByRole("button", { name: "Collapse sidebar", exact: true })
     .click();
