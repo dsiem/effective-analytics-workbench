@@ -46,63 +46,6 @@ for (const timezoneId of ["Europe/Berlin", "America/Los_Angeles"]) {
   });
 }
 
-test("clears dates while preserving the ZIP filter", async ({ page }) => {
-  await openTrips(page, "from=2016-01-10&to=2016-01-20&zip=10001");
-  await page.getByLabel("Pickup start date").fill("");
-  await page.getByLabel("Pickup end date").fill("");
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
-  await expect(page).toHaveURL(/\/trips\?zip=10001$/);
-  await expect(page.getByLabel("Pickup start date")).toHaveValue("");
-  await expect(page.getByLabel("Pickup end date")).toHaveValue("");
-});
-
-for (const [query, from, to] of [
-  ["from=2016-01-10", "2016-01-10", ""],
-  ["to=2016-02-20", "", "2016-02-20"],
-] as const) {
-  test(`preserves an open range: ${query}`, async ({ page }) => {
-    await openTrips(page, query);
-    await expect(page.getByLabel("Pickup start date")).toHaveValue(from);
-    await expect(page.getByLabel("Pickup end date")).toHaveValue(to);
-    await expect(
-      page.getByRole("button", { name: "Apply", exact: true }),
-    ).toBeDisabled();
-    await expect(page).toHaveURL(`/trips?${query}`);
-  });
-}
-
-test("rejects dates outside the dataset bounds before applying filters", async ({
-  page,
-}) => {
-  await openTrips(page);
-  await page.getByLabel("Pickup start date").fill("2016-01-02");
-  await page.getByLabel("Pickup end date").fill("2016-02-26");
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
-  await expect(page).toHaveURL(/\/trips\?zip=10001$/);
-  await page.getByLabel("Pickup start date").fill("2016-01-03");
-  await page.getByLabel("Pickup end date").fill("2016-02-25");
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
-  await expect(page).toHaveURL(
-    /\/trips\?from=2016-01-03&to=2016-02-25&zip=10001$/,
-  );
-});
-
-test("keeps date-order validation when dates are entered directly", async ({
-  page,
-}) => {
-  await openTrips(page);
-  await page.getByLabel("Pickup start date").fill("2016-02-20");
-  await page.getByLabel("Pickup end date").fill("2016-01-10");
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
-  await expect(page).toHaveURL("/trips?zip=10001");
-  await expect(
-    page.getByRole("heading", { name: "Trip records", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("form", { name: "Filters" }).getByRole("alert"),
-  ).toContainText("start date must be on or before the end date");
-});
-
 test("date fields fit a mobile screen and apply a range", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await openTrips(page);

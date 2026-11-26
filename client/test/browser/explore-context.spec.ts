@@ -173,28 +173,6 @@ test("Genie shows the Records filters and sends them with the question", async (
   await expect(page).toHaveURL(`/trips?${query}`);
 });
 
-for (const [search, dates] of [
-  ["", "All dates"],
-  ["from=2016-01-10", "From Jan 10, 2016"],
-  ["to=2016-01-20", "Through Jan 20, 2016"],
-] as const) {
-  test(`context communicates unbounded filters: ${search || "all data"}`, async ({
-    page,
-  }) => {
-    await page.goto(`/trips${search ? `?${search}` : ""}`);
-    await page
-      .getByRole("form", { name: "Filters" })
-      .getByRole("button", { name: "Save view", exact: true })
-      .click();
-    const context = page.getByRole("dialog", {
-      name: "What would you call this view?",
-      exact: true,
-    });
-    await expect(context).toContainText(dates);
-    await expect(context).toContainText("All pickup areas");
-  });
-}
-
 test("context and saved-view actions fit a narrow mobile viewport", async ({
   page,
 }) => {

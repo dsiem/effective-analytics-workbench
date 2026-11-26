@@ -1,5 +1,6 @@
 import { tripPreviewResponse } from "../trip-fixture";
 import { expect, test } from "@playwright/test";
+import { airportView } from "../saved-view-fixture";
 
 for (const width of [360, 768, 1024, 1440]) {
   for (const populated of [false, true]) {
@@ -60,17 +61,6 @@ for (const width of [360, 768, 1024, 1440]) {
     });
   }
 }
-
-const airportView = {
-  id: "8aa0cc1a-6033-4fd0-9a61-908958570382",
-  title: "Airport pickups",
-  body: "Review January airport trips.",
-  filters: { from: "2016-01-10", to: "2016-01-20", zip: "11430" },
-  version: 1,
-  pinned: true,
-  created_at: "2026-11-14T10:00:00Z",
-  updated_at: "2026-11-14T10:00:00Z",
-};
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/trips**", (route) =>
@@ -194,42 +184,6 @@ test("opening a saved view applies its filters in place and identifies the activ
     .click();
   await expect(page).toHaveURL("/trips");
   await expect(trigger).toContainText("All trips");
-});
-
-test("opening an already-applied view discards unapplied edits even when its URL is unchanged", async ({
-  page,
-}) => {
-  await page.goto("/trips?from=2016-01-10&to=2016-01-20&zip=11430");
-  await page.getByLabel("Pickup ZIP code").fill("10002");
-  await page.getByRole("button", { name: "Saved views", exact: true }).click();
-  await page
-    .getByRole("button", {
-      name: "Open saved view for Airport pickups",
-      exact: true,
-    })
-    .click();
-  await expect(page.getByLabel("Pickup ZIP code")).toHaveValue("11430");
-  await expect(
-    page.getByText("Unapplied changes", { exact: true }),
-  ).not.toBeVisible();
-  await expect(
-    page
-      .getByRole("form", { name: "Filters" })
-      .getByRole("button", { name: "Save view", exact: true }),
-  ).toBeEnabled();
-});
-
-test("reset clears a draft even when no filters have been applied", async ({
-  page,
-}) => {
-  await page.goto("/trips");
-  await page.getByLabel("Pickup ZIP code").fill("10002");
-  await page.getByRole("button", { name: "Reset", exact: true }).click();
-  await expect(page.getByLabel("Pickup ZIP code")).toHaveValue("");
-  await expect(
-    page.getByText("Unapplied changes", { exact: true }),
-  ).not.toBeVisible();
-  await expect(page).toHaveURL("/trips");
 });
 
 test("view chooser supports keyboard dismissal and returns focus to its trigger", async ({

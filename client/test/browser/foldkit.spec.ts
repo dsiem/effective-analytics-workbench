@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  enrichedTrip as trip,
   fixtureContinuation,
   fixtureCursor,
   tripPreviewResponse,
@@ -25,33 +26,6 @@ const overview = {
   zones: [{ zip: "10001", trips: 50, revenue: 600, avg_fare: 12 }],
   queriedAt: "2026-11-14T10:00:00Z",
 };
-const trip = {
-  trip_id: "stable-trip",
-  pickup_at: "2016-01-01 10:00:00",
-  dropoff_at: "2016-01-01 10:15:00",
-  pickup_zip: "10001",
-  dropoff_zip: "10019",
-  distance: 3,
-  fare: 12,
-  duration: 15,
-  details: {
-    source_file: "yellow_tripdata_2016-01.csv.gz",
-    vendor_id: 2,
-    passenger_count: 1,
-    rate_code_id: 1,
-    store_and_fwd_flag: "N",
-    payment_type: 2,
-    pickup_location: { longitude: -73.99, latitude: 40.75 },
-    dropoff_location: { longitude: -73.98, latitude: 40.76 },
-    tip_amount: 0,
-    tolls_amount: 2.5,
-    extra: 0.5,
-    mta_tax: 0.5,
-    improvement_surcharge: 0.3,
-    total_amount: 15.8,
-  },
-};
-
 test("overview charts and browser history work through the runtime", async ({
   page,
 }) => {

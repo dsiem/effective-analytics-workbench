@@ -115,7 +115,16 @@ For a standalone database, supply its connection settings in your shell or in
 
 ### Run local checks
 
-Run the build and local tests, then exercise the UI against mocked API responses.
+Run the Foldkit Scene tests with Node. They exercise the app's views and update
+logic with fixture responses and require no browser or running server.
+
+```sh
+npm run test:scene
+```
+
+`npm test` and `npm run check` both include Scene tests. For browser coverage
+of layout, focus, history, and runtime effects, run the Playwright suite against
+the built app.
 
 ```sh
 npm run check
