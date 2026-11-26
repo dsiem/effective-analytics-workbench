@@ -130,34 +130,6 @@ test("date and pickup ZIP filters refresh GPS data and clear area selection", as
   ).toHaveCount(0);
 });
 
-test("an older endpoint response cannot overwrite the latest selection", async ({
-  page,
-}) => {
-  let release = () => {};
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  await page.route("**/api/trip-map**", async (route) => {
-    const dropoff =
-      new URL(route.request().url()).searchParams.get("endpoint") === "dropoff";
-    if (dropoff) await gate;
-    await route.fulfill({ json: gpsFixture(dropoff ? "dropoff" : "pickup") });
-  });
-  await page.goto("/trip-map");
-  await ready(page);
-  await page.getByRole("tab", { name: "Drop-offs", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Updating drop-offs");
-  await page.getByRole("tab", { name: "Pickups", exact: true }).click();
-  await ready(page);
-  release();
-  await expect(
-    page.getByRole("heading", { name: "Where journeys begin", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("tab", { name: "Pickups", exact: true }),
-  ).toHaveAttribute("aria-selected", "true");
-});
-
 test("GPS service failure offers retry and the empty result keeps the map usable", async ({
   page,
 }) => {

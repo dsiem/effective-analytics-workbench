@@ -580,15 +580,23 @@ test("failed posts keep the draft across inspection and retry the same submissio
   expect(submitted[1]).toEqual(submitted[0]);
 });
 
-test("loading older comments preserves the visible conversation through an outage", async ({
+test("loading older comments retries the same continuation request", async ({
   page,
 }) => {
-  let failing = true;
   const recent = makeComment("Recent comment");
   const older = makeComment("Older comment");
+  const cursor = { id: recent.id, createdAt: "2026-11-14T10:00:00.000000Z" };
+  const requests: { tripId: string | null; cursor: unknown }[] = [];
   await page.route("**/api/trip-comments**", (route) => {
-    const next = new URL(route.request().url()).searchParams.has("cursor");
-    if (next && failing)
+    const query = new URL(route.request().url()).searchParams;
+    const continuation = query.get("cursor");
+    if (continuation === null)
+      return route.fulfill({ json: { rows: [recent], nextCursor: cursor } });
+    requests.push({
+      tripId: query.get("tripId"),
+      cursor: JSON.parse(continuation),
+    });
+    if (requests.length === 1)
       return route.fulfill({
         status: 503,
         json: {
@@ -598,14 +606,7 @@ test("loading older comments preserves the visible conversation through an outag
           },
         },
       });
-    return route.fulfill({
-      json: {
-        rows: next ? [older] : [recent],
-        nextCursor: next
-          ? null
-          : { id: recent.id, createdAt: "2026-11-14T10:00:00.000000Z" },
-      },
-    });
+    return route.fulfill({ json: { rows: [older], nextCursor: null } });
   });
   await page.goto("/trips");
   await page
@@ -614,18 +615,12 @@ test("loading older comments preserves the visible conversation through an outag
     .click();
   const panel = page.getByRole("dialog", { name: "Record details" });
   await panel.getByRole("button", { name: "Load older comments" }).click();
-  await expect(panel.getByRole("alert")).toHaveText(
-    "Try loading older comments again.",
-  );
-  await expect(
-    panel.getByText("Recent comment", { exact: true }),
-  ).toBeVisible();
-  failing = false;
   await panel.getByRole("button", { name: "Retry loading comments" }).click();
   await expect(panel.getByText("Older comment", { exact: true })).toBeVisible();
-  await expect(
-    panel.getByText("Recent comment", { exact: true }),
-  ).toBeVisible();
+  expect(requests).toEqual([
+    { tripId: trip.trip_id, cursor },
+    { tripId: trip.trip_id, cursor },
+  ]);
 });
 
 test("typing while a comment posts keeps the new draft with a distinct retry identity", async ({

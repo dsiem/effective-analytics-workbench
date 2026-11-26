@@ -114,7 +114,17 @@ For a standalone database, supply its connection settings in your shell or in
 
 ### Run local checks
 
-Run the build and local tests, then exercise the UI against mocked API responses.
+After installing dependencies, run the Foldkit Scene tests to exercise the
+app's views and update logic with fixture responses. The command builds the
+Genie client workspace before running the tests in Node.
+
+```sh
+npm run test:scene
+```
+
+`npm test` and `npm run check` include both Story and Scene tests. Use Story for
+state transitions, Scene for rendered interactions, and Playwright for actual
+visibility, focus, browser history, and requests from the running app.
 
 ```sh
 npm run check

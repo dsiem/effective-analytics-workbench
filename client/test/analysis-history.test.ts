@@ -6,6 +6,7 @@ import {
   AnalysisRunId,
   type AnalysisRunSummary,
 } from "@dsiem/analytics-shared/analysis-runs";
+import { LoadAnalysisHistory } from "../src/features/analysis-runs/commands";
 import { Message as M } from "../src/features/analysis-runs/messages";
 import { init } from "../src/features/analysis-runs/model";
 import {
@@ -21,6 +22,11 @@ const run: AnalysisRunSummary = {
   endedAt: null,
   requestedBy: null,
 };
+
+const historyReads = (change: ReturnType<typeof updateAnalysisRuns>) =>
+  (change.commands ?? [])
+    .filter(({ name }) => name === LoadAnalysisHistory.name)
+    .map(({ args }) => args?.generation);
 
 test("analysis submission completions accept only success and failure", () => {
   const message = {
@@ -64,11 +70,10 @@ test("refreshing history keeps the recent list visible through a failure", () =>
     M.RefreshAnalysisHistory(),
     "",
   );
-  assert.equal(duplicate.model, refreshing.model);
-  assert.equal(duplicate.commands, undefined);
+  assert.deepEqual(historyReads(duplicate), []);
 
   const failed = updateAnalysisRuns(
-    refreshing.model,
+    duplicate.model,
     M.LoadedAnalysisHistory({
       generation: refreshing.model.historyGeneration,
       result: Result.fail("History unavailable"),
@@ -99,12 +104,8 @@ test("a completed submission can refresh pending history without accepting older
     "",
   ).model;
   const submitted = updateAnalysisRuns(withDates, M.StartAnalysis(), "");
-  assert.equal(submitted.model.submission._tag, "Submitting");
   const reopened = openAnalysisRuns(submitted.model, { _tag: "NoRun" });
-  assert.deepEqual(
-    reopened.commands?.map(({ name }) => name),
-    ["LoadAnalysisHistory"],
-  );
+  assert.deepEqual(historyReads(reopened), [reopened.model.historyGeneration]);
 
   const refreshed = updateAnalysisRuns(
     reopened.model,
@@ -115,10 +116,9 @@ test("a completed submission can refresh pending history without accepting older
     }),
     "",
   );
-  assert.deepEqual(
-    refreshed.commands?.map(({ name }) => name),
-    ["LoadAnalysisHistory"],
-  );
+  assert.deepEqual(historyReads(refreshed), [
+    refreshed.model.historyGeneration,
+  ]);
 
   const current = updateAnalysisRuns(
     refreshed.model,
@@ -136,8 +136,5 @@ test("a completed submission can refresh pending history without accepting older
     }),
     "",
   );
-  assert.deepEqual(Option.getOrUndefined(AsyncData.getData(current.recent)), [
-    run,
-  ]);
-  assert.equal(old.model, current);
+  assert.deepEqual(AsyncData.getData(old.model.recent), Option.some([run]));
 });

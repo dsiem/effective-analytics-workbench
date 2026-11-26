@@ -26,10 +26,6 @@ test("route query values keep their first occurrence while filters keep the last
   const trips = parseLocation("/trips", query);
   assert.deepEqual(trips.route, { _tag: "Trips", sort: "fare" });
   assert.deepEqual(trips.filters, Option.some({ zip: "10001" }));
-  assert.deepEqual(
-    parseLocation("/trips", "zip=invalid").filters,
-    Option.none(),
-  );
   assert.equal(trips.query, query);
   assert.equal(withTripSort(query, "newest"), "zip=10019&zip=10001");
 
@@ -41,4 +37,19 @@ test("route query values keep their first occurrence while filters keep the last
     _tag: "AnalysisRuns",
     run: { _tag: "SelectedRun", id: 123 },
   });
+});
+
+test("malformed Explore filters are distinct from an unfiltered link", () => {
+  assert.deepEqual(parseLocation("/trips", "").filters, Option.some({}));
+  for (const query of [
+    "from=2016-02-01&to=2016-01-01",
+    "from=2016-02-30",
+    "zip=invalid",
+  ]) {
+    assert.deepEqual(
+      parseLocation("/trips", query).filters,
+      Option.none(),
+      query,
+    );
+  }
 });

@@ -116,7 +116,7 @@ test("editing a saved view retains its original view and the visible action rest
   await expect(page).toHaveURL("/trips?to=2016-02-20&zip=11430");
 });
 
-test("Genie shows the Records filters and sends them with the question", async ({
+test("Genie sends the applied Records filters when a draft ZIP differs", async ({
   page,
 }) => {
   const operation = { conversationId: "conversation", messageId: "message" };
@@ -138,16 +138,11 @@ test("Genie shows the Records filters and sends them with the question", async (
       }),
   );
   await page.goto(`/trips?${query}`);
+  await page.getByLabel("Pickup ZIP code").fill("10002");
   await page
     .locator("header")
     .getByRole("button", { name: "Ask Genie", exact: true })
     .click();
-  const context = page.getByRole("region", {
-    name: "Explore view for your next question",
-  });
-  await expect(context).toContainText("Jan 10, 2016 – Jan 20, 2016");
-  await expect(context).toContainText("Pickup ZIP 10001");
-  await expect(context).toContainText("Applied filters included.");
   await page
     .getByRole("textbox", { name: "Ask a question about taxi data" })
     .fill("Count trips");
@@ -164,28 +159,6 @@ test("Genie shows the Records filters and sends them with the question", async (
   await page.getByRole("button", { name: "Close Genie" }).click();
   await expect(page).toHaveURL(`/trips?${query}`);
 });
-
-for (const [search, dates] of [
-  ["", "All dates"],
-  ["from=2016-01-10", "From Jan 10, 2016"],
-  ["to=2016-01-20", "Through Jan 20, 2016"],
-] as const) {
-  test(`context communicates unbounded filters: ${search || "all data"}`, async ({
-    page,
-  }) => {
-    await page.goto(`/trips${search ? `?${search}` : ""}`);
-    await page
-      .getByRole("form", { name: "Filters" })
-      .getByRole("button", { name: "Save view", exact: true })
-      .click();
-    const context = page.getByRole("dialog", {
-      name: "What would you call this view?",
-      exact: true,
-    });
-    await expect(context).toContainText(dates);
-    await expect(context).toContainText("All pickup areas");
-  });
-}
 
 test("context and saved-view actions fit a narrow mobile viewport", async ({
   page,

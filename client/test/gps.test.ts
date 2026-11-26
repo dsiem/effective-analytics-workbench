@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { Tabs } from "@foldkit/ui";
 import { Option } from "effect";
 import { AsyncData, Url } from "foldkit";
 import { pageContext } from "../src/app/analysis-context";
@@ -35,24 +36,54 @@ test("same-query retries reject old dataset and render revisions", () => {
 });
 
 test("stale endpoint, filter and render responses cannot replace the active GPS map", () => {
-  const query = "from=2016-01-10";
-  const model = { ...initGps(), endpoint: "dropoff" as const };
+  const location = {
+    query: "from=2016-01-10",
+    filters: { from: "2016-01-10" },
+  };
+  const dropoff = updateGps(
+    initGps(),
+    M.GotGpsTabsMessage({
+      message: Tabs.Message.SelectedTab({ index: 1, value: "dropoff" }),
+    }),
+    location,
+  ).model;
+  assert.equal(dropoff.endpoint, "dropoff");
+  const pickup = updateGps(
+    dropoff,
+    M.GotGpsTabsMessage({
+      message: Tabs.Message.SelectedTab({ index: 0, value: "pickup" }),
+    }),
+    location,
+  ).model;
+  const activity = summary();
+  const model = updateGps(
+    pickup,
+    M.LoadedGps({
+      key: dataKey(location.query, "pickup", pickup.revision),
+      result: succeed(activity),
+    }),
+    location,
+  ).model;
+  assert.deepEqual(AsyncData.getData(model.activity), Option.some(activity));
+
   for (const message of [
     M.LoadedGps({
-      key: dataKey(query, "pickup"),
-      result: succeed(summary()),
-    }),
-    M.LoadedGps({
-      key: dataKey("", "dropoff"),
+      key: dataKey(location.query, "dropoff", dropoff.revision),
       result: succeed(summary("dropoff")),
     }),
-    M.GpsReady({ key: dataKey(query, "pickup"), error: "Old renderer failed" }),
-  ])
-    assert.deepEqual(
-      updateGps(model, message, { query, filters: { from: "2016-01-10" } })
-        .model,
-      model,
-    );
+    M.LoadedGps({
+      key: dataKey("", "pickup", pickup.revision),
+      result: fail("Old filter failed"),
+    }),
+    M.GpsReady({
+      key: frameKey(location.query, "dropoff", null, dropoff.revision),
+      error: "Old renderer failed",
+    }),
+  ]) {
+    const stale = updateGps(model, message, location);
+    assert.deepEqual(stale.model, model);
+    assert.equal(stale.commands?.length ?? 0, 0);
+  }
 });
 
 test("selection and Genie use the same GPS endpoint, counts and area without copying all geometry", () => {

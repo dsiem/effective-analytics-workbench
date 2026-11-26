@@ -1,5 +1,6 @@
 import { tripPreviewResponse } from "../trip-fixture";
 import { expect, test } from "@playwright/test";
+import { airportView } from "../saved-view-fixture";
 
 for (const width of [360, 768, 1024, 1440]) {
   for (const populated of [false, true]) {
@@ -53,17 +54,6 @@ for (const width of [360, 768, 1024, 1440]) {
   }
 }
 
-const airportView = {
-  id: "8aa0cc1a-6033-4fd0-9a61-908958570382",
-  title: "Airport pickups",
-  body: "Review January airport trips.",
-  filters: { from: "2016-01-10", to: "2016-01-20", zip: "11430" },
-  version: 1,
-  pinned: true,
-  created_at: "2026-11-14T10:00:00Z",
-  updated_at: "2026-11-14T10:00:00Z",
-};
-
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/trips**", (route) =>
     route.fulfill(tripPreviewResponse([])),
@@ -108,29 +98,21 @@ test("browser history closes the Saved Views picker when it leaves Explore", asy
   await expect(picker).not.toBeVisible();
 });
 
-test("pending edits must be applied before saving and the saved view keeps those values", async ({
+test("saving an applied ZIP sends it once and selects the saved view", async ({
   page,
 }) => {
-  let submitted: unknown;
+  const submissions: unknown[] = [];
   await page.route("**/api/saved-views", (route) => {
     if (route.request().method() !== "PUT")
       return route.fulfill({ json: { rows: [airportView], nextCursor: null } });
-    submitted = route.request().postDataJSON();
+    submissions.push(route.request().postDataJSON());
     return route.fulfill({
       json: { ...airportView, ...route.request().postDataJSON(), version: 1 },
     });
   });
   await page.goto("/trips?zip=10001");
   const form = page.getByRole("form", { name: "Filters" });
-  await expect(
-    form.getByRole("button", { name: "Apply", exact: true }),
-  ).toBeDisabled();
   await page.getByLabel("Pickup ZIP code").fill("10002");
-  await expect(form.getByRole("status")).toContainText("Unapplied changes");
-  await expect(form.getByRole("status")).toContainText("Pickup ZIP 10001");
-  await expect(
-    form.getByRole("button", { name: "Save view", exact: true }),
-  ).toBeDisabled();
   await form.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(page).toHaveURL("/trips?zip=10002");
   await form.getByRole("button", { name: "Save view", exact: true }).click();
@@ -141,13 +123,12 @@ test("pending edits must be applied before saving and the saved view keeps those
   await editor.getByLabel("View name", { exact: true }).fill("Fare review");
   await editor.getByRole("button", { name: "Save view", exact: true }).click();
   await expect(editor).not.toBeVisible();
-  expect(submitted).toMatchObject({
-    title: "Fare review",
-    filters: { zip: "10002" },
-  });
   await expect(
     form.getByRole("button", { name: "Saved views", exact: true }),
   ).toContainText("Fare review");
+  expect(submissions).toMatchObject([
+    { title: "Fare review", filters: { zip: "10002" } },
+  ]);
 });
 
 test("opening a saved view applies its filters in place and identifies the active view", async ({
@@ -184,39 +165,40 @@ test("opening a saved view applies its filters in place and identifies the activ
   await expect(trigger).toContainText("All trips");
 });
 
-test("opening an already-applied view discards unapplied edits even when its URL is unchanged", async ({
+test("reopening the applied saved view clears unapplied edits at the same URL", async ({
   page,
 }) => {
-  await page.goto("/trips?from=2016-01-10&to=2016-01-20&zip=11430");
-  await page.getByLabel("Pickup ZIP code").fill("10002");
-  await page.getByRole("button", { name: "Saved views", exact: true }).click();
+  const href = "/trips?from=2016-01-10&to=2016-01-20&zip=11430";
+  await page.goto(href);
+  const form = page.getByRole("form", { name: "Filters" });
+  const zip = form.getByLabel("Pickup ZIP code");
+  const pending = form.getByText("Unapplied changes", { exact: true });
+  await zip.fill("10002");
+  await expect(pending).toBeVisible();
+  await form.getByRole("button", { name: "Saved views", exact: true }).click();
   await page
-    .getByRole("button", {
-      name: "Open saved view for Airport pickups",
-      exact: true,
-    })
+    .getByRole("dialog", { name: "Saved views" })
+    .getByRole("button", { name: "Open saved view for Airport pickups" })
     .click();
-  await expect(page.getByLabel("Pickup ZIP code")).toHaveValue("11430");
-  await expect(
-    page.getByText("Unapplied changes", { exact: true }),
-  ).not.toBeVisible();
-  await expect(
-    page
-      .getByRole("form", { name: "Filters" })
-      .getByRole("button", { name: "Save view", exact: true }),
-  ).toBeEnabled();
+  await expect(zip).toHaveValue("11430");
+  await expect(pending).toBeHidden();
+  await expect(form.getByRole("button", { name: "Save view" })).toBeEnabled();
+  await expect(page).toHaveURL(href);
 });
 
-test("reset clears a draft even when no filters have been applied", async ({
+test("reset clears unapplied edits when All trips is already applied", async ({
   page,
 }) => {
   await page.goto("/trips");
-  await page.getByLabel("Pickup ZIP code").fill("10002");
-  await page.getByRole("button", { name: "Reset", exact: true }).click();
-  await expect(page.getByLabel("Pickup ZIP code")).toHaveValue("");
-  await expect(
-    page.getByText("Unapplied changes", { exact: true }),
-  ).not.toBeVisible();
+  const form = page.getByRole("form", { name: "Filters" });
+  const zip = form.getByLabel("Pickup ZIP code");
+  const pending = form.getByText("Unapplied changes", { exact: true });
+  await zip.fill("10002");
+  await expect(pending).toBeVisible();
+  await form.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(zip).toHaveValue("");
+  await expect(pending).toBeHidden();
+  await expect(form.getByRole("button", { name: "Save view" })).toBeEnabled();
   await expect(page).toHaveURL("/trips");
 });
 

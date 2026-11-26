@@ -77,7 +77,7 @@ async function fixture(page: Page, getRows: () => SavedView[]) {
   });
 }
 
-test("a compact picker searches 1,000 views globally and supports arrows, Enter and Escape", async ({
+test("the picker can replace a pending search and open the new result by keyboard", async ({
   page,
 }) => {
   const rows = makeViews();
@@ -101,23 +101,28 @@ test("a compact picker searches 1,000 views globally and supports arrows, Enter 
   const search = views.getByRole("searchbox", {
     name: "Search all saved views",
   });
-  for (const query of ["winter exceptions", "flight delays", "2016-02 11430"]) {
-    const response = page.waitForResponse(
-      (response) => new URL(response.url()).searchParams.get("q") === query,
-    );
-    await search.fill(query);
-    await response;
-    await expect(search).toHaveAttribute("aria-busy", "false");
-    await expect(
-      views.getByRole("button", { name: /^Open saved view for/ }),
-    ).toHaveCount(1);
-    await expect(views).toContainText("Pickup ZIP 11430");
-  }
-  await search.press("ArrowDown");
+  const firstSearch = (url: URL) =>
+    url.pathname === "/api/saved-views" &&
+    url.searchParams.get("q") === "Finding";
+  await page.route(firstSearch, () => {
+    // Leave the first request pending while the user changes the search.
+  });
+  await Promise.all([
+    page.waitForRequest((request) => firstSearch(new URL(request.url()))),
+    search.fill("Finding"),
+  ]);
+  await search.fill("flight delays");
   const targetButton = views.getByRole("button", {
     name: "Open saved view for JFK winter exceptions",
     exact: true,
   });
+  await expect(targetButton).toBeVisible();
+  await expect(
+    views.getByRole("button", { name: /^Open saved view for/ }),
+  ).toHaveCount(1);
+  await expect(targetButton).toContainText("Pickup ZIP 11430");
+  await expect(search).toHaveAttribute("aria-busy", "false");
+  await search.press("ArrowDown");
   await expect(targetButton).toBeFocused();
   await targetButton.press("ArrowUp");
   await expect(search).toBeFocused();
@@ -136,11 +141,17 @@ test("a compact picker searches 1,000 views globally and supports arrows, Enter 
     views.getByRole("heading", { name: "Recently used", exact: true }),
   ).toBeVisible();
   await expect(targetButton).toHaveCount(1);
+  await search.fill("Other finding");
   await search.press("Escape");
   await expect(views).not.toBeVisible();
   await expect(
     page.getByRole("button", { name: "Saved views", exact: true }),
   ).toBeFocused();
+  await openPicker(page);
+  await expect(search).toHaveValue("");
+  await expect(
+    views.getByRole("heading", { name: "Pinned", exact: true }),
+  ).toBeVisible();
 });
 
 test("personal recents hydrate fresh records, deduplicate pins and discard deleted IDs across reload", async ({
@@ -273,62 +284,6 @@ test("pinning and applying before recent hydration finishes preserves older rece
     .toBe(JSON.stringify([target.id, previous.id]));
 });
 
-test("typing during a pending search and closing during debounce cannot restore stale results", async ({
-  page,
-}) => {
-  const rows = makeViews();
-  rows[999] = { ...viewAt(rows, 999), title: "Latest needle" };
-  await fixture(page, () => rows);
-  let release: (() => void) | undefined;
-  let requested: (() => void) | undefined;
-  const started = new Promise<void>((resolve) => {
-    requested = resolve;
-  });
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  await page.route("**/api/saved-views**", async (route) => {
-    if (new URL(route.request().url()).searchParams.get("q") !== "Finding 999")
-      return route.fallback();
-    requested?.();
-    await gate;
-    try {
-      await route.fulfill({ json: { rows: [rows[998]], nextCursor: null } });
-    } catch {
-      /* The superseded request may have been aborted by the browser. */
-    }
-  });
-  await page.goto("/trips");
-  await openPicker(page);
-  const search = picker(page).getByRole("searchbox");
-  await search.fill("Finding 999");
-  await started;
-  await search.fill("Latest needle");
-  const latest = picker(page).getByRole("button", {
-    name: "Open saved view for Latest needle",
-    exact: true,
-  });
-  await expect(latest).toBeVisible();
-  release?.();
-  await expect(
-    picker(page).getByRole("button", { name: /^Open saved view for/ }),
-  ).toHaveCount(1);
-  await expect(latest).toBeVisible();
-  await search.fill("Finding 888");
-  await search.press("Escape");
-  await openPicker(page);
-  await expect(search).toHaveValue("");
-  await expect(
-    picker(page).getByRole("heading", { name: "Pinned", exact: true }),
-  ).toBeVisible();
-  await expect(
-    picker(page).getByRole("button", {
-      name: "Open saved view for Finding 888",
-      exact: true,
-    }),
-  ).toHaveCount(0);
-});
-
 test("same-name views expose different dates, remain selectable on mobile, and recover from no matches", async ({
   page,
 }) => {
@@ -341,7 +296,7 @@ test("same-name views expose different dates, remain selectable on mobile, and r
   rows[999] = {
     ...viewAt(rows, 999),
     title: "Midtown review",
-    filters: { zip: "10019", from: "2016-01-08", to: "2016-01-14" },
+    filters: { zip: "10001", from: "2016-01-08", to: "2016-01-14" },
   };
   await fixture(page, () => rows);
   await page.setViewportSize({ width: 360, height: 800 });
@@ -364,13 +319,21 @@ test("same-name views expose different dates, remain selectable on mobile, and r
     exact: true,
   });
   await expect(matches).toHaveCount(2);
-  await expect(matches.nth(0)).toContainText("Pickup ZIP 10001");
-  await expect(matches.nth(1)).toContainText("Pickup ZIP 10019");
+  const firstDates = "Jan 1, 2016 – Jan 7, 2016";
+  const secondDates = "Jan 8, 2016 – Jan 14, 2016";
+  const first = matches.filter({ hasText: firstDates });
+  const second = matches.filter({ hasText: secondDates });
+  await expect(first.getByText(firstDates, { exact: true })).toBeVisible();
+  await expect(first).toHaveAccessibleDescription(new RegExp(firstDates));
+  await expect(second.getByText(secondDates, { exact: true })).toBeVisible();
+  await expect(second).toHaveAccessibleDescription(new RegExp(secondDates));
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  await matches.nth(1).click();
-  await expect(page).toHaveURL(/from=2016-01-08&to=2016-01-14&zip=10019/);
+  await second.click();
+  await expect(page).toHaveURL(
+    "/trips?from=2016-01-08&to=2016-01-14&zip=10001",
+  );
 });

@@ -54,10 +54,17 @@ for (const scenario of [
 
     await page.goto("/genie");
     await page.getByLabel("Genie mode").selectOption("agent");
-    await page.getByLabel("Ask a question about taxi data").fill("Count trips");
-    await page
-      .getByRole("button", { name: "Send question", exact: true })
-      .click();
+    const composer = page.getByLabel("Ask a question about taxi data");
+    const send = page.getByRole("button", {
+      name: "Send question",
+      exact: true,
+    });
+    await composer.fill("Count trips");
+    await send.click();
+    if (scenario === "confirmed") {
+      await composer.fill("Compare fares");
+      await expect(send).toBeDisabled();
+    }
     await page.getByRole("button", { name: "Stop", exact: true }).click();
 
     if (scenario === "response lost") {
@@ -81,6 +88,10 @@ for (const scenario of [
     await expect(
       page.getByRole("button", { name: "New conversation", exact: true }),
     ).toBeEnabled();
+    if (scenario === "confirmed") {
+      await expect(composer).toHaveValue("Compare fares");
+      await expect(send).toBeEnabled();
+    }
     expect(submissions).toBe(1);
     expect(stopRequests).toBe(1);
   });

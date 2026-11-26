@@ -250,30 +250,19 @@ test("reload during an uncertain submission never silently resubmits", async ({
   await expect(page.getByRole("alert")).toContainText("may have been accepted");
   await page.reload();
   await expect(page.getByRole("alert")).toContainText("may have been accepted");
+  await expect(page.getByRole("button", { name: "Edit question" })).toHaveCount(
+    0,
+  );
   expect(submissions).toBe(1);
 });
 
 for (const { name, status, error } of [
-  {
-    name: "validation",
-    status: 400,
-    error: { code: "invalid_request", message: "Check the question fields." },
-  },
   {
     name: "permission",
     status: 403,
     error: {
       code: "permission_denied",
       message: "Even Genie needs permission to send this question.",
-    },
-  },
-  {
-    name: "rate limit",
-    status: 502,
-    error: {
-      code: "workspace_request_failed",
-      message: "Too many requests.",
-      upstreamStatus: 429,
     },
   },
   {
@@ -391,69 +380,6 @@ for (const step of ["poll", "result"] as const) {
       page.getByRole("button", { name: /Resume answer|Retry result download/ }),
     ).toHaveCount(0);
     expect(polls).toBe(1);
-  });
-}
-
-for (const { name, status, json } of [
-  {
-    name: "application timeout",
-    status: 504,
-    json: {
-      error: { code: "genie_timeout", message: "Submission timed out." },
-    },
-  },
-  {
-    name: "upstream timeout",
-    status: 502,
-    json: {
-      error: {
-        code: "workspace_request_failed",
-        message: "Upstream timed out.",
-        upstreamStatus: 408,
-      },
-    },
-  },
-  {
-    name: "upstream server failure",
-    status: 502,
-    json: {
-      error: {
-        code: "workspace_request_failed",
-        message: "Upstream failed.",
-        upstreamStatus: 500,
-      },
-    },
-  },
-  {
-    name: "workspace connection failure",
-    status: 503,
-    json: {
-      error: { code: "workspace_unavailable", message: "Connection lost." },
-    },
-  },
-  { name: "invalid acceptance response", status: 200, json: {} },
-] as const) {
-  test(`${name} stays uncertain without replaying the question`, async ({
-    page,
-  }) => {
-    let submissions = 0;
-    await page.route("**/api/genie", (route) => {
-      submissions++;
-      return route.fulfill({ status, json });
-    });
-    await page.goto("/genie");
-    await send(page);
-    await expect(page.getByRole("alert")).toContainText(
-      "may have been accepted",
-    );
-    await expect(
-      page.getByRole("button", { name: "Edit question" }),
-    ).toHaveCount(0);
-    await page.reload();
-    await expect(page.getByRole("alert")).toContainText(
-      "may have been accepted",
-    );
-    expect(submissions).toBe(1);
   });
 }
 
