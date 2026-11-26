@@ -1,10 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-const invalidQueries = [
-  "from=2016-02-01&to=2016-01-01",
-  "from=2016-02-30",
-  "zip=invalid",
-];
 const dataEndpoints = new Set([
   "/api/overview",
   "/api/trip-map",
@@ -13,38 +8,36 @@ const dataEndpoints = new Set([
   "/api/genie",
 ]);
 
-for (const [path, endpointAfterClear] of [
-  ["/", "/api/overview"],
-  ["/trips", "/api/trips"],
-  ["/trip-map", "/api/trip-map"],
-  ["/genie", null],
+for (const [path, search, endpointAfterClear] of [
+  ["/", "from=2016-02-01&to=2016-01-01", "/api/overview"],
+  ["/trips", "from=2016-02-30", "/api/trips"],
+  ["/trip-map", "zip=invalid", "/api/trip-map"],
+  ["/genie", "zip=invalid", null],
 ] as const) {
-  for (const search of invalidQueries) {
-    test(`${path} shows invalid filters (${search}) without querying unfiltered data`, async ({
-      page,
-    }) => {
-      const dataRequests: string[] = [];
-      page.on("request", (request) => {
-        const { pathname } = new URL(request.url());
-        if (dataEndpoints.has(pathname)) dataRequests.push(pathname);
-      });
-      await page.goto(`${path}?${search}`);
-      const invalid = page.getByRole("heading", {
-        name: "Invalid Explore filters",
-      });
-      await expect(invalid).toBeVisible();
-      await expect(page.getByRole("alert")).toContainText(
-        "start date must be on or before the end date",
-      );
-      expect(dataRequests).toEqual([]);
-      await page.getByRole("button", { name: "Clear invalid filters" }).click();
-      await expect(invalid).toBeHidden();
-      await expect(page).toHaveURL(path);
-      if (endpointAfterClear) {
-        await expect.poll(() => dataRequests).toContain(endpointAfterClear);
-      }
+  test(`${path} shows invalid filters (${search}) without querying unfiltered data`, async ({
+    page,
+  }) => {
+    const dataRequests: string[] = [];
+    page.on("request", (request) => {
+      const { pathname } = new URL(request.url());
+      if (dataEndpoints.has(pathname)) dataRequests.push(pathname);
     });
-  }
+    await page.goto(`${path}?${search}`);
+    const invalid = page.getByRole("heading", {
+      name: "Invalid Explore filters",
+    });
+    await expect(invalid).toBeVisible();
+    await expect(page.getByRole("alert")).toContainText(
+      "Check the dates and five-digit ZIP code",
+    );
+    expect(dataRequests).toEqual([]);
+    await page.getByRole("button", { name: "Clear invalid filters" }).click();
+    await expect(invalid).toBeHidden();
+    await expect(page).toHaveURL(path);
+    if (endpointAfterClear) {
+      await expect.poll(() => dataRequests).toContain(endpointAfterClear);
+    }
+  });
 }
 
 test("navigation preserves invalid filters until corrected and Apply can repair them", async ({

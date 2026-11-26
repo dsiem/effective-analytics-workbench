@@ -216,6 +216,16 @@ for (const { name, status, error, mode, state } of submissionFailures) {
         turn.error,
         AccessDenied.make({ message: error.message }),
       );
+    } else if (
+      turn.state === "submission-rejected" ||
+      turn.state === "agent-mode-unavailable"
+    ) {
+      assert.ok(error);
+      assert.ok(typeof turn.error === "string");
+      assert.ok(
+        turn.error.includes(error.message),
+        `Missing rejection reason in: ${turn.error}`,
+      );
     }
   });
 }
