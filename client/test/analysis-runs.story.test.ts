@@ -15,7 +15,7 @@ import {
   openAnalysisRuns,
   updateAnalysisRuns,
 } from "../src/features/analysis-runs/update";
-import { fail } from "../src/lib/command-result";
+import { fail, succeed } from "../src/lib/command-result";
 import { AccessDenied } from "../src/lib/request-state";
 
 const id = Schema.decodeUnknownSync(AnalysisRunId)(123);
@@ -35,40 +35,46 @@ const update = (state: Model, action: Message) =>
 const pollingSelection = (state: Model) =>
   subscriptions.analysisRun.modelToDependencies(state).selection;
 
-test("a denied report preserves the completed run and its inputs", () => {
-  const completed: typeof AnalysisRun.Type = {
-    ...running,
-    state: "succeeded",
-    startedAt: Date.UTC(2026, 10, 19, 8),
-    endedAt: Date.UTC(2026, 10, 19, 8, 1),
-    input: {
-      baselineWeek: "2016-01-04",
-      comparisonWeek: "2016-01-11",
-      minimumTrips: 50,
-    },
+test("a late report from the first visit cannot replace a denial after reopening the same run", () => {
+  const input = {
+    baselineWeek: "2016-01-04",
+    comparisonWeek: "2016-01-11",
+    minimumTrips: 75,
   };
-  const denial = AccessDenied.make({
-    message: "You need permission to read this report.",
-  });
+  const completed = { ...running, state: "succeeded", input } as const;
+  const status = (generation: number) =>
+    Message.LoadedAnalysisStatus({
+      id,
+      generation,
+      result: Result.succeed(completed),
+      observedAt: 1,
+    });
+  const firstVisit = update(initial, status(selection.generation));
+  const reopened = openAnalysisRuns(firstVisit.model, {
+    _tag: "SelectedRun",
+    id,
+  }).model;
+  const current = { id, generation: reopened.generation };
+  const denial = AccessDenied.make({ message: "Report access was revoked." });
 
   story(
     update,
-    given(initial),
+    given(reopened),
+    message(status(current.generation)),
+    Command.resolve(
+      LoadAnalysisReport(current),
+      Message.LoadedAnalysisReport({ ...current, result: fail(denial) }),
+    ),
     message(
-      Message.LoadedAnalysisStatus({
+      Message.LoadedAnalysisReport({
         ...selection,
-        result: Result.succeed(completed),
-        observedAt: 1,
+        result: succeed({ input, rows: [] }),
       }),
     ),
-    Command.resolve(
-      LoadAnalysisReport(selection),
-      Message.LoadedAnalysisReport({ ...selection, result: fail(denial) }),
-    ),
     model((state) => {
-      const { detail, report } = Option.getOrThrow(state.selected);
-      assert.deepEqual(AsyncData.getData(detail), Option.some(completed));
+      const { report } = Option.getOrThrow(state.selected);
       assert.deepEqual(AsyncData.getError(report), Option.some(denial));
+      assert.ok(Option.isNone(AsyncData.getData(report)));
     }),
   );
 });

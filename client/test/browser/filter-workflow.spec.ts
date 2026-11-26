@@ -106,29 +106,21 @@ test("browser history closes the Saved Views picker when it leaves Explore", asy
   await expect(picker).not.toBeVisible();
 });
 
-test("pending edits must be applied before saving and the saved view keeps those values", async ({
+test("saving an applied ZIP sends it once and selects the saved view", async ({
   page,
 }) => {
-  let submitted: unknown;
+  const submissions: unknown[] = [];
   await page.route("**/api/saved-views", (route) => {
     if (route.request().method() !== "PUT")
       return route.fulfill({ json: { rows: [airportView], nextCursor: null } });
-    submitted = route.request().postDataJSON();
+    submissions.push(route.request().postDataJSON());
     return route.fulfill({
       json: { ...airportView, ...route.request().postDataJSON(), version: 1 },
     });
   });
   await page.goto("/trips?zip=10001");
   const form = page.getByRole("form", { name: "Filters" });
-  await expect(
-    form.getByRole("button", { name: "Apply", exact: true }),
-  ).toBeDisabled();
   await page.getByLabel("Pickup ZIP code").fill("10002");
-  await expect(form.getByRole("status")).toContainText("Unapplied changes");
-  await expect(form.getByRole("status")).toContainText("Pickup ZIP 10001");
-  await expect(
-    form.getByRole("button", { name: "Save view", exact: true }),
-  ).toBeDisabled();
   await form.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(page).toHaveURL("/trips?zip=10002");
   await form.getByRole("button", { name: "Save view", exact: true }).click();
@@ -139,13 +131,12 @@ test("pending edits must be applied before saving and the saved view keeps those
   await editor.getByLabel("View name", { exact: true }).fill("Fare review");
   await editor.getByRole("button", { name: "Save view", exact: true }).click();
   await expect(editor).not.toBeVisible();
-  expect(submitted).toMatchObject({
-    title: "Fare review",
-    filters: { zip: "10002" },
-  });
   await expect(
     form.getByRole("button", { name: "Saved views", exact: true }),
   ).toContainText("Fare review");
+  expect(submissions).toMatchObject([
+    { title: "Fare review", filters: { zip: "10002" } },
+  ]);
 });
 
 test("opening a saved view applies its filters in place and identifies the active view", async ({

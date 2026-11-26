@@ -10,20 +10,16 @@ import {
   role,
   scene,
   type,
+  text,
   within,
 } from "foldkit/scene";
-import {
-  CreateSavedViewDraft,
-  SaveSavedView,
-} from "../src/features/saved-views/commands";
+import { CreateSavedViewDraft } from "../src/features/saved-views/commands";
 import { Message } from "../src/features/saved-views/messages";
-import { succeed } from "../src/lib/command-result";
-import { app, followNavigation, open } from "./app-scene";
+import { app, open } from "./app-scene";
 import { airportView } from "./saved-view-fixture";
 
 const button = (name: string) => role("button", { name });
 const form = role("form", { name: "Filters" });
-const trigger = button("Saved views");
 const save = within(form, button("Save view"));
 const zip = label("Pickup ZIP code");
 
@@ -35,47 +31,19 @@ const showEditor = [
   ),
 ];
 
-const closeEditor = [
-  Command.resolve(Dialog.CloseDialog, Dialog.Message.CompletedCloseDialog()),
-  Mount.expectEnded(Dialog.AcquireResources),
-];
-
-test("only applied edits can be saved, and saving keeps the applied filters", () => {
-  const dialog = role("dialog", { name: "What would you call this view?" });
-  const draft = {
-    id: airportView.id,
-    title: "Fare review",
-    body: "",
-    filters: { zip: "10002" },
-    version: null,
-  };
+test("restoring the applied ZIP by typing makes the view saveable again", () => {
+  const pending = within(form, text("Unapplied changes"));
   scene(
     app,
     given(open("/trips?zip=10001")),
-    expect(button("Apply")).toBeDisabled(),
     type(zip, "10002"),
-    expect(role("status")).toContainText("Unapplied changes"),
-    expect(role("status")).toContainText("Pickup ZIP 10001"),
+    expect(pending).toExist(),
+    expect(within(form, role("status"))).toContainText("Pickup ZIP 10001"),
     expect(save).toBeDisabled(),
-    click(button("Apply")),
-    ...followNavigation("/trips?zip=10002"),
-    click(save),
-    Command.resolve(
-      CreateSavedViewDraft,
-      Message.CreatedSavedView({ id: draft.id }),
-    ),
-    ...showEditor,
-    type(within(dialog, label("View name")), draft.title),
-    click(within(dialog, button("Save view"))),
-    Command.resolve(
-      SaveSavedView({ draft }),
-      Message.SavedViewSaved({
-        result: succeed({ ...airportView, ...draft, version: 1 }),
-      }),
-    ),
-    ...closeEditor,
-    expect(dialog).toBeAbsent(),
-    expect(trigger).toContainText("Fare review"),
+    type(zip, "10001"),
+    expect(pending).toBeAbsent(),
+    expect(save).toBeEnabled(),
+    expect(within(form, button("Apply"))).toBeDisabled(),
   );
 });
 

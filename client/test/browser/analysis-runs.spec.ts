@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("a denied report leaves the completed run and its inputs visible", async ({
+test("a denied report still lets the user reuse the completed run’s inputs", async ({
   page,
 }, testInfo) => {
   const message = "This report is under lock. You need permission to read it.";
@@ -13,7 +13,7 @@ test("a denied report leaves the completed run and its inputs visible", async ({
         input: {
           baselineWeek: "2016-01-04",
           comparisonWeek: "2016-01-11",
-          minimumTrips: 50,
+          minimumTrips: 75,
         },
         startedAt: Date.UTC(2026, 10, 19, 8),
         endedAt: Date.UTC(2026, 10, 19, 8, 1),
@@ -30,23 +30,26 @@ test("a denied report leaves the completed run and its inputs visible", async ({
   await page.goto("/analysis?run=123");
   await expect(page.getByRole("alert")).toHaveText(message);
   await expect(page.getByRole("heading", { name: "Run #123" })).toBeVisible();
-  await expect(page.getByText("Minimum trips per week")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Reuse these inputs" }),
-  ).toBeEnabled();
-  await expect(
-    page.getByRole("alert").locator('svg[aria-hidden="true"]'),
-  ).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("report-permission.png"),
     animations: "disabled",
   });
+  await page.getByRole("button", { name: "Reuse these inputs" }).click();
+  const form = page.getByRole("dialog", { name: "New analysis run" });
+  await expect(form.getByLabel("Baseline week starts")).toHaveValue(
+    "2016-01-04",
+  );
+  await expect(form.getByLabel("Comparison week starts")).toHaveValue(
+    "2016-01-11",
+  );
+  await expect(form.getByLabel("Minimum trips per week")).toHaveValue("75");
 });
 
 test("a status permission denial clears the stale running state", async ({
   page,
 }) => {
   const message = "This run is under lock. You need permission to open it.";
+  await page.clock.install();
   let allowed = true;
   await page.route("**/api/analysis-runs/123", (route) =>
     route.fulfill(
@@ -72,7 +75,8 @@ test("a status permission denial clears the stale running state", async ({
   const running = page.getByRole("status").filter({ hasText: "Running" });
   await expect(running).toBeVisible();
   allowed = false;
-  await expect(page.getByRole("alert")).toHaveText(message, { timeout: 10000 });
+  await page.clock.fastForward("00:30");
+  await expect(page.getByRole("alert")).toHaveText(message);
   await expect(running).toBeHidden();
   await expect(page.getByText("Started by Avery Morgan")).toBeHidden();
   allowed = true;
