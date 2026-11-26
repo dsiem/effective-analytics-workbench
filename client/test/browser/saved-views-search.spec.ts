@@ -136,11 +136,17 @@ test("a compact picker searches 1,000 views globally and supports arrows, Enter 
     views.getByRole("heading", { name: "Recently used", exact: true }),
   ).toBeVisible();
   await expect(targetButton).toHaveCount(1);
+  await search.fill("Other finding");
   await search.press("Escape");
   await expect(views).not.toBeVisible();
   await expect(
     page.getByRole("button", { name: "Saved views", exact: true }),
   ).toBeFocused();
+  await openPicker(page);
+  await expect(search).toHaveValue("");
+  await expect(
+    views.getByRole("heading", { name: "Pinned", exact: true }),
+  ).toBeVisible();
 });
 
 test("personal recents hydrate fresh records, deduplicate pins and discard deleted IDs across reload", async ({
@@ -271,62 +277,6 @@ test("pinning and applying before recent hydration finishes preserves older rece
   await expect
     .poll(() => page.evaluate((key) => localStorage.getItem(key), storageKey))
     .toBe(JSON.stringify([target.id, previous.id]));
-});
-
-test("typing during a pending search and closing during debounce cannot restore stale results", async ({
-  page,
-}) => {
-  const rows = makeViews();
-  rows[999] = { ...viewAt(rows, 999), title: "Latest needle" };
-  await fixture(page, () => rows);
-  let release: (() => void) | undefined;
-  let requested: (() => void) | undefined;
-  const started = new Promise<void>((resolve) => {
-    requested = resolve;
-  });
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  await page.route("**/api/saved-views**", async (route) => {
-    if (new URL(route.request().url()).searchParams.get("q") !== "Finding 999")
-      return route.fallback();
-    requested?.();
-    await gate;
-    try {
-      await route.fulfill({ json: { rows: [rows[998]], nextCursor: null } });
-    } catch {
-      /* The superseded request may have been aborted by the browser. */
-    }
-  });
-  await page.goto("/trips");
-  await openPicker(page);
-  const search = picker(page).getByRole("searchbox");
-  await search.fill("Finding 999");
-  await started;
-  await search.fill("Latest needle");
-  const latest = picker(page).getByRole("button", {
-    name: "Open saved view for Latest needle",
-    exact: true,
-  });
-  await expect(latest).toBeVisible();
-  release?.();
-  await expect(
-    picker(page).getByRole("button", { name: /^Open saved view for/ }),
-  ).toHaveCount(1);
-  await expect(latest).toBeVisible();
-  await search.fill("Finding 888");
-  await search.press("Escape");
-  await openPicker(page);
-  await expect(search).toHaveValue("");
-  await expect(
-    picker(page).getByRole("heading", { name: "Pinned", exact: true }),
-  ).toBeVisible();
-  await expect(
-    picker(page).getByRole("button", {
-      name: "Open saved view for Finding 888",
-      exact: true,
-    }),
-  ).toHaveCount(0);
 });
 
 test("same-name views expose different dates, remain selectable on mobile, and recover from no matches", async ({

@@ -73,17 +73,16 @@ test("a replaced search cannot start from an old cancellation or accept an old r
     }),
   );
   assert.equal(staleCancel.commands?.length ?? 0, 0);
-  const staleResponse = updateBrowser(
-    latest,
-    result(first.searchVersion, [row(1)]),
-  ).model;
-  assert.deepEqual(visibleSavedViews(staleResponse), []);
+  const stale = result(first.searchVersion, [row(1)]);
+  const pending = updateBrowser(staleCancel.model, stale).model;
+  assert.deepEqual(visibleSavedViews(pending), []);
   const current = updateBrowser(
-    staleResponse,
+    pending,
     result(latest.searchVersion, [row(2)]),
   ).model;
+  const staleResponse = updateBrowser(current, stale).model;
   assert.deepEqual(
-    visibleSavedViews(current).map((entry) => entry.title),
+    visibleSavedViews(staleResponse).map((entry) => entry.title),
     ["View 2"],
   );
 });
@@ -101,8 +100,17 @@ test("closing and reopening cannot accept a previous session's search or shortcu
     closed,
     M.GotSavedViewsPickerMessage({ message: Popover.Message.RequestedOpen() }),
   ).model;
-  const late = updateBrowser(
+  const staleCancel = updateBrowser(
     reopened,
+    M.CompletedCancelLoadSavedViews({
+      version: first.searchVersion,
+      more: false,
+      debounce: true,
+    }),
+  );
+  assert.equal(staleCancel.commands?.length ?? 0, 0);
+  const late = updateBrowser(
+    staleCancel.model,
     result(first.searchVersion, [row(1)]),
   ).model;
   const hydrated = updateBrowser(

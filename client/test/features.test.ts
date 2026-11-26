@@ -29,6 +29,7 @@ import { Message as OverviewViewMessage } from "../src/features/overview/view-me
 import { Message as SavedMessage } from "../src/features/saved-views/messages";
 import * as SavedViews from "../src/features/saved-views/model";
 import { updateSavedViews } from "../src/features/saved-views/update";
+import { PostComment } from "../src/features/trips/commands";
 import { Message as TripMessage } from "../src/features/trips/messages";
 import * as Trips from "../src/features/trips/model";
 import { subscriptions } from "../src/features/trips/subscription";
@@ -355,6 +356,51 @@ test("lost comment responses replay the attempted payload until the draft is edi
   assert.equal(edited.body, "Edited finding");
   assert.equal(edited.trip.fare, 14);
   assert.deepEqual(edited.trip.details, trip.details);
+});
+
+test("a post completion keeps a newer draft available as a new submission", () => {
+  const snapshot = tripSummaryFor(trip);
+  const input: TripCommentInput = {
+    id: "00000000-0000-4000-8000-000000000001",
+    trip: snapshot,
+    body: "First finding",
+  };
+  const newer = "Next finding, typed while posting";
+  const opened = updateTrips(
+    Trips.init(),
+    TripMessage.InspectTrip({ trip: snapshot }),
+  );
+  const drafted = updateTrips(
+    opened.model,
+    TripMessage.CommentChanged({ body: input.body }),
+  );
+  const posting = updateTrips(drafted.model, TripMessage.PostComment());
+  assert.deepEqual(
+    posting.commands?.find(({ name }) => name === PostComment.name)?.args,
+    { trip: snapshot, body: input.body, retryId: null },
+  );
+
+  const edited = updateTrips(
+    posting.model,
+    TripMessage.CommentChanged({ body: newer }),
+  );
+  const completed = updateTrips(
+    edited.model,
+    TripMessage.PostedComment({
+      input,
+      result: succeed({
+        ...input,
+        author: null,
+        created_at: "2026-11-14T10:00:00Z",
+      }),
+    }),
+  );
+  assert.equal(completed.model.commentDrafts[trip.trip_id]?.body, newer);
+  const next = updateTrips(completed.model, TripMessage.PostComment());
+  assert.deepEqual(
+    next.commands?.find(({ name }) => name === PostComment.name)?.args,
+    { trip: snapshot, body: newer, retryId: null },
+  );
 });
 
 test("trip details ignore an earlier selection and retry independently", () => {
