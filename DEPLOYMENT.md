@@ -123,6 +123,13 @@ npx playwright install chromium webkit
 npm run test:browser
 ```
 
+To save screenshots for visual review, run the design tests with capture
+enabled. Playwright saves the images in `test-results/`.
+
+```sh
+CAPTURE_TEST_SCREENSHOTS=1 npm run test:browser -- design.spec.ts
+```
+
 ### Check hosted APIs
 
 After a release, run the check to verify SQL queries, trip maps, Lakebase, and

@@ -5,7 +5,7 @@ for (const width of [360, 768, 1024, 1440]) {
   for (const populated of [false, true]) {
     test(`filter controls stay within their fields at ${width}px (${populated ? "populated" : "empty"})`, async ({
       page,
-    }, info) => {
+    }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.route("**/api/metadata", (route) =>
         route.fulfill({
@@ -35,14 +35,6 @@ for (const width of [360, 768, 1024, 1440]) {
           };
         }),
       );
-      await page.screenshot({
-        path: info.outputPath("filters.png"),
-        animations: "disabled",
-      });
-      await form.screenshot({
-        path: info.outputPath("filter-panel.png"),
-        animations: "disabled",
-      });
       for (const field of fields) {
         expect(field.inputLeft, JSON.stringify(field)).toBeGreaterThanOrEqual(
           field.left - 1,
@@ -160,7 +152,7 @@ test("pending edits must be applied before saving and the saved view keeps those
 
 test("opening a saved view applies its filters in place and identifies the active view", async ({
   page,
-}, info) => {
+}) => {
   await page.goto("/trips?zip=10001");
   const trigger = page.getByRole("button", {
     name: "Saved views",
@@ -173,10 +165,6 @@ test("opening a saved view applies its filters in place and identifies the activ
     exact: true,
   });
   await expect(option).toBeVisible();
-  await page.screenshot({
-    path: info.outputPath("view-chooser.png"),
-    animations: "disabled",
-  });
   await option.click();
   await expect(picker).not.toBeVisible();
   await expect(page).toHaveURL(

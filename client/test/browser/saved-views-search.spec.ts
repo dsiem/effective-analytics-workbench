@@ -371,7 +371,6 @@ test("same-name views expose different dates, remain selectable on mobile, and r
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  await page.screenshot({ path: "test-results/saved-views-search-mobile.png" });
   await matches.nth(1).click();
   await expect(page).toHaveURL(/from=2016-01-08&to=2016-01-14&zip=10019/);
 });
