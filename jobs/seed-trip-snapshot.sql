@@ -175,17 +175,6 @@ WHERE q.analytics_valid;
 
 -- COMMAND ----------
 
-CREATE OR REPLACE TABLE IDENTIFIER('`' || :catalog || '`.`' || :schema || '`.`trip_quality`')
-USING DELTA AS
-SELECT source_file, COUNT(*) AS raw_trips,
-  count_if(analytics_valid) AS accepted_trips,
-  count_if(NOT analytics_valid) AS rejected_trips,
-  count_if(analytics_valid AND NOT pickup_coordinates_valid) AS accepted_without_pickup_gps,
-  count_if(analytics_valid AND NOT dropoff_coordinates_valid) AS accepted_without_dropoff_gps
-FROM snapshot_source GROUP BY source_file;
-
--- COMMAND ----------
-
 CREATE TABLE IF NOT EXISTS IDENTIFIER('`' || :catalog || '`.`' || :schema || '`.`route_reliability_runs`') (
   run_id BIGINT NOT NULL,
   report_json STRING NOT NULL
@@ -193,4 +182,11 @@ CREATE TABLE IF NOT EXISTS IDENTIFIER('`' || :catalog || '`.`' || :schema || '`.
 
 -- COMMAND ----------
 
-SELECT * FROM IDENTIFIER('`' || :catalog || '`.`' || :schema || '`.`trip_quality`') ORDER BY source_file;
+SELECT source_file, COUNT(*) AS raw_trips,
+  count_if(analytics_valid) AS accepted_trips,
+  count_if(NOT analytics_valid) AS rejected_trips,
+  count_if(analytics_valid AND NOT pickup_coordinates_valid) AS accepted_without_pickup_gps,
+  count_if(analytics_valid AND NOT dropoff_coordinates_valid) AS accepted_without_dropoff_gps
+FROM snapshot_source
+GROUP BY source_file
+ORDER BY source_file;
