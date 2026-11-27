@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { bundleResources, bundleTarget } from "./lib/databricks.mjs";
 import { initializeLakebase, prepareLakebaseSetup } from "./lib/lakebase.mjs";
 
-const target = bundleTarget("setup_taxi_demo");
+const target = bundleTarget("deploy-taxi-demo");
 const bundle = (command, ...args) =>
   execFileSync("databricks", ["bundle", command, "-t", target, ...args], {
     stdio: "inherit",

@@ -19,8 +19,8 @@ import { promisify } from "node:util";
 const run = promisify(execFile);
 const principal = "472a6613-2337-4af1-a416-e9b6b61064dd";
 const endpointName = "projects/test/branches/production/endpoints/primary";
-const setupTaxiDemo = new URL(
-  "../scripts/setup-taxi-demo.mjs",
+const deployTaxiDemo = new URL(
+  "../scripts/deploy-taxi-demo.mjs",
   import.meta.url,
 );
 const setupBundleLakebase = new URL(
@@ -115,12 +115,21 @@ childProcess.execFileSync = (file, args, options) => {
 };
 childProcess.spawn = (file, args, options) => {
   const child = new EventEmitter();
+  child.kill = () => false;
   console.log("CALL " + args.join(" "));
   if (args.includes("server/src/main.ts")) {
     process.stdout.write(execFileSync(file, args.filter((arg) => arg !== "--watch"), {
       encoding: "utf8", env: options.env, timeout: 10_000,
     }));
     setImmediate(() => child.emit("message", { type: "dev:api-ready", port: 43171 }));
+  }
+  if (file === "databricks" && args[1] === "run-local") {
+    console.log("SERVER " + JSON.stringify({
+      port: options.env.DATABRICKS_APP_PORT ?? null,
+      profile: options.env.DATABRICKS_CONFIG_PROFILE,
+      genie: options.env.GENIE_SPACE_ID,
+    }));
+    setImmediate(() => child.emit("exit", 0, null));
   }
   return child;
 };
@@ -137,12 +146,14 @@ async function setup(
     appPrincipal = principal,
     expectedError = failure ? /Fixture command failed/ : undefined,
     args = [],
+    appPort,
   }: {
     failure?: string;
     warehouse?: string;
     appPrincipal?: string;
     expectedError?: RegExp;
     args?: string[];
+    appPort?: string;
   } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "workspace-setup-"));
@@ -167,6 +178,7 @@ async function setup(
             : "selected-profile",
           DATABRICKS_CONFIG_FILE: undefined,
           DATABRICKS_TOKEN: "",
+          DATABRICKS_APP_PORT: appPort,
           PGHOST: "local.invalid",
           GENIE_MAX_CONCURRENCY: "3",
           SETUP_FAILURE: failure,
@@ -224,15 +236,15 @@ const setupCalls = [
   "bundle run -t prod app",
 ];
 
-test("setup_taxi_demo seeds before creating Genie and the app, then grants access before starting it", async (t) => {
-  const result = await setup(t, setupTaxiDemo);
+test("deploy-taxi-demo seeds before creating Genie and the app, then grants access before starting it", async (t) => {
+  const result = await setup(t, deployTaxiDemo);
   assert.deepEqual(result.calls, setupCalls);
   assert.equal(result.lakebase, "LAKEBASE " + JSON.stringify(lakebaseSettings));
 });
 
 for (const failedCommand of [setupCalls[2]!, setupCalls[7]!, lakebaseCommand]) {
-  test(`setup_taxi_demo stops after ${failedCommand} fails`, async (t) => {
-    const result = await setup(t, setupTaxiDemo, { failure: failedCommand });
+  test(`deploy-taxi-demo stops after ${failedCommand} fails`, async (t) => {
+    const result = await setup(t, deployTaxiDemo, { failure: failedCommand });
     assert.deepEqual(
       result.calls,
       setupCalls.slice(0, setupCalls.indexOf(failedCommand) + 1),
@@ -290,6 +302,23 @@ test("bundle dev stops before starting either process when a target setting is m
     expectedError: /Missing deployed resource sql_warehouses.analytics/,
   });
   assert.deepEqual(result.calls, [summaryCommand]);
+});
+
+test("bundle proxy builds the app and gives the CLI control of the backend port", async (t) => {
+  const result = await setup(t, dev, {
+    args: ["--bundle-proxy"],
+    appPort: "43170",
+  });
+  assert.deepEqual(result.calls, [
+    summaryCommand,
+    "current-user me -o json",
+    "run build",
+    "apps run-local --profile selected-profile --env=DATABRICKS_APP_NAME= --env=APP_BIND_HOST=127.0.0.1",
+  ]);
+  assert.equal(
+    result.server,
+    'SERVER {"port":null,"profile":"selected-profile","genie":"genie"}',
+  );
 });
 
 test("npm dev launches the API with its local connection settings", async (t) => {

@@ -7,7 +7,7 @@ const readConfig = (env: Record<string, string>) =>
   Effect.runPromise(ServerConfig.parse(ConfigProvider.fromEnvRecord(env)));
 
 test("starts locally without Databricks credentials", async () => {
-  assert.deepEqual(await readConfig({}), { port: 3000 });
+  assert.deepEqual(await readConfig({}), { host: "0.0.0.0", port: 3000 });
 });
 
 test("reads the Databricks port", async () => {
@@ -15,7 +15,14 @@ test("reads the Databricks port", async () => {
     await readConfig({
       DATABRICKS_APP_PORT: "8000",
     }),
-    { port: 8000 },
+    { host: "0.0.0.0", port: 8000 },
+  );
+});
+
+test("binds to loopback when the local proxy sets the host", async () => {
+  assert.equal(
+    (await readConfig({ APP_BIND_HOST: "127.0.0.1" })).host,
+    "127.0.0.1",
   );
 });
 
@@ -25,6 +32,7 @@ test("accepts an ephemeral port for smoke checks", async () => {
 
 test("treats empty environment values as absent", async () => {
   assert.deepEqual(await readConfig({ DATABRICKS_APP_PORT: "" }), {
+    host: "0.0.0.0",
     port: 3000,
   });
 });

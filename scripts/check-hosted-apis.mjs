@@ -37,7 +37,7 @@ async function waitForAppUrl(appName) {
   }
 }
 
-const resources = bundleResources(bundleTarget("check_hosted_apis"));
+const resources = bundleResources(bundleTarget("check-hosted-apis"));
 const appUrl = await waitForAppUrl(deployedAppName(resources));
 const token =
   process.env.DATABRICKS_APP_OAUTH_TOKEN ||
