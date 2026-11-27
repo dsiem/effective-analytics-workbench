@@ -90,13 +90,16 @@ BEGIN
          ELSE '{' || array_join(missing_files, ',') || '}' END;
 
     -- Each source file is immutable. Keep its UUIDs when later ranges reuse it.
-    INSERT INTO IDENTIFIER('`' || :catalog || '`.`' || :schema || '`.`trips_raw`') BY NAME
+    EXECUTE IMMEDIATE '
+    INSERT INTO IDENTIFIER(:raw_table) BY NAME
     SELECT uuid() AS trip_id, _metadata.file_name AS source_file, source.*
     FROM read_files(
-      source_path,
-      format => 'csv', header => true, enforceSchema => false, mode => 'FAILFAST',
-      schema => 'VendorID INT, tpep_pickup_datetime TIMESTAMP_NTZ, tpep_dropoff_datetime TIMESTAMP_NTZ, passenger_count INT, trip_distance DOUBLE, pickup_longitude DOUBLE, pickup_latitude DOUBLE, RatecodeID INT, store_and_fwd_flag STRING, dropoff_longitude DOUBLE, dropoff_latitude DOUBLE, payment_type INT, fare_amount DOUBLE, extra DOUBLE, mta_tax DOUBLE, tip_amount DOUBLE, tolls_amount DOUBLE, improvement_surcharge DOUBLE, total_amount DOUBLE'
-    ) AS source;
+      :source_path,
+      format => \'csv\', header => true, enforceSchema => false, mode => \'FAILFAST\',
+      schema => \'VendorID INT, tpep_pickup_datetime TIMESTAMP_NTZ, tpep_dropoff_datetime TIMESTAMP_NTZ, passenger_count INT, trip_distance DOUBLE, pickup_longitude DOUBLE, pickup_latitude DOUBLE, RatecodeID INT, store_and_fwd_flag STRING, dropoff_longitude DOUBLE, dropoff_latitude DOUBLE, payment_type INT, fare_amount DOUBLE, extra DOUBLE, mta_tax DOUBLE, tip_amount DOUBLE, tolls_amount DOUBLE, improvement_surcharge DOUBLE, total_amount DOUBLE\'
+    ) AS source
+    ' USING source_path AS source_path,
+      '`' || :catalog || '`.`' || :schema || '`.`trips_raw`' AS raw_table;
   END IF;
 END;
 
