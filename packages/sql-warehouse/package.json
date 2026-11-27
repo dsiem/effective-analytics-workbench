@@ -27,9 +27,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
-    "smoke:live": "node --env-file-if-exists=../../.env scripts/live.mjs",
-    "presmoke:live": "npm run build",
-    "prepack": "npm run build"
+    "smoke:live": "pnpm run build && node --env-file-if-exists=../../.env scripts/live.mjs",
+    "prepack": "pnpm run build"
   },
   "peerDependencies": {
     "effect": "~4.1.4"

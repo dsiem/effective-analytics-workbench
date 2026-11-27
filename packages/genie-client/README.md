@@ -1,14 +1,14 @@
 # Genie Client for Effect
 
 Use Databricks Genie in Chat and Agent mode from Node.js 22.19+ with Effect
-`~4.1.4`. `@dsiem/genie-client` is a private npm workspace package.
+`~4.1.4`. `@dsiem/genie-client` is a private workspace package.
 [Databricks Genie API](https://docs.databricks.com/api/genie/v1/conversation)
 
 This project is independently maintained and is not affiliated with or endorsed by Databricks, Inc.
 
 ## Build from this workspace
 
-Run `npm run build --workspace @dsiem/genie-client` at the repository root.
+Run `pnpm --filter @dsiem/genie-client run build` at the repository root.
 
 Use `GenieAnswer` as the parameter type for code that displays results from
 both modes. It contains the attachments in response order and an optional

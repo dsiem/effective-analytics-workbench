@@ -8,7 +8,7 @@ const bundle = (command, ...args) =>
     stdio: "inherit",
   });
 
-execFileSync("npm", ["run", "build", "--workspaces", "--if-present"], {
+execFileSync("pnpm", ["-r", "run", "--if-present", "build"], {
   stdio: "inherit",
 });
 bundle("deploy", "--select", "jobs.seed_trip_snapshot");

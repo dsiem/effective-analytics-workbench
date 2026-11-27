@@ -6,7 +6,9 @@ This project is independently maintained and is not affiliated with or endorsed 
 
 ## Install from this workspace
 
-Run `npm ci` and `npm pack --workspace @dsiem/sql-warehouse --pack-destination /tmp` at the repository root. In your application, run `npm install /tmp/dsiem-sql-warehouse-0.1.0.tgz effect@4.1.4`.
+Run `pnpm install --frozen-lockfile` and
+`pnpm --filter @dsiem/sql-warehouse pack --pack-destination /tmp` at the repository
+root. In your application, run `npm install /tmp/dsiem-sql-warehouse-0.1.0.tgz effect@4.1.4`.
 
 ## A small query helper
 

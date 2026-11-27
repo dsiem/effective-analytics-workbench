@@ -1,7 +1,8 @@
 # Deploy the Databricks app
 
-Use the Node version in [.nvmrc](.nvmrc), npm 10, and Databricks CLI 1.26 or
-later in the 1.x series. Start in the repository root.
+Use the Node version in [.nvmrc](.nvmrc), the pnpm version pinned in
+[package.json](package.json), and Databricks CLI 1.26 or later in the 1.x series.
+Start in the repository root.
 
 Use a workspace with Databricks Apps, SQL, Genie, Lakebase Autoscaling, and the
 NYC taxi sample files. Your deployment identity needs permission to manage the
@@ -16,7 +17,8 @@ and grant access. [Lakebase permissions](https://docs.databricks.com/aws/en/dev-
    ```sh
    nvm install
    nvm use
-   npm ci
+   corepack enable
+   pnpm install --frozen-lockfile
    databricks auth login --host https://YOUR-WORKSPACE.cloud.databricks.com
    ```
 
@@ -103,7 +105,7 @@ If you authenticate with a personal access token, select a named CLI profile
 for the proxy.
 
 To supply your own connections, export the settings from `.env.example` or put
-them in `.env`, then run `npm run dev`.
+them in `.env`, then run `pnpm run dev`.
 
 ## Initialize or repair Lakebase
 
@@ -122,7 +124,7 @@ This release requires the current saved-view schema with a non-null
 Existing installations must migrate their data separately before deployment.
 
 For a standalone database, supply its connection settings in your shell or in
-`.env` and run `npm run db:setup`.
+`.env` and run `pnpm run db:setup`.
 
 ## Verify the app
 
@@ -133,24 +135,24 @@ app's views and update logic with fixture responses. The command builds the
 Genie client workspace before running the tests in Node.
 
 ```sh
-npm run test:scene
+pnpm run test:scene
 ```
 
-`npm test` and `npm run check` include both Story and Scene tests. Use Story for
+`pnpm test` and `pnpm run check` include both Story and Scene tests. Use Story for
 state transitions, Scene for rendered interactions, and Playwright for actual
 visibility, focus, browser history, and requests from the running app.
 
 ```sh
-npm run check
-npx playwright install chromium webkit
-npm run test:browser
+pnpm run check
+pnpm exec playwright install chromium webkit
+pnpm run test:browser
 ```
 
 To save screenshots for visual review, run the design tests with capture
 enabled. Playwright saves the images in `test-results/`.
 
 ```sh
-CAPTURE_TEST_SCREENSHOTS=1 npm run test:browser -- design.spec.ts
+CAPTURE_TEST_SCREENSHOTS=1 pnpm run test:browser design.spec.ts
 ```
 
 ### Check hosted APIs
@@ -182,11 +184,11 @@ Use a test deployment and an account with `CAN USE` permission on the app. Set
 
 ```sh
 export DATABRICKS_APP_URL='https://YOUR-APP.databricksapps.com'
-npx playwright install chromium
+pnpm exec playwright install chromium
 mkdir -p .databricks
 (
   umask 077
-  npx playwright open --save-storage=.databricks/playwright-auth.json "$DATABRICKS_APP_URL"
+  pnpm exec playwright open --save-storage=.databricks/playwright-auth.json "$DATABRICKS_APP_URL"
 )
 ```
 
@@ -202,7 +204,7 @@ an included date in `YYYY-MM-DD`. Choose a day with enough pickups in ZIP
 `10001` to scroll through the record list.
 
 ```sh
-npm run test:browser:deployed
+pnpm run test:browser:deployed
 ```
 
 ## Choose resource names

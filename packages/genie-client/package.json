@@ -21,7 +21,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "prepack": "npm run build",
+    "prepack": "pnpm run build",
     "test": "node --import tsx --test test/*.test.ts"
   },
   "peerDependencies": {
