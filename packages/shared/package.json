@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@dsiem/genie-client": "0.1.0"
+    "@dsiem/genie-client": "workspace:*"
   },
   "peerDependencies": {
     "effect": "~4.1.4"

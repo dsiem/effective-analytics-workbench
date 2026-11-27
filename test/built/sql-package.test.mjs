@@ -11,30 +11,15 @@ import { Config, ConfigProvider, Effect, Stream } from "effect";
 // catches missing runtime files and bad package exports without a registry.
 const directory = mkdtempSync(join(tmpdir(), "sql-warehouse-package-"));
 try {
-  const packed = JSON.parse(
-    execFileSync(
-      "npm",
-      [
-        "pack",
-        "--workspace",
-        "@dsiem/sql-warehouse",
-        "--pack-destination",
-        directory,
-        "--cache",
-        join(directory, "cache"),
-        "--json",
-        "--silent",
-      ],
-      { encoding: "utf8" },
-    ),
-  );
-  assert.equal(packed.length, 1);
-  execFileSync("tar", [
-    "-xzf",
-    join(directory, packed[0].filename),
-    "-C",
-    directory,
+  const tarball = join(directory, "sql-warehouse.tgz");
+  execFileSync("pnpm", [
+    "--filter",
+    "@dsiem/sql-warehouse",
+    "pack",
+    "--out",
+    tarball,
   ]);
+  execFileSync("tar", ["-xzf", tarball, "-C", directory]);
   symlinkSync(resolve("node_modules"), join(directory, "node_modules"), "dir");
   const consumer = join(directory, "package/consumer.mjs");
   writeFileSync(consumer, 'export * from "@dsiem/sql-warehouse";\n');

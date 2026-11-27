@@ -204,9 +204,9 @@ path you configure.
 
 ## Run the examples locally
 
-After `npm ci`, run the tests that exercise the contract, request lifecycle, and
-identity handling with local fixtures. The HTTP contract test runs the generated
-client through the real handlers with test Layers.
+After `pnpm install --frozen-lockfile`, run the tests that exercise the contract,
+request lifecycle, and identity handling with local fixtures. The HTTP contract
+test runs the generated client through the real handlers with test Layers.
 
 ```sh
 node --import tsx --test server/test/http-api.test.ts client/test/api-client.test.ts \
@@ -220,6 +220,6 @@ Analysis Runs and Genie tests. These exercise the built UI with fixture API
 responses. [Browser setup](../DEPLOYMENT.md#verify-the-app)
 
 ```sh
-npm run build
-npm run test:browser -- analysis-runs.spec.ts genie-recovery.spec.ts
+pnpm run build
+pnpm run test:browser analysis-runs.spec.ts genie-recovery.spec.ts
 ```

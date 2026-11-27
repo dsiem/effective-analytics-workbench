@@ -54,6 +54,6 @@ The deployed app uses its service principal for data access. Saved views and
 comments are shared across viewers. If your users have different permissions,
 enforce record access in the API handlers. [API handlers](server/src/routes.ts)
 
-Run `npm run check` to verify a change. [Browser and deployment checks](DEPLOYMENT.md#verify-the-app)
+Run `pnpm run check` to verify a change. [Browser and deployment checks](DEPLOYMENT.md#verify-the-app)
 
 [Taxi data and asset sources](client/public/SOURCES.md)

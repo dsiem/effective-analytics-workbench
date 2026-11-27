@@ -32,11 +32,9 @@ const serverEnv = bundleMode
   ? bundleServerEnv(proxyMode ? "app-local-proxy" : "app-local")
   : process.env;
 execFileSync(
-  "npm",
-  ["run", "build", ...(proxyMode ? [] : ["--workspaces", "--if-present"])],
-  {
-    stdio: "inherit",
-  },
+  "pnpm",
+  proxyMode ? ["run", "build"] : ["-r", "run", "--if-present", "build"],
+  { stdio: "inherit" },
 );
 
 const children = [];

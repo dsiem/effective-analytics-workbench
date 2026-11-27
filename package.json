@@ -6,22 +6,19 @@
   "engines": {
     "node": ">=22.23.5 <23"
   },
-  "packageManager": "npm@10.9.2",
-  "workspaces": [
-    "packages/*"
-  ],
+  "packageManager": "pnpm@11.29.0",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "npm run build --workspaces --if-present && tsc -p tsconfig.build.json && vite build",
+    "build": "corepack pnpm -r run build && tsc -p tsconfig.build.json && vite build",
     "start": "node --env-file-if-exists=.env dist/server/src/main.js",
-    "typecheck": "npm run build --workspaces --if-present && npm run typecheck --workspaces --if-present && tsc --noEmit && tsc -p client",
-    "lint": "npm run build --workspaces --if-present && oxlint --deny-warnings .",
+    "typecheck": "pnpm -r run build && pnpm -r run typecheck && tsc --noEmit && tsc -p client",
+    "lint": "pnpm -r run build && oxlint --deny-warnings .",
     "format": "oxfmt --write .",
-    "test": "npm run test --workspaces --if-present && node --conditions=development --conditions=workbench-source --import tsx --test server/test/*.test.ts test/*.test.ts client/test/*.test.ts",
-    "test:scene": "npm run build --workspace @dsiem/genie-client && node --conditions=development --import tsx --test client/test/*.scene.test.ts",
+    "test": "pnpm -r run test && node --conditions=development --conditions=workbench-source --import tsx --test server/test/*.test.ts test/*.test.ts client/test/*.test.ts",
+    "test:scene": "pnpm --filter @dsiem/genie-client run build && node --conditions=development --import tsx --test client/test/*.scene.test.ts",
     "test:dist": "node --test server/test/built/*.test.mjs test/built/*.test.mjs",
-    "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build && npm run test:dist",
-    "db:setup": "npm run build --workspace @dsiem/sql-warehouse && node --env-file-if-exists=.env --import tsx scripts/setup-lakebase.ts",
+    "check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm test && pnpm run build && pnpm run test:dist",
+    "db:setup": "pnpm --filter @dsiem/sql-warehouse run build && node --env-file-if-exists=.env --import tsx scripts/setup-lakebase.ts",
     "test:browser": "playwright test",
     "test:browser:deployed": "playwright test --config client/test/deployed/playwright.config.ts",
     "format:check": "oxfmt --check ."
@@ -30,9 +27,9 @@
     "@deck.gl/core": "9.4.2",
     "@deck.gl/layers": "9.4.2",
     "@deck.gl/maplibre": "9.4.2",
-    "@dsiem/analytics-shared": "0.1.0",
-    "@dsiem/genie-client": "0.1.0",
-    "@dsiem/sql-warehouse": "0.1.0",
+    "@dsiem/analytics-shared": "workspace:*",
+    "@dsiem/genie-client": "workspace:*",
+    "@dsiem/sql-warehouse": "workspace:*",
     "@effect/platform-browser": "4.1.5",
     "@effect/platform-node": "4.1.5",
     "@effect/sql-pg": "4.1.5",

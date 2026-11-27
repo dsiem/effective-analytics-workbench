@@ -30,7 +30,7 @@ const setupBundleLakebase = new URL(
 const dev = new URL("../scripts/dev.mjs", import.meta.url);
 const api = new URL("../server/src/main.ts", import.meta.url);
 const tsxPackage = new URL("../node_modules/tsx/", import.meta.url);
-const buildWorkspaces = "run build --workspaces --if-present";
+const buildWorkspaces = "-r run --if-present build";
 const watchServer =
   "--conditions=development --conditions=workbench-source --import tsx --watch server/src/main.ts --dev";
 const startClient = "node_modules/vite/bin/vite.js --host 127.0.0.1";
@@ -62,7 +62,11 @@ async function writeDevFixture(directory: string) {
     ),
     writeFile(
       join(directory, "package.json"),
-      '{"private":true,"type":"module","workspaces":["packages/*"]}',
+      '{"private":true,"type":"module"}',
+    ),
+    writeFile(
+      join(directory, "pnpm-workspace.yaml"),
+      "packages:\n  - packages/*\n",
     ),
     writeFile(
       join(workspace, "package.json"),
@@ -321,7 +325,7 @@ test("bundle proxy builds the app and gives the CLI control of the backend port"
   );
 });
 
-test("npm dev launches the API with its local connection settings", async (t) => {
+test("pnpm dev launches the API with its local connection settings", async (t) => {
   const result = await setup(t, dev, { warehouse: "" });
   assert.deepEqual(result.calls, [
     buildWorkspaces,
