@@ -378,7 +378,7 @@ process.exit(response.status === 204 ? 7 : 2);
 
 test("dev reports an occupied API port before starting the frontend", async (t) => {
   const occupied = createServer();
-  occupied.listen(0, "0.0.0.0");
+  occupied.listen(0, "127.0.0.1");
   await once(occupied, "listening");
   t.after(() => occupied.close());
   const address = occupied.address();
@@ -405,6 +405,7 @@ test("dev reports an occupied API port before starting the frontend", async (t) 
       cwd: directory,
       env: {
         ...process.env,
+        APP_BIND_HOST: "0.0.0.0",
         DATABRICKS_HOST: "https://workspace.invalid",
         DATABRICKS_APP_PORT: String(address.port),
         GENIE_SPACE_ID: "fixture-space",
@@ -420,7 +421,7 @@ test("dev reports an occupied API port before starting the frontend", async (t) 
       );
       assert.equal(error.code, 1);
       const output = String(error.stdout) + String(error.stderr);
-      assert.match(output, /EADDRINUSE/);
+      assert.match(output, /EADDRINUSE[^\n]*127\.0\.0\.1/);
       assert.doesNotMatch(output, /Frontend started/);
       return true;
     },

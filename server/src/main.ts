@@ -17,8 +17,8 @@ import { TripComments } from "./trip-comments.js";
 import { Warehouse } from "./warehouse.js";
 import { Workspace } from "./workspace.js";
 
-const sendToDev =
-  process.argv[2] === "--dev" ? process.send?.bind(process) : undefined;
+const isDev = process.argv[2] === "--dev";
+const sendToDev = isDev ? process.send?.bind(process) : undefined;
 const ServerLive = Layer.unwrap(
   Effect.gen(function* () {
     const { host, port } = yield* ServerConfig;
@@ -32,7 +32,7 @@ const ServerLive = Layer.unwrap(
           })
         : port;
     return NodeHttpServer.layer(createServer, {
-      host,
+      host: isDev ? "127.0.0.1" : host,
       port: selectedPort,
       gracefulShutdownTimeout: "5 seconds",
     });
