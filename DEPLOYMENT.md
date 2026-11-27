@@ -36,7 +36,7 @@ and grant access. [Lakebase permissions](https://docs.databricks.com/aws/en/dev-
    Lakebase access before it starts the app.
 
    ```sh
-   databricks bundle run setup_taxi_demo -t dev
+   databricks bundle run deploy-taxi-demo -t dev
    ```
 
    In Databricks Apps, open the app when its status is **Running**.
@@ -75,18 +75,32 @@ databricks bundle run app -t dev
 
 ## Develop locally
 
-Start the client and API using the deployed target's connections. If you use a
-named profile, export `DATABRICKS_CONFIG_PROFILE` in your shell first.
+Start the client and API in watch mode using the deployed target's connections.
+If you use a named profile, export `DATABRICKS_CONFIG_PROFILE` in your shell first.
 
 ```sh
-databricks bundle run dev -t dev
+databricks bundle run app-local -t dev
 ```
 
 Open the frontend URL printed after the API starts. Set `DATABRICKS_APP_PORT`
 to choose a different API port, or use `0` to let the OS choose one. The local
 API uses your Databricks CLI login and the resources recorded in the deployed
-bundle. Export local settings such as `GENIE_MAX_CONCURRENCY` in your shell. The
-bundle command skips `.env`.
+bundle. In both bundle modes, the API reads local settings such as
+`GENIE_MAX_CONCURRENCY` from your shell and skips `.env`.
+
+To check the built app with Databricks viewer headers, start it through the
+Databricks CLI proxy.
+
+```sh
+databricks bundle run app-local-proxy -t dev
+```
+
+Open the proxy URL printed by the CLI, usually `http://localhost:8001`. The
+proxy forwards your signed-in identity on each request. Run the command again
+after editing the app to rebuild it.
+
+If you authenticate with a personal access token, select a named CLI profile
+for the proxy.
 
 To supply your own connections, export the settings from `.env.example` or put
 them in `.env`, then run `npm run dev`.
@@ -97,7 +111,7 @@ To create the application tables and grant access to the deployed app, run the
 setup command as a workspace user with the required PostgreSQL permissions.
 
 ```sh
-databricks bundle run setup_lakebase -t dev
+databricks bundle run setup-lakebase -t dev
 ```
 
 Use the same target as your deployment. The command updates the selected
@@ -149,7 +163,7 @@ identity. The app runs Genie with its service principal. The check creates and
 deletes a temporary saved view and submits one read-only question per mode.
 
 ```sh
-databricks bundle run check_hosted_apis -t dev
+databricks bundle run check-hosted-apis -t dev
 ```
 
 Each Genie check has a three-minute deadline. The check fails if either mode

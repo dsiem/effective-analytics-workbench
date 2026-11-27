@@ -21,7 +21,7 @@ const sendToDev =
   process.argv[2] === "--dev" ? process.send?.bind(process) : undefined;
 const ServerLive = Layer.unwrap(
   Effect.gen(function* () {
-    const { port } = yield* ServerConfig;
+    const { host, port } = yield* ServerConfig;
     const selectedPort =
       sendToDev && port === 0
         ? yield* Effect.promise(async () => {
@@ -32,7 +32,7 @@ const ServerLive = Layer.unwrap(
           })
         : port;
     return NodeHttpServer.layer(createServer, {
-      host: "0.0.0.0",
+      host,
       port: selectedPort,
       gracefulShutdownTimeout: "5 seconds",
     });

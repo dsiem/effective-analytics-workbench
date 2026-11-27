@@ -7,7 +7,7 @@ variables:
     default: "2016-02-29"
 
 scripts:
-  setup_taxi_demo:
+  deploy-taxi-demo:
     # Forward resolved values, including --var overrides, to nested bundle commands.
     env:
       BUNDLE_VAR_app_name: ${var.app_name}
@@ -17,10 +17,12 @@ scripts:
       BUNDLE_VAR_snapshot_start_date: ${var.snapshot_start_date}
       BUNDLE_VAR_snapshot_end_date: ${var.snapshot_end_date}
       BUNDLE_VAR_warehouse_name: ${var.warehouse_name}
-    content: node scripts/setup-taxi-demo.mjs
-  dev:
+    content: node scripts/deploy-taxi-demo.mjs
+  app-local:
     content: node scripts/dev.mjs --bundle
-  setup_lakebase:
+  app-local-proxy:
+    content: node scripts/dev.mjs --bundle-proxy
+  setup-lakebase:
     content: node scripts/setup-bundle-lakebase.mjs
-  check_hosted_apis:
+  check-hosted-apis:
     content: node scripts/check-hosted-apis.mjs
