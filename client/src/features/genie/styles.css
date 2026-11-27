@@ -30,7 +30,10 @@
   }
   .genie-full {
     max-width: 58rem;
-    height: calc(100dvh - 7.5rem);
+    height: calc(
+      100dvh - 2 * var(--workspace-gutter) - var(--workspace-header-height) -
+        var(--workspace-content-top) - var(--workspace-content-padding) - 2px
+    );
     min-height: 34rem;
     margin: 0 auto;
     box-shadow: var(--shadow);
@@ -191,7 +194,6 @@
       border-radius: 0.875rem 0.875rem 0 0;
     }
     .genie-full {
-      height: calc(100dvh - 6rem);
       min-height: 0;
     }
     .genie-messages {

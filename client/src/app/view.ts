@@ -103,6 +103,7 @@ function sidebar(h: H, model: Model) {
             [
               h.Href(workspaceHref(pageUrls.Overview, query)),
               h.Class("sidebar-brand"),
+              h.AriaLabel("NYC Taxi overview"),
             ],
             [
               h.span([h.Class("icon-tile")], [icon(h, "car-taxi-front")]),
@@ -123,7 +124,8 @@ function sidebar(h: H, model: Model) {
                     LayoutMessage.CloseNavigation(),
                   ),
                   attributes: [h.AriaLabel("Close navigation")],
-                  className: " absolute right-2 top-4",
+                  className: "sidebar-close",
+                  size: "icon",
                   variant: "ghost",
                 }),
               ]
@@ -140,7 +142,7 @@ function sidebar(h: H, model: Model) {
                   h.a(
                     [
                       ...current.link,
-                      h.Class(`nav-link ${current.isCurrent ? "active" : ""}`),
+                      h.Class("nav-link"),
                       h.AriaLabel(item.label),
                       ...attrs,
                     ],
@@ -394,34 +396,45 @@ export function view(model: Model, h: H): Document {
                     ),
                     h.AriaControls("main-navigation"),
                   ],
+                  className: "workspace-navigation",
+                  size: "icon",
                   variant: "ghost",
                 }),
-                h.span([h.Class("h-4 border-l mx-2")], []),
-                h.a(
+                h.nav(
+                  [h.AriaLabel("Breadcrumb"), h.Class("workspace-path")],
                   [
-                    h.Href(workspaceHref(pageUrls.Overview, query)),
-                    h.Class("hidden sm:block muted text-sm"),
+                    h.ol(
+                      [],
+                      [
+                        h.li(
+                          [h.Class("workspace-path-parent")],
+                          [
+                            h.a(
+                              [h.Href(workspaceHref(pageUrls.Overview, query))],
+                              ["NYC Taxi"],
+                            ),
+                            icon(h, "chevron-right"),
+                          ],
+                        ),
+                        h.li([h.Attribute("aria-current", "page")], [current]),
+                      ],
+                    ),
                   ],
-                  ["NYC Taxi"],
                 ),
-                h.span([h.Class("hidden sm:block muted text-sm")], ["/ "]),
-                h.span([h.Class("text-sm")], [current]),
-                h.div(
-                  [h.Class("ml-auto flex items-center gap-2")],
-                  explore
-                    ? [
-                        button(h, {
-                          label: h.span(
-                            [h.Class("inline-flex items-center gap-2")],
-                            [icon(h, "sparkles"), "Ask Genie"],
-                          ),
-                          onClick: openGenie({ context: null, question: null }),
-                          disabled: !applied,
-                          attributes: [h.Id("genie-trigger")],
-                        }),
-                      ]
-                    : [],
-                ),
+                ...(explore
+                  ? [
+                      button(h, {
+                        label: h.span(
+                          [h.Class("inline-flex items-center gap-2")],
+                          [icon(h, "sparkles"), "Ask Genie"],
+                        ),
+                        onClick: openGenie({ context: null, question: null }),
+                        disabled: !applied,
+                        attributes: [h.Id("genie-trigger")],
+                        className: "workspace-genie",
+                      }),
+                    ]
+                  : []),
               ],
             ),
             h.main(
