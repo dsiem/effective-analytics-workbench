@@ -133,12 +133,15 @@
     }
   }
   @media (max-width: 379px) {
+    .filter-bar {
+      padding-inline: 0.75rem;
+    }
     .filter-controls {
       grid-template-columns: 1fr;
       gap: 0.5rem;
     }
     .filter-controls .field {
-      grid-template-columns: 6.25rem minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) minmax(9.75rem, 1.6fr);
       align-items: center;
     }
     .filter-view .view-picker-trigger {

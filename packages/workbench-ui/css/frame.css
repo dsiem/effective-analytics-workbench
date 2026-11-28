@@ -306,4 +306,9 @@
       transition: none;
     }
   }
+  @media (max-width: 359px) {
+    .workspace {
+      --workspace-content-padding: 0.625rem;
+    }
+  }
 }
