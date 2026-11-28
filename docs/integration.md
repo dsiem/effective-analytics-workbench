@@ -6,7 +6,10 @@ Effect HTTP contract to connect the server to Foldkit.
 
 ## How the workbench fits together
 
-The browser and server import their feature schemas from `packages/shared/src/`.
+The taxi browser and server import their feature schemas from `packages/shared/src/`.
+Independent applications can compose the query, report, Jobs and persistence packages.
+[Analytics package](../packages/analytics/README.md) · [Workbench UI package](../packages/workbench-ui/README.md)
+
 `AppApi` describes the HTTP operations, and the server supplies their handlers
 with Effect services at startup. [HTTP contract](../packages/shared/src/api.ts) ·
 [Server layers](../server/src/main.ts)
@@ -93,12 +96,12 @@ uncertain acceptance.
 ## Submit, poll, and retrieve long-running work
 
 1. **Submit.** The Analysis Runs command keeps its request ID when the user
-   retries the same submission. The server derives a Jobs idempotency token from
+   retries the same submission. The reusable job binding derives a Jobs idempotency token from
    the job ID, request ID, and parameters. Once Databricks accepts the run, the
    API returns `202` with its run ID. Foldkit puts that ID in `/analysis?run=<id>`
    so a reload or shared link can reopen the run.
    [Analysis commands](../client/src/features/analysis-runs/commands.ts) ·
-   [Jobs service](../server/src/analysis-runs.ts)
+   [Taxi job binding](../server/src/analysis-runs.ts) · [Jobs lifecycle](../packages/analytics/src/jobs.ts)
 2. **Poll.** Derive subscription dependencies from the model. Analysis Runs
    polls while the page is open and the selected run needs a status check.
    Status and report replies carry the run ID and selection generation, so
@@ -109,7 +112,7 @@ uncertain acceptance.
    and has succeeded. Fetch the report by run ID so the browser can retry that
    read independently of submission.
    [Job configuration](../resources/jobs.yml) · [Report SQL](../jobs/route-reliability.sql) ·
-   [Jobs service](../server/src/analysis-runs.ts)
+   [Taxi job binding](../server/src/analysis-runs.ts) · [Jobs lifecycle](../packages/analytics/src/jobs.ts)
 
 The Genie composer offers Chat and Agent mode. Both use `GENIE_SPACE_ID`
 and keep their follow-up conversations separate. Agent mode needs workspace
@@ -209,7 +212,7 @@ request lifecycle, and identity handling with local fixtures. The HTTP contract
 test runs the generated client through the real handlers with test Layers.
 
 ```sh
-node --import tsx --test server/test/http-api.test.ts client/test/api-client.test.ts \
+node --conditions=development --conditions=workbench-source --import tsx --test server/test/http-api.test.ts client/test/api-client.test.ts \
   client/test/features.test.ts server/test/analysis-runs.test.ts \
   server/test/current-user.test.ts server/test/lakebase.test.ts \
   server/test/admission.test.ts
