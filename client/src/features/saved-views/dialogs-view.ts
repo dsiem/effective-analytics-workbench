@@ -1,9 +1,9 @@
-import { Dialog, Textarea } from "@foldkit/ui";
+import { Dialog } from "@foldkit/ui";
+import { findingFields } from "@dsiem/workbench-ui/findings";
 import { Option } from "effect";
 import { defineView } from "foldkit/submodel";
 import { filterSummary } from "../../domain/filter-summary";
 import { dialog } from "../../ui/dialog";
-import { field } from "../../ui/field";
 import { icon } from "../../ui/icons";
 import { alert, button } from "../../ui/primitives";
 import type { Model } from "./model";
@@ -48,45 +48,18 @@ function editor(h: H, model: Model) {
       h.form(
         [h.OnSubmit(M.SaveSavedView()), h.Class("p-6 space-y-5")],
         [
-          field(h, {
-            id: "saved-view-title",
-            label: "View name",
-            value: draft.title,
-            onInput: (value) => M.SavedViewChanged({ field: "title", value }),
-            placeholder: "e.g. Midtown fare review",
-            attributes: [
-              h.Required(true),
-              h.Maxlength(160),
-              h.Readonly(saving),
-            ],
+          ...findingFields(h, {
+            id: "saved-view",
+            title: draft.title,
+            body: draft.body,
+            readOnly: saving,
+            titleLabel: "View name",
+            bodyLabel: "Finding (optional)",
+            titlePlaceholder: "e.g. Midtown fare review",
+            bodyPlaceholder:
+              "What is worth returning to? Add context or a next step…",
+            onChange: (field, value) => M.SavedViewChanged({ field, value }),
           }),
-          h.div(
-            [],
-            [
-              h.label(
-                [h.For("saved-view-body"), h.Class("field-label")],
-                ["Finding (optional)"],
-              ),
-              Textarea.view(
-                {
-                  id: "saved-view-body",
-                  value: draft.body,
-                  onInput: (value) =>
-                    M.SavedViewChanged({ field: "body", value }),
-                  placeholder:
-                    "What is worth returning to? Add context or a next step…",
-                  toView: (attributes) =>
-                    h.textarea([
-                      ...attributes.textarea,
-                      h.Class("input mt-2 min-h-28"),
-                      h.Maxlength(10000),
-                      h.Readonly(saving),
-                    ]),
-                },
-                h,
-              ),
-            ],
-          ),
           h.div(
             [h.Class("inset-panel")],
             [

@@ -21,13 +21,26 @@
       "workbench-source": "./src/query-page.ts",
       "import": "./dist/query-page.js"
     },
-    "./styles.css": "./styles.css"
+    "./findings": {
+      "types": "./dist/findings.d.ts",
+      "workbench-source": "./src/findings.ts",
+      "import": "./dist/findings.js"
+    },
+    "./styles.css": "./styles.css",
+    "./record-explorer": {
+      "types": "./dist/record-explorer.d.ts",
+      "workbench-source": "./src/record-explorer.ts",
+      "import": "./dist/record-explorer.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
     "prepack": "pnpm run build"
+  },
+  "dependencies": {
+    "@dsiem/analytics": "workspace:*"
   },
   "peerDependencies": {
     "effect": "~4.1.4",

@@ -1,3 +1,7 @@
+import {
+  recordGrid,
+  recordViewportMount,
+} from "@dsiem/workbench-ui/record-explorer";
 import { Select } from "@foldkit/ui";
 import { Option, Schema } from "effect";
 import { defineView } from "foldkit/submodel";
@@ -16,7 +20,6 @@ import {
 import { type Model, previewRows, Sort, SortMenu, tripWindow } from "./model";
 import type { H } from "./view-messages";
 import { Message as M } from "./view-messages";
-import { RecordsViewport } from "./viewport-dom";
 
 const sortLabels = {
   newest: "Latest pickup",
@@ -25,35 +28,9 @@ const sortLabels = {
 } satisfies Record<typeof Sort.Type, string>;
 const decodeSort = Schema.decodeUnknownSync(Sort);
 
-function spacer(
-  h: H,
-  count: number,
-  rowHeight: number,
-  key: string,
-  columns: number,
-): Child[] {
-  return count > 0
-    ? [
-        h.tr(
-          [h.Key(key), h.AriaHidden(true), h.Class("trip-spacer")],
-          [
-            h.td(
-              [
-                h.Colspan(columns),
-                h.Style({ height: `${count * rowHeight}px` }),
-              ],
-              [],
-            ),
-          ],
-        ),
-      ]
-    : [];
-}
-
-function tripRow(
+function tripCells(
   h: H,
   trip: TripSummary,
-  index: number,
   counts: Model["commentCounts"],
   tabbable: boolean,
 ) {
@@ -68,7 +45,7 @@ function tripRow(
           ? "Comment count unavailable"
           : "View comments"
       : `${number(count)} ${count === 1 ? "comment" : "comments"}`;
-  const cells = [
+  return [
     trip.pickup_at,
     `${trip.pickup_zip} → ${trip.dropoff_zip}`,
     trip.dropoff_at,
@@ -113,83 +90,37 @@ function tripRow(
       ],
     ),
   ];
-  return h.tr(
-    [h.Key(`trip-${trip.trip_id}`), h.AriaRowindex(index + 2)],
-    cells.map((cell) => h.td([], [cell])),
-  );
 }
 
 function tripTable(h: H, model: Model, rows: readonly TripSummary[]) {
-  const window = tripWindow(rows.length, model.viewport);
-  const columns = [
-    "Pickup time",
-    "Route · ZIP codes",
-    "Drop-off time",
-    "Distance",
-    "Duration",
-    "Fare",
-    "Comments",
-  ];
-  return h.div(
-    [
+  return recordGrid(h, rows, {
+    caption: "Matching trips",
+    headers: [
+      "Pickup time",
+      "Route · ZIP codes",
+      "Drop-off time",
+      "Distance",
+      "Duration",
+      "Fare",
+      "Comments",
+    ],
+    key: (trip) => `trip-${trip.trip_id}`,
+    cells: (trip, tabbable) =>
+      tripCells(h, trip, model.commentCounts, tabbable),
+    window: tripWindow(rows.length, model.viewport),
+    loading: model.preview._tag === "Loading",
+    region: [
       h.Key(`records-${model.loadGeneration}`),
-      h.Class("table-scroll"),
       h.Role("region"),
       h.AriaLabel("Scrollable trip records"),
       h.Tabindex(0),
-      h.OnMount(RecordsViewport({ generation: model.loadGeneration })),
-    ],
-    [
-      h.table(
-        [
-          h.AriaRowcount(
-            model.preview._tag === "Loading" ? -1 : rows.length + 1,
-          ),
-        ],
-        [
-          h.caption([h.Class("sr-only")], ["Matching trips"]),
-          h.thead(
-            [],
-            [
-              h.tr(
-                [],
-                columns.map((label) => h.th([h.Scope("col")], [label])),
-              ),
-            ],
-          ),
-          h.tbody(
-            [],
-            [
-              ...spacer(
-                h,
-                window.start,
-                window.rowHeight,
-                "before",
-                columns.length,
-              ),
-              ...rows.slice(window.start, window.end).map((trip, offset) => {
-                const index = window.start + offset;
-                return tripRow(
-                  h,
-                  trip,
-                  index,
-                  model.commentCounts,
-                  index >= window.tabStart && index < window.tabEnd,
-                );
-              }),
-              ...spacer(
-                h,
-                rows.length - window.end,
-                window.rowHeight,
-                "after",
-                columns.length,
-              ),
-            ],
-          ),
-        ],
+      h.OnMount(
+        recordViewportMount(model.loadGeneration, ({ generation, viewport }) =>
+          M.TripsScrolled({ generation, viewport }),
+        ),
       ),
     ],
-  );
+  });
 }
 
 function sortControl(

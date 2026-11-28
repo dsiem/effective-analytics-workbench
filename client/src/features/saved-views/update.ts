@@ -14,7 +14,7 @@ import {
 } from "./browser-update";
 import * as SavedViewsCommands from "./commands";
 import { type BrowserMessage, Message as M, type Message } from "./messages";
-import type { Model } from "./model";
+import { editorWorkflow, type Model } from "./model";
 
 type DialogId = keyof Model["dialogs"];
 
@@ -117,54 +117,34 @@ function updateSavedViewsState(
       commands: [SavedViewsCommands.CreateSavedViewDraft({})],
     }),
     CreatedSavedView: ({ id }) => ({
-      model: modifyFields(model, {
-        editor: () =>
-          Option.some({
-            draft: {
-              id,
-              title: "",
-              body: "",
-              filters: context.filters,
-              version: null,
+      model: {
+        ...model,
+        editor: Option.some(editorWorkflow.create(id, context.filters)),
+      },
+    }),
+    EditSavedView: ({ savedView }) => ({
+      model: { ...model, editor: Option.some(editorWorkflow.edit(savedView)) },
+    }),
+    SavedViewChanged: ({ field, value }) =>
+      editor
+        ? {
+            model: {
+              ...model,
+              editor: Option.some(editorWorkflow.change(editor, field, value)),
             },
-            saving: false,
-            error: "",
-          }),
-      }),
-    }),
-    EditSavedView: ({ savedView: { id, title, body, filters, version } }) => ({
-      model: modifyFields(model, {
-        editor: () =>
-          Option.some({
-            draft: { id, title, body, filters, version },
-            saving: false,
-            error: "",
-          }),
-      }),
-    }),
-    SavedViewChanged: ({ field, value }) => {
-      if (!editor || editor.saving) return { model };
-      const draft = { ...editor.draft, [field]: value };
-      return {
-        model: modifyFields(model, {
-          editor: () => Option.some({ ...editor, draft }),
-        }),
-      };
-    },
-    SaveSavedView: () =>
-      !editor || editor.saving || !editor.draft.title.trim()
-        ? { model }
-        : {
-            model: modifyFields(model, {
-              editor: () =>
-                Option.some(
-                  modifyFields(editor, { saving: () => true, error: () => "" }),
-                ),
-            }),
+          }
+        : { model },
+    SaveSavedView: () => {
+      const pending = editor && editorWorkflow.submit(editor);
+      return pending
+        ? {
+            model: { ...model, editor: Option.some(pending) },
             commands: [
-              SavedViewsCommands.SaveSavedView({ draft: editor.draft }),
+              SavedViewsCommands.SaveSavedView({ draft: pending.draft }),
             ],
-          },
+          }
+        : { model };
+    },
     SavedViewSaved: ({ result }) => {
       const savedView = Option.getOrUndefined(AsyncData.getData(result));
       const error = Option.getOrElse(AsyncData.getError(result), () => "");
@@ -173,10 +153,7 @@ function updateSavedViewsState(
           savedView
             ? Option.none()
             : Option.map(editor, (current) =>
-                modifyFields(current, {
-                  saving: () => false,
-                  error: () => error,
-                }),
+                editorWorkflow.reject(current, error),
               ),
         selection: (selection) =>
           savedView && sameFilters(savedView.filters, context.filters)

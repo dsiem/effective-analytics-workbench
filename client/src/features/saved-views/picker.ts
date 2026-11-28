@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import { AsyncData } from "foldkit";
-import type { SavedView } from "@dsiem/analytics-shared/saved-views";
+export { mergeFindingPages as mergeSavedViews } from "@dsiem/workbench-ui/findings";
 import type { Model } from "./browser-model";
 
 export const searchId = "saved-view-search";
@@ -41,8 +41,3 @@ export const visibleSavedViews = (model: Model) =>
 
 export const rememberRecent = (ids: readonly string[], id: string) =>
   [id, ...ids.filter((entry) => entry !== id)].slice(0, 5);
-
-export const mergeSavedViews = (
-  previous: readonly SavedView[],
-  next: readonly SavedView[],
-) => [...new Map([...previous, ...next].map((row) => [row.id, row])).values()];

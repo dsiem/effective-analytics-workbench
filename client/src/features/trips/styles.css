@@ -34,7 +34,7 @@
   .trip-records .table-scroll tr:hover td:last-child {
     background: var(--surface-hover);
   }
-  .trip-records .table-scroll .trip-spacer td {
+  .trip-records .table-scroll .record-spacer td {
     padding: 0;
     border: 0;
     position: static;

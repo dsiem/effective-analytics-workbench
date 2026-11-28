@@ -1,14 +1,12 @@
 import { Notice } from "../../lib/request-state";
 import { Dialog } from "@foldkit/ui";
 import { Option, Schema } from "effect";
-import { SavedView, SavedViewInput } from "@dsiem/analytics-shared/saved-views";
+import { findingEditor } from "@dsiem/workbench-ui/findings";
+import { SavedView } from "@dsiem/analytics-shared/saved-views";
 import { Filters } from "@dsiem/analytics-shared/filters";
 import * as Browser from "./browser-model";
-export const SavedViewEditor = Schema.Struct({
-  draft: Schema.Struct({ ...SavedViewInput.fields, title: Schema.String }),
-  saving: Schema.Boolean,
-  error: Notice,
-});
+export const editorWorkflow = findingEditor(Filters, Notice, "");
+export const SavedViewEditor = editorWorkflow.Model;
 export const Model = Schema.Struct({
   dialogs: Schema.Struct({ savedView: Dialog.Model, delete: Dialog.Model }),
   browser: Browser.Model,
