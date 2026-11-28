@@ -1,51 +1,13 @@
-import { Schema } from "effect";
+import type { recordWindow } from "./record-viewport.js";
 import type { Attribute } from "foldkit/html";
 import type { Child, H } from "./primitives.js";
-
-export const RecordViewport = Schema.Struct({
-  firstRow: Schema.Int,
-  visibleEnd: Schema.Int,
-  tabStart: Schema.Int,
-  tabEnd: Schema.Int,
-  rowHeight: Schema.Number,
-});
-
-export function recordWindow(
-  rowCount: number,
-  viewport?: typeof RecordViewport.Type,
-) {
-  const firstRow = viewport?.firstRow ?? 0;
-  const leadingOverscan = 3;
-  const windowStep = 8;
-  const minimumRows = 25;
-  const size = Math.max(
-    minimumRows,
-    (viewport?.visibleEnd ?? 0) - firstRow + leadingOverscan + windowStep - 1,
-  );
-  const start = Math.max(
-    0,
-    Math.min(
-      rowCount - size,
-      Math.floor((firstRow - leadingOverscan) / windowStep) * windowStep,
-    ),
-  );
-  return {
-    start,
-    end: Math.min(rowCount, start + size),
-    visibleStart: firstRow,
-    visibleEnd: Math.min(rowCount, viewport?.visibleEnd ?? 0),
-    tabStart: viewport?.tabStart ?? 0,
-    tabEnd: Math.min(rowCount, viewport?.tabEnd ?? 0),
-    rowHeight: viewport?.rowHeight ?? 44,
-  };
-}
 
 export function recordGrid<Message, Row>(
   h: H<Message>,
   rows: readonly Row[],
   options: {
     readonly caption: string;
-    readonly headers: readonly string[];
+    readonly headers: readonly Child[];
     readonly key: (row: Row) => string;
     readonly cells: (row: Row, tabbable: boolean) => readonly Child[];
     readonly region?: readonly Attribute<Message>[];
@@ -93,7 +55,7 @@ export function recordGrid<Message, Row>(
             [],
             [
               ...spacer(start, "before"),
-              ...rows.slice(start, end).map((row, offset) => {
+              ...(window ? rows.slice(start, end) : rows).map((row, offset) => {
                 const index = start + offset;
                 const tabbable =
                   !window ||

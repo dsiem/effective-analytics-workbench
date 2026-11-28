@@ -176,7 +176,37 @@
     width: 0.875rem;
     height: 0.875rem;
   }
+  .filter-view {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+  .filter-view-label {
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+  @media (min-width: 1280px) {
+    .filter-view-label {
+      display: none;
+    }
+    .filter-view .view-picker-trigger {
+      max-width: 12rem;
+    }
+  }
+  @media (max-width: 379px) {
+    .filter-view .view-picker-trigger {
+      max-width: 100%;
+      padding-inline: 0.5rem;
+    }
+    .view-picker-trigger > .icon:first-child {
+      display: none;
+    }
+  }
   @media (max-width: 767px) {
+    .filter-view-label {
+      display: none;
+    }
     .view-picker-trigger {
       max-width: 44vw;
     }

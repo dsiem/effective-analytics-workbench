@@ -6,7 +6,7 @@ import {
   pendingOverview,
   subscriptions as overviewSubscriptions,
 } from "../features/overview/subscription";
-import { subscriptions as tripsSubscriptions } from "../features/trips/subscription";
+import { subscriptions as tripsSubscriptions } from "../features/trips/records";
 import * as Features from "./features";
 import type { Message } from "./message";
 import type { Model } from "./model";

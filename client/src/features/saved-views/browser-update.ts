@@ -1,16 +1,18 @@
 import { Popover } from "@foldkit/ui";
-import { Option, Result } from "effect";
+import { Option } from "effect";
 import { AsyncData, Command, type Update } from "foldkit";
 import { modifyFields } from "foldkit/struct";
 import type { FeatureUpdate } from "../../lib/feature-update";
-import { type Model, PickerMode } from "./browser-model";
+import type { Model } from "./browser-model";
 import * as SavedViewsCommands from "./commands";
 import {
   BrowserMessage as M,
   type BrowserMessage,
+  findingSearch,
   type Message,
 } from "./messages";
-import { mergeSavedViews, rememberRecent, searchText } from "./picker";
+import { rememberRecent } from "./picker";
+import { search } from "./workflow";
 
 const loadedOrIdle = <A>(data: Option.Option<A>) =>
   Option.match(data, { onNone: AsyncData.Idle, onSome: AsyncData.succeed });
@@ -24,39 +26,32 @@ function foldPicker(
   >,
 ): FeatureUpdate<Model, Message> {
   return {
-    model: modifyFields(model, { picker: () => changed.model }),
-    commands: (changed.commands ?? []).map((command) =>
-      Command.mapMessage(command, (message) =>
-        M.GotSavedViewsPickerMessage({ message }),
-      ),
+    model: { ...model, picker: changed.model },
+    commands: Command.mapMessages(changed.commands, (message) =>
+      M.GotSavedViewsPickerMessage({ message }),
     ),
   };
 }
 
-function loadSavedViews(
+function updateSearch(
   model: Model,
-  more = false,
-  debounce = false,
+  message: typeof search.Message.Type,
 ): FeatureUpdate<Model, Message> {
-  const version = model.searchVersion + 1;
+  const changed = search.update(model.search, message);
   return {
-    model: modifyFields(model, {
-      searchVersion: () => version,
-      savedViews: (savedViews) =>
-        model.pickerMode._tag === "Quick"
-          ? loadedOrIdle(AsyncData.getData(savedViews))
-          : Option.getOrElse(
-              AsyncData.revalidateOrLoad(savedViews),
-              () => savedViews,
-            ),
-    }),
+    model:
+      changed.model === model.search
+        ? model
+        : { ...model, search: changed.model },
     commands: [
-      SavedViewsCommands.LoadSavedViews.Interrupt(() =>
-        M.CompletedCancelLoadSavedViews({ version, more, debounce }),
-      ),
+      ...Command.mapMessages(changed.commands, findingSearch),
+      ...(changed.outMessage?._tag === "ReachedEnd"
+        ? [SavedViewsCommands.FocusSavedViewSearch()]
+        : []),
     ],
   };
 }
+
 function loadShortcuts(
   model: Model,
   removedId: string | null = null,
@@ -80,39 +75,19 @@ function loadShortcuts(
     ],
   };
 }
-function changeMode(model: Model, pickerMode: typeof PickerMode.Type) {
-  return loadSavedViews(
-    modifyFields(model, {
-      pickerMode: () => pickerMode,
-      savedViewPages: () => 1,
-      savedViews: () => AsyncData.Idle(),
-    }),
-    false,
-    pickerMode._tag === "Search",
-  );
-}
+
 function invalidatePicker(model: Model) {
-  return loadSavedViews(
+  return updateSearch(
     modifyFields(model, {
-      pickerMode: () => PickerMode.Quick(),
+      pickerMode: () => "Quick",
       shortcutVersion: (version) => version + 1,
       shortcuts: (shortcuts) =>
         AsyncData.isPending(shortcuts)
           ? loadedOrIdle(AsyncData.getData(shortcuts))
           : shortcuts,
     }),
+    search.Message.Reset({ retainResults: true }),
   );
-}
-
-function changeModeAndFocus(model: Model, pickerMode: typeof PickerMode.Type) {
-  const changed = changeMode(model, pickerMode);
-  return {
-    ...changed,
-    commands: [
-      ...(changed.commands ?? []),
-      SavedViewsCommands.FocusSavedViewSearch(),
-    ],
-  };
 }
 
 export function updateBrowser(
@@ -128,108 +103,75 @@ export function updateBrowser(
     GotSavedViewsPickerMessage: (message) => {
       const changed = Popover.update(model.picker, message.message);
       const folded = foldPicker(model, changed);
-      if (changed.outMessage?._tag === "Closed") {
-        const invalidated = invalidatePicker(folded.model);
-        return {
-          ...invalidated,
-          commands: [
-            ...(folded.commands ?? []),
-            ...(invalidated.commands ?? []),
-          ],
-        };
-      }
-      if (changed.outMessage?._tag !== "Opened") return folded;
-      const loaded = loadShortcuts(
-        modifyFields(folded.model, { pickerMode: () => PickerMode.Quick() }),
+      const next =
+        changed.outMessage?._tag === "Closed"
+          ? invalidatePicker(folded.model)
+          : changed.outMessage?._tag === "Opened"
+            ? loadShortcuts({ ...folded.model, pickerMode: "Quick" })
+            : folded;
+      return next === folded
+        ? folded
+        : {
+            ...next,
+            commands: [...(folded.commands ?? []), ...(next.commands ?? [])],
+          };
+    },
+    SavedViewSearchChanged: ({ value }) =>
+      value
+        ? updateSearch(
+            { ...model, pickerMode: "Search" },
+            search.Message.Search({ value }),
+          )
+        : updateSearch(
+            { ...model, pickerMode: "Quick" },
+            search.Message.Reset({ retainResults: false }),
+          ),
+    BrowseSavedViews: () => {
+      const opened = updateSearch(
+        { ...model, pickerMode: "Browse" },
+        search.Message.Browse(),
       );
       return {
-        ...loaded,
-        commands: [...(folded.commands ?? []), ...(loaded.commands ?? [])],
+        ...opened,
+        commands: [
+          ...(opened.commands ?? []),
+          SavedViewsCommands.FocusSavedViewSearch(),
+        ],
       };
     },
-    SavedViewSearchChanged: (message) =>
-      changeMode(
-        model,
-        message.value
-          ? PickerMode.Search({ query: message.value.slice(0, 200) })
-          : PickerMode.Quick(),
-      ),
-    BrowseSavedViews: () => changeModeAndFocus(model, PickerMode.Browse()),
-    ShowSavedViewShortcuts: () => changeModeAndFocus(model, PickerMode.Quick()),
-    LoadSavedViewShortcuts: () => loadShortcuts(model),
-    LoadedSavedViewShortcuts: (message) => {
-      if (message.version !== model.shortcutVersion || !model.picker.isOpen)
-        return { model };
-      const loaded = message.result._tag === "Success";
+    ShowSavedViewShortcuts: () => {
+      const opened = updateSearch(
+        { ...model, pickerMode: "Quick" },
+        search.Message.Reset({ retainResults: false }),
+      );
       return {
-        model: modifyFields(model, {
-          recentIds: (ids) => (loaded ? message.recentIds : ids),
-          shortcuts: () => message.result,
-        }),
+        ...opened,
+        commands: [
+          ...(opened.commands ?? []),
+          SavedViewsCommands.FocusSavedViewSearch(),
+        ],
+      };
+    },
+    LoadSavedViewShortcuts: () => loadShortcuts(model),
+    LoadedSavedViewShortcuts: ({ version, result, recentIds }) => {
+      if (version !== model.shortcutVersion || !model.picker.isOpen)
+        return { model };
+      const loaded = result._tag === "Success";
+      return {
+        model: {
+          ...model,
+          recentIds: loaded ? recentIds : model.recentIds,
+          shortcuts: result,
+        },
         commands: loaded
-          ? [
-              SavedViewsCommands.PersistRecentSavedViews({
-                ids: message.recentIds,
-              }),
-            ]
+          ? [SavedViewsCommands.PersistRecentSavedViews({ ids: recentIds })]
           : [],
       };
     },
-    CompletedCancelLoadSavedViews: (message) =>
-      message.version !== model.searchVersion ||
-      !model.picker.isOpen ||
-      model.pickerMode._tag === "Quick"
-        ? { model }
-        : {
-            model,
-            commands: [
-              SavedViewsCommands.LoadSavedViews({
-                version: message.version,
-                query: searchText(model).trim(),
-                more: message.more,
-                debounce: message.debounce,
-                cursor: message.more
-                  ? (Option.getOrUndefined(AsyncData.getData(model.savedViews))
-                      ?.nextCursor ?? null)
-                  : null,
-                pages: message.more ? 1 : model.savedViewPages,
-              }),
-            ],
-          },
-    LoadSavedViews: (message) =>
-      AsyncData.isPending(model.savedViews)
-        ? { model }
-        : loadSavedViews(model, message.more),
-    LoadedSavedViews: (message) => {
-      if (message.version !== model.searchVersion || !model.picker.isOpen)
-        return { model };
-      const { result } = message;
-      const page = result._tag === "Success" ? result.data : undefined;
-      const previous = AsyncData.getData(model.savedViews);
-      const savedViews =
-        result._tag === "Failure"
-          ? AsyncData.settle(model.savedViews, Result.fail(result.error))
-          : page && message.more
-            ? AsyncData.succeed({
-                ...page,
-                rows: mergeSavedViews(
-                  Option.getOrUndefined(previous)?.rows ?? [],
-                  page.rows,
-                ),
-              })
-            : result;
-      return {
-        commands:
-          message.more && page && !page.nextCursor && model.picker.isOpen
-            ? [SavedViewsCommands.FocusSavedViewSearch()]
-            : [],
-        model: modifyFields(model, {
-          savedViewPages: (pages) =>
-            page ? (message.more ? pages + 1 : message.pages) : pages,
-          savedViews: () => savedViews,
-        }),
-      };
-    },
+    GotFindingSearchMessage: ({ message }) =>
+      model.picker.isOpen && model.pickerMode !== "Quick"
+        ? updateSearch(model, message)
+        : { model },
   });
 }
 
@@ -238,16 +180,15 @@ export function refreshBrowser(
   removedId: string | null = null,
 ): FeatureUpdate<Model, Message> {
   const next = removedId
-    ? modifyFields(model, {
-        recentIds: (ids) => ids.filter((id) => id !== removedId),
-      })
+    ? { ...model, recentIds: model.recentIds.filter((id) => id !== removedId) }
     : model;
   if (!next.picker.isOpen) return { model: next };
   const shortcuts = loadShortcuts(next, removedId);
-  const results = loadSavedViews(shortcuts.model);
+  if (next.pickerMode === "Quick") return shortcuts;
+  const refreshed = updateSearch(shortcuts.model, search.Message.Refresh());
   return {
-    ...results,
-    commands: [...(shortcuts.commands ?? []), ...(results.commands ?? [])],
+    ...refreshed,
+    commands: [...(shortcuts.commands ?? []), ...(refreshed.commands ?? [])],
   };
 }
 
@@ -255,10 +196,10 @@ export function selectBrowser(
   model: Model,
   id: string,
 ): FeatureUpdate<Model, Message> {
-  const recentIds = rememberRecent(model.recentIds, id);
-  const closed = clearBrowser(
-    modifyFields(model, { recentIds: () => recentIds }),
-  );
+  const closed = clearBrowser({
+    ...model,
+    recentIds: rememberRecent(model.recentIds, id),
+  });
   return {
     ...closed,
     commands: [

@@ -59,6 +59,36 @@ from a listed row can use its summary while details load.
 [Trip ordering and limit](../server/src/taxi/trips.ts) ·
 [Trip records view](../client/src/features/trips/view.ts)
 
+## Build a second data app
+
+Start with the data the page already has. A report can pass the same array of
+stock records to a chart and a table. A `TableColumn<Stock>` pairs a heading
+with the function that renders a stock record. Pass the columns to
+`recordTable` for a summary or to `createRecordExplorer` to inspect a row.
+The shared renderer owns table captions, column headings and row identity.
+The explorer adds record selection and discussion.
+
+| Concern                   | Shared implementation                                                         | The application supplies                                              |
+| ------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Metrics and charts        | `metricGrid`, `seriesChart`                                                   | Measures, units, labels and links                                     |
+| Filters                   | `filterPanel`, `field`                                                        | Typed draft, fields, validation and apply message                     |
+| Record list and inspector | Loading, selection, stale responses, comment drafts and retries               | Row and detail schemas, record identity, data access and presentation |
+| Findings                  | Search, paging, versioned writes and draft recovery                           | Filter schema, persistence, picker layout and navigation              |
+| Report assistant          | `createAssistant` manages a scoped question, pending turn and follow-up token | How the scope becomes evidence, how to ask, and setup instructions    |
+
+The taxi picker has a shortcut mode, pinned and recent views, and keyboard
+focus rules. The trip table can show the first warehouse page while later
+pages arrive. The package and the app share the state transitions these
+surfaces have in common. Each surface can render them using its own layout.
+A configurable all-purpose page would force another app to account for
+taxi dialogs, routes and shortcuts just to show a table.
+
+The taxi Genie workspace also manages accepted operations, Stop, CSV downloads
+and permission grants. Those behaviors belong to its conversation service and
+workspace. A report that only needs a scoped question and answer can embed
+the smaller assistant. See the package guide for working component signatures.
+[Workbench UI usage](../packages/workbench-ui/README.md)
+
 ## Carry a query through one HTTP contract
 
 1. Define the endpoint's input, response, and error schemas in `AppApi`. The

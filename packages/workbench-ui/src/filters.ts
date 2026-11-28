@@ -1,13 +1,13 @@
-import { button, type Child, type H } from "./primitives";
+import { button } from "./frame/button.js";
+import type { Child, H } from "./primitives.js";
+export { field } from "./field.js";
 
-/** Controls and summaries belong to the caller; the panel knows no filter schema. */
 export function filterPanel<Message>(
   h: H<Message>,
   options: {
     readonly label: string;
-    readonly viewPicker: Child;
+    readonly toolbar?: readonly Child[];
     readonly fields: ReadonlyArray<Child>;
-    readonly saveAction: Child;
     readonly onApply: Message;
     readonly onReset?: Message;
     readonly hasChanges: boolean;
@@ -49,19 +49,9 @@ export function filterPanel<Message>(
           ),
         ],
       ),
-      h.div(
-        [h.Class("filter-toolbar")],
-        [
-          h.div(
-            [h.Class("filter-view")],
-            [
-              h.span([h.Class("filter-view-label")], ["View"]),
-              options.viewPicker,
-            ],
-          ),
-          options.saveAction,
-        ],
-      ),
+      ...(options.toolbar?.length
+        ? [h.div([h.Class("filter-toolbar")], [...options.toolbar])]
+        : []),
       ...(options.error
         ? [h.p([h.Role("alert"), h.Class("filter-error")], [options.error])]
         : []),

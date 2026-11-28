@@ -1,7 +1,7 @@
 import { type Filters, sameFilters } from "@dsiem/analytics-shared/filters";
 import { Dialog } from "@foldkit/ui";
 import { Option } from "effect";
-import { AsyncData, Command } from "foldkit";
+import { Command } from "foldkit";
 import { modifyFields } from "foldkit/struct";
 import { syncDialog } from "../../lib/dialog";
 import type { FeatureUpdate } from "../../lib/feature-update";
@@ -13,8 +13,14 @@ import {
   updateBrowser,
 } from "./browser-update";
 import * as SavedViewsCommands from "./commands";
-import { type BrowserMessage, Message as M, type Message } from "./messages";
-import { editorWorkflow, type Model } from "./model";
+import {
+  type BrowserMessage,
+  findingWrite,
+  Message as M,
+  type Message,
+} from "./messages";
+import type { Model } from "./model";
+import { writes } from "./workflow";
 
 type DialogId = keyof Model["dialogs"];
 
@@ -59,10 +65,11 @@ function updateDialog(
   id: DialogId,
   message: Dialog.Message,
 ): FeatureUpdate<Model, Message> {
+  const panel = model.writes.panel;
   const busy =
     id === "savedView"
-      ? Option.exists(model.editor, (editor) => editor.saving)
-      : model.savedViewBusy;
+      ? panel._tag === "Editor" && panel.editor.saving
+      : panel._tag === "Delete" && panel.busy;
   if (busy && message._tag === "RequestedClose") return { model };
 
   const changed = Dialog.update(model.dialogs[id], message);
@@ -74,16 +81,59 @@ function updateDialog(
   ) {
     commands.push(SavedViewsCommands.FocusSavedViewSearch());
   }
-  const dialogs = { ...model.dialogs, [id]: changed.model };
-  const next = modifyFields(model, { dialogs: () => dialogs });
+  const next = { ...model, dialogs: { ...model.dialogs, [id]: changed.model } };
+  if (
+    changed.outMessage?._tag !== "Closed" ||
+    panel._tag !== (id === "savedView" ? "Editor" : "Delete")
+  )
+    return { model: next, commands };
+  const canceled = writes.update(model.writes, writes.Message.Cancel());
+  return { model: { ...next, writes: canceled.model }, commands };
+}
+
+function updateWrites(
+  model: Model,
+  message: typeof writes.Message.Type,
+  context: Context,
+): FeatureUpdate<Model, Message> {
+  const changed = writes.update(model.writes, message);
+  const next =
+    changed.model === model.writes
+      ? model
+      : { ...model, writes: changed.model };
+  const commands = Command.mapMessages(changed.commands, findingWrite);
+  const result = changed.outMessage;
+  if (!result) return { model: next, commands };
+
+  const removedId = result._tag === "Deleted" ? result.id : null;
+  const saved = result._tag === "Saved" ? result.row : null;
+  const refreshed = withBrowser(
+    {
+      ...next,
+      selection:
+        saved && sameFilters(saved.filters, context.filters)
+          ? Option.some({
+              id: saved.id,
+              title: saved.title,
+              filters: saved.filters,
+            })
+          : Option.filter(next.selection, ({ id }) => id !== removedId),
+      notice: saved ? `Saved “${saved.title}”` : removedId ? "" : next.notice,
+    },
+    refreshBrowser(next.browser, removedId),
+  );
+  const focusSearch =
+    result._tag === "Pinned" ||
+    (result._tag === "WriteFailed" && result.action === "Pin");
   return {
-    model:
-      changed.outMessage?._tag === "Closed"
-        ? id === "savedView"
-          ? modifyFields(next, { editor: Option.none })
-          : modifyFields(next, { deleting: Option.none })
-        : next,
-    commands,
+    ...refreshed,
+    commands: [
+      ...commands,
+      ...(refreshed.commands ?? []),
+      ...(focusSearch && next.browser.picker.isOpen
+        ? [SavedViewsCommands.FocusSavedViewSearch()]
+        : []),
+    ],
   };
 }
 
@@ -92,131 +142,22 @@ function updateSavedViewsState(
   message: Message,
   context: Context,
 ): FeatureUpdate<Model, Message, Out> {
-  const editor = Option.getOrUndefined(model.editor);
-  const deleting = Option.getOrUndefined(model.deleting);
   const browser = (message: BrowserMessage) =>
     withBrowser(model, updateBrowser(model.browser, message));
 
   return M.match<FeatureUpdate<Model, Message, Out>>(message, {
-    CloseSavedView: () => ({
-      model: editor?.saving
-        ? model
-        : modifyFields(model, { editor: Option.none }),
-    }),
-    CloseDelete: () => ({
-      model: model.savedViewBusy
-        ? model
-        : modifyFields(model, { deleting: Option.none }),
-    }),
     GotSavedViewDialogMessage: ({ message }) =>
       updateDialog(model, "savedView", message),
     GotDeleteDialogMessage: ({ message }) =>
       updateDialog(model, "delete", message),
-    NewSavedView: () => ({
-      model,
-      commands: [SavedViewsCommands.CreateSavedViewDraft({})],
-    }),
-    CreatedSavedView: ({ id }) => ({
-      model: {
-        ...model,
-        editor: Option.some(editorWorkflow.create(id, context.filters)),
-      },
-    }),
-    EditSavedView: ({ savedView }) => ({
-      model: { ...model, editor: Option.some(editorWorkflow.edit(savedView)) },
-    }),
-    SavedViewChanged: ({ field, value }) =>
-      editor
-        ? {
-            model: {
-              ...model,
-              editor: Option.some(editorWorkflow.change(editor, field, value)),
-            },
-          }
-        : { model },
-    SaveSavedView: () => {
-      const pending = editor && editorWorkflow.submit(editor);
-      return pending
-        ? {
-            model: { ...model, editor: Option.some(pending) },
-            commands: [
-              SavedViewsCommands.SaveSavedView({ draft: pending.draft }),
-            ],
-          }
-        : { model };
-    },
-    SavedViewSaved: ({ result }) => {
-      const savedView = Option.getOrUndefined(AsyncData.getData(result));
-      const error = Option.getOrElse(AsyncData.getError(result), () => "");
-      const next = modifyFields(model, {
-        editor: (editor) =>
-          savedView
-            ? Option.none()
-            : Option.map(editor, (current) =>
-                editorWorkflow.reject(current, error),
-              ),
-        selection: (selection) =>
-          savedView && sameFilters(savedView.filters, context.filters)
-            ? Option.some({
-                id: savedView.id,
-                title: savedView.title,
-                filters: savedView.filters,
-              })
-            : selection,
-        notice: (notice) => (savedView ? `Saved “${savedView.title}”` : notice),
-      });
-      return withBrowser(next, refreshBrowser(next.browser));
-    },
-    PinSavedView: ({ savedView }) =>
-      model.savedViewBusy
-        ? { model }
-        : {
-            model: modifyFields(model, {
-              savedViewBusy: () => true,
-              savedViewError: () => "",
-            }),
-            commands: [SavedViewsCommands.PinSavedView({ savedView })],
-          },
-    DeleteSavedView: ({ savedView }) => ({
-      model: modifyFields(model, {
-        deleting: () => Option.some(savedView),
-        savedViewError: () => "",
-      }),
-    }),
-    ConfirmDelete: () =>
-      !deleting || model.savedViewBusy
-        ? { model }
-        : {
-            model: modifyFields(model, { savedViewBusy: () => true }),
-            commands: [
-              SavedViewsCommands.DeleteSavedView({ savedView: deleting }),
-            ],
-          },
-    MutatedSavedView: ({ result }) => {
-      const deleted = result._tag === "Success" && result.data.removed;
-      const error = Option.getOrElse(AsyncData.getError(result), () => "");
-      const removedId = deleted ? deleting?.id : undefined;
-      const next = modifyFields(model, {
-        savedViewBusy: () => false,
-        savedViewError: () => error,
-        notice: (notice) => (deleted ? "" : notice),
-        deleting: (deleting) => (deleted ? Option.none() : deleting),
-        selection: Option.filter((selection) => selection.id !== removedId),
-      });
-      const refreshed = withBrowser(
-        next,
-        refreshBrowser(next.browser, removedId),
-      );
-      return {
-        ...refreshed,
-        commands: [
-          ...(refreshed.commands ?? []),
-          ...(!deleting && model.browser.picker.isOpen
-            ? [SavedViewsCommands.FocusSavedViewSearch()]
-            : []),
-        ],
-      };
-    },
+    NewSavedView: () =>
+      updateWrites(
+        model,
+        writes.Message.New({ input: context.filters }),
+        context,
+      ),
+    GotFindingWriteMessage: ({ message }) =>
+      updateWrites(model, message, context),
     RestoreView: ({ savedView: { id, title, filters } }) => {
       const changed = withBrowser(
         modifyFields(model, {
@@ -244,12 +185,10 @@ function updateSavedViewsState(
     ShowSavedViewShortcuts: browser,
     LoadSavedViewShortcuts: browser,
     LoadedSavedViewShortcuts: browser,
-    CompletedCancelLoadSavedViews: browser,
     CompletedPersistRecentSavedViews: browser,
     CompletedRememberRecentSavedView: browser,
     CompletedFocusSavedViewSearch: browser,
-    LoadSavedViews: browser,
-    LoadedSavedViews: browser,
+    GotFindingSearchMessage: browser,
   });
 }
 
@@ -269,9 +208,12 @@ export function updateSavedViews(
   context: Context,
 ): FeatureUpdate<Model, Message, Out> {
   const result = updateSavedViewsState(model, message, context);
-  const { dialogs, editor, deleting } = result.model;
-  const savedView = syncDialog(dialogs.savedView, Option.isSome(editor));
-  const deletion = syncDialog(dialogs.delete, Option.isSome(deleting));
+  const {
+    dialogs,
+    writes: { panel },
+  } = result.model;
+  const savedView = syncDialog(dialogs.savedView, panel._tag === "Editor");
+  const deletion = syncDialog(dialogs.delete, panel._tag === "Delete");
   return {
     ...result,
     model:

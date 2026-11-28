@@ -1,8 +1,7 @@
 import { Input } from "@foldkit/ui";
 import type { Attribute } from "foldkit/html";
-import type { H } from "./primitives";
+import type { H } from "./primitives.js";
 
-/** A labeled Foldkit input with the same visual contract in every feature. */
 export const field = <Message>(
   h: H<Message>,
   options: {

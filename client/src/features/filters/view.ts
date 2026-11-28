@@ -1,7 +1,7 @@
 import type { DatePicker } from "@foldkit/ui";
 import { Option } from "effect";
 import { dateField } from "../../ui/date-field";
-import { field } from "../../ui/field";
+import { field } from "@dsiem/workbench-ui/filters";
 import type { H } from "../../ui/primitives";
 import type { Model } from "./model";
 

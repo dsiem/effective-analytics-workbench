@@ -17,7 +17,7 @@ import { Message as SavedViewMessage } from "../features/saved-views/messages";
 import { savedViewsView } from "../features/saved-views/view";
 import { inspectorView } from "../features/trips/inspector";
 import { tripsView } from "../features/trips/view";
-import { filterPanel } from "../ui/filter-panel";
+import { filterPanel } from "@dsiem/workbench-ui/filters";
 import { icon } from "../ui/icons";
 import { badge, button, type Child, card, title } from "../ui/primitives";
 import { pageContext } from "./analysis-context";
@@ -75,16 +75,6 @@ function filters(h: H, model: Model) {
     !applied || queryFor(model.filtersState.filterDraft) !== queryFor(applied);
   return filterPanel(h, {
     label: "Filters",
-    viewPicker: h.submodel({
-      slotId: "saved-views-picker",
-      view: savedViewsView,
-      model: model.savedViewsState,
-      viewInputs: {
-        filters: applied ?? {},
-        canSave: !!applied && !hasChanges,
-      },
-      toParentMessage: Features.savedViews.toParentMessage,
-    }),
     fields: filterFields(h, {
       draft: model.filtersState.filterDraft,
       datePickers: model.filtersState.datePickers,
@@ -97,24 +87,45 @@ function filters(h: H, model: Model) {
           FilterMessage.FilterChanged({ field, value }),
         ),
     }),
-    saveAction: button(h, {
-      label: h.span(
-        [h.Class("inline-flex items-center gap-2")],
-        [icon(h, "plus"), "Save view"],
+    toolbar: [
+      h.div(
+        [h.Class("filter-view")],
+        [
+          h.span([h.Class("filter-view-label")], ["View"]),
+          h.submodel({
+            slotId: "saved-views-picker",
+            view: savedViewsView,
+            model: model.savedViewsState,
+            viewInputs: {
+              filters: applied ?? {},
+              canSave: !!applied && !hasChanges,
+            },
+            toParentMessage: Features.savedViews.toParentMessage,
+          }),
+        ],
       ),
-      onClick: Features.savedViews.toParentMessage(
-        SavedViewMessage.NewSavedView(),
-      ),
-      disabled: !applied || hasChanges,
-      attributes: [
-        h.Attribute(
-          "title",
-          hasChanges
-            ? "Apply your changes before saving a view"
-            : "Save the applied filters",
+      button(h, {
+        label: h.span(
+          [h.Class("inline-flex items-center gap-2")],
+          [icon(h, "plus"), "Save view"],
         ),
-      ],
-    }),
+        onClick: Features.savedViews.toParentMessage(
+          SavedViewMessage.NewSavedView(),
+        ),
+        disabled:
+          !applied ||
+          hasChanges ||
+          model.savedViewsState.writes.panel._tag !== "Browse",
+        attributes: [
+          h.Attribute(
+            "title",
+            hasChanges
+              ? "Apply your changes before saving a view"
+              : "Save the applied filters",
+          ),
+        ],
+      }),
+    ],
     onApply: Features.filters.toParentMessage(FilterMessage.ApplyFilters()),
     ...(query || hasChanges
       ? {
@@ -297,7 +308,7 @@ export function view(model: Model, h: H): Document {
               }),
             ]
           : []),
-        ...(Option.isSome(model.savedViewsState.deleting)
+        ...(model.savedViewsState.writes.panel._tag === "Delete"
           ? [
               h.submodel({
                 slotId: "deleteDialog",
@@ -307,7 +318,7 @@ export function view(model: Model, h: H): Document {
               }),
             ]
           : []),
-        ...(Option.isSome(model.savedViewsState.editor)
+        ...(model.savedViewsState.writes.panel._tag === "Editor"
           ? [
               h.submodel({
                 slotId: "editor",

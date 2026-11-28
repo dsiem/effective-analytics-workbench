@@ -1,4 +1,4 @@
-import { Effect, Schema, type Scope } from "effect";
+import { Effect, Schema, type Duration, type Scope } from "effect";
 import type {
   SavedViewPin,
   SavedViewSearch,
@@ -7,6 +7,24 @@ import type {
 
 type Result<A> = Effect.Effect<A, unknown, Scope.Scope>;
 type Saved<F> = ReturnType<typeof savedViewSchemas<Schema.Codec<F>>>;
+
+export interface FindingOperations<F, E = string, R = never> {
+  readonly list: (
+    query: SavedViewSearch,
+  ) => Effect.Effect<Saved<F>["SavedViewsPage"]["Type"], E, R>;
+  readonly save: (
+    draft: Saved<F>["SavedViewInput"]["Type"],
+  ) => Effect.Effect<Saved<F>["SavedView"]["Type"], E, R>;
+  readonly pin: (
+    id: string,
+    pinned: boolean,
+    version: number,
+  ) => Effect.Effect<unknown, E, R>;
+  readonly remove: (
+    id: string,
+    version: number,
+  ) => Effect.Effect<unknown, E, R>;
+}
 
 interface FindingsClient<F> {
   readonly list: (request: {
@@ -31,20 +49,34 @@ const apiFailure = Schema.is(
   }),
 );
 
-/** Bind the generated savedViewsGroup client to the findings feature. */
-export function findingsClient<F>(
-  client: Effect.Effect<FindingsClient<F>, unknown>,
-) {
+type FailurePolicy<E> = {
+  readonly onError: (cause: unknown) => E;
+  readonly timeout?: Duration.Input;
+};
+
+export function findingsClient<F, R = never>(
+  client: Effect.Effect<FindingsClient<F>, unknown, R>,
+): FindingOperations<F, string, R>;
+export function findingsClient<F, E, R = never>(
+  client: Effect.Effect<FindingsClient<F>, unknown, R>,
+  options: FailurePolicy<E>,
+): FindingOperations<F, E, R>;
+export function findingsClient<F, E, R>(
+  client: Effect.Effect<FindingsClient<F>, unknown, R>,
+  options?: FailurePolicy<E>,
+): FindingOperations<F, E | string, R> {
+  const onError: (cause: unknown) => E | string =
+    options?.onError ??
+    ((problem) =>
+      apiFailure(problem)
+        ? problem.error.message
+        : "The findings request failed. Please retry.");
   function request<A>(call: (api: FindingsClient<F>) => Result<A>) {
     return client.pipe(
       Effect.flatMap(call),
       Effect.scoped,
-      Effect.timeout("30 seconds"),
-      Effect.mapError((problem) =>
-        apiFailure(problem)
-          ? problem.error.message
-          : "The findings request failed. Please retry.",
-      ),
+      Effect.timeout(options?.timeout ?? "30 seconds"),
+      Effect.mapError(onError),
     );
   }
   return {

@@ -1,5 +1,7 @@
 import { test } from "node:test";
+import assert from "node:assert/strict";
 import { Dialog } from "@foldkit/ui";
+import { Option } from "effect";
 import {
   click,
   Command,
@@ -13,8 +15,7 @@ import {
   text,
   within,
 } from "foldkit/scene";
-import { CreateSavedViewDraft } from "../src/features/saved-views/commands";
-import { Message } from "../src/features/saved-views/messages";
+import { writes } from "../src/features/saved-views/workflow";
 import { app, open } from "./app-scene";
 import { airportView } from "./saved-view-fixture";
 
@@ -54,13 +55,30 @@ for (const [query, dates] of [
 ] as const) {
   test(`the saved-view editor summarizes the scope (${dates})`, () => {
     const dialog = role("dialog", { name: "What would you call this view?" });
+    const model = open(`/trips${query}`);
+    const filters = Option.getOrThrow(model.location.filters);
+    const writing = writes.update(
+      model.savedViewsState.writes,
+      writes.Message.New({ input: filters }),
+    );
+    const prepare = writing.commands?.[0];
+    assert.ok(prepare);
     scene(
       app,
-      given(open(`/trips${query}`)),
+      given(model),
       click(save),
       Command.resolve(
-        CreateSavedViewDraft,
-        Message.CreatedSavedView({ id: airportView.id }),
+        prepare,
+        writes.Message.DraftPrepared({
+          generation: writing.model.generation,
+          draft: {
+            id: airportView.id,
+            filters,
+            title: "",
+            body: "",
+            version: null,
+          },
+        }),
       ),
       ...showEditor,
       expect(dialog).toContainText(dates),

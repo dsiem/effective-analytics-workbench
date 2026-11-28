@@ -10,7 +10,7 @@ export function appliedView(
   const selection = Option.getOrUndefined(model.selection);
   if (selection && sameFilters(selection.filters, filters)) return selection;
   const results = Option.getOrUndefined(
-    AsyncData.getData(model.browser.savedViews),
+    AsyncData.getData(model.browser.search.data),
   );
   const shortcuts = Option.getOrUndefined(
     AsyncData.getData(model.browser.shortcuts),

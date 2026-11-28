@@ -303,6 +303,20 @@
     padding: 0;
     border: 0;
   }
+  .record-explorer [data-fixed-rows] table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .record-explorer [data-fixed-rows] td {
+    height: auto;
+    padding-block: 0;
+    border-block: 0;
+  }
+  .record-fixed-cell {
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
   .record-explorer button,
   .record-explorer select,
   .record-explorer textarea {
