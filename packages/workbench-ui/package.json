@@ -27,10 +27,30 @@
       "import": "./dist/findings.js"
     },
     "./styles.css": "./styles.css",
+    "./assistant": {
+      "types": "./dist/assistant.d.ts",
+      "workbench-source": "./src/assistant.ts",
+      "import": "./dist/assistant.js"
+    },
     "./record-explorer": {
       "types": "./dist/record-explorer.d.ts",
       "workbench-source": "./src/record-explorer.ts",
       "import": "./dist/record-explorer.js"
+    },
+    "./workspace": {
+      "types": "./dist/workspace.d.ts",
+      "workbench-source": "./src/workspace.ts",
+      "import": "./dist/workspace.js"
+    },
+    "./run-page": {
+      "types": "./dist/run-page.d.ts",
+      "workbench-source": "./src/run-page.ts",
+      "import": "./dist/run-page.js"
+    },
+    "./assistant-answer": {
+      "types": "./dist/assistant-answer.d.ts",
+      "workbench-source": "./src/assistant-answer.ts",
+      "import": "./dist/assistant-answer.js"
     }
   },
   "scripts": {
