@@ -25,7 +25,6 @@ type PickerModel = Model & {
   readonly customFilters: boolean;
   readonly canSave: boolean;
   readonly mutationBusy: boolean;
-  readonly canMutate: boolean;
   readonly mutationError: Notice;
 };
 
@@ -78,7 +77,6 @@ function viewRow(
           button(h, {
             label: icon(h, savedView.pinned ? "pin" : "pin-off"),
             onClick: findingWrite(writes.Message.Pin({ row: savedView })),
-            disabled: !model.canMutate,
             busy: model.mutationBusy,
             size: "icon",
             variant: "ghost",
@@ -91,7 +89,7 @@ function viewRow(
           button(h, {
             label: icon(h, "pencil"),
             onClick: findingWrite(writes.Message.Edit({ row: savedView })),
-            disabled: !model.canMutate,
+            busy: model.mutationBusy,
             size: "icon",
             variant: "ghost",
             attributes: [h.AriaLabel(`Edit ${savedView.title}`)],
@@ -99,7 +97,7 @@ function viewRow(
           button(h, {
             label: icon(h, "trash-2"),
             onClick: findingWrite(writes.Message.Delete({ row: savedView })),
-            disabled: !model.canMutate,
+            busy: model.mutationBusy,
             size: "icon",
             variant: "ghost",
             attributes: [h.AriaLabel(`Delete ${savedView.title}`)],
@@ -354,6 +352,7 @@ export function savedViewBrowser(h: H, model: PickerModel) {
             label: "Save this view",
             onClick: M.NewSavedView(),
             disabled: !model.canSave,
+            busy: model.mutationBusy,
             size: "small",
           }),
         ],

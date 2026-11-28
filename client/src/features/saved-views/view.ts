@@ -17,10 +17,8 @@ export const savedViewsView = defineView<Model, typeof M.Type, ViewInputs>(
       ...model.browser,
       selected: appliedView(model, filters),
       customFilters: !sameFilters(filters, {}),
-      canSave: canSave && panel._tag === "Browse",
-      canMutate: panel._tag === "Browse",
-      mutationBusy:
-        panel._tag === "Pinning" || (panel._tag === "Delete" && panel.busy),
+      canSave,
+      mutationBusy: panel._tag === "Pinning" || panel._tag === "Preparing",
       mutationError: panel._tag === "Browse" ? (panel.error ?? "") : "",
     });
   },
