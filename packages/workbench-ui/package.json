@@ -70,7 +70,12 @@
       "workbench-source": "./src/frame/theme.ts",
       "import": "./dist/frame/theme.js"
     },
-    "./workspace.css": "./workspace.css"
+    "./workspace.css": "./workspace.css",
+    "./filters": {
+      "types": "./dist/filters.d.ts",
+      "workbench-source": "./src/filters.ts",
+      "import": "./dist/filters.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

@@ -1,12 +1,25 @@
-import { Effect, Schema } from "effect";
-import { AsyncData, Command, Runtime } from "foldkit";
+import { Effect, Option, Schema } from "effect";
+import { Runtime, type Update } from "foldkit";
 import { defineMessageUnion } from "foldkit/message";
 import type { Html } from "foldkit/html";
 import { type Child, type H, card, panelHeader } from "./primitives.js";
-import { recordGrid, RecordViewport, recordWindow } from "./record-grid.js";
-import { recordViewportMount } from "./record-viewport.js";
-export { recordViewportMount } from "./record-viewport.js";
-export { RecordViewport, recordGrid, recordWindow } from "./record-grid.js";
+import { recordGrid } from "./record-grid.js";
+import {
+  RecordViewport,
+  recordViewportMount,
+  recordWindow,
+} from "./record-viewport.js";
+import { recordInspector } from "./record-inspector.js";
+import { recordList } from "./record-list.js";
+import type { TableColumn } from "./report.js";
+export { recordList, type RecordPage } from "./record-list.js";
+export { recordInspector } from "./record-inspector.js";
+export {
+  RecordViewport,
+  recordViewportMount,
+  recordWindow,
+} from "./record-viewport.js";
+export { recordGrid } from "./record-grid.js";
 
 const Note = Schema.Struct({
   id: Schema.String,
@@ -47,12 +60,6 @@ export function commentList<M>(
     ),
   );
 }
-const Draft = Schema.Struct({
-  body: Schema.String,
-  retryId: Schema.NullOr(Schema.String),
-  error: Schema.String,
-});
-const blank = { body: "", retryId: null, error: "" };
 const Notes = Schema.Struct({
   rows: Schema.Array(Note),
   nextCursor: Schema.NullOr(Schema.String),
@@ -74,17 +81,21 @@ export interface RecordExplorerOptions<
 > {
   readonly row: Schema.Codec<Row>;
   readonly detail: Schema.Codec<Detail>;
-  readonly sort: Schema.Codec<Sort>;
+  readonly sort?: Schema.Codec<Sort>;
   readonly sorts: readonly [Sort, ...Sort[]];
-  readonly sortLabel: (sort: Sort) => string;
+  readonly sortLabel?: (sort: Sort) => string;
   readonly key: (row: Row) => string;
   readonly caption: string;
-  readonly columns: readonly {
-    readonly header: string;
-    readonly value: (row: Row) => Child;
-  }[];
-  readonly heading: <M>(h: H<M>) => readonly Html[];
-  readonly inspectLabel: (row: Row) => string;
+  readonly fixedRowHeight?: number;
+  readonly columns: readonly (
+    | TableColumn<Row>
+    | {
+        readonly header: string;
+        readonly value: (row: Row) => Child;
+      }
+  )[];
+  readonly heading?: <M>(h: H<M>) => readonly Html[];
+  readonly inspectLabel?: (row: Row) => string;
   readonly inspector: <M>(h: H<M>, detail: Detail) => readonly Html[];
   readonly load: (sort: Sort) => Result<readonly Row[]>;
   readonly inspect: (row: Row) => Result<Detail>;
@@ -96,290 +107,93 @@ export function createRecordExplorer<
   Detail extends object,
   Sort extends string,
 >(options: RecordExplorerOptions<Row, Detail, Sort>) {
-  const revision = Schema.Int;
-  const rows = Schema.Array(options.row);
+  const { fixedRowHeight } = options;
+  if (
+    fixedRowHeight !== undefined &&
+    (!Number.isFinite(fixedRowHeight) || fixedRowHeight <= 0)
+  )
+    throw new RangeError("fixedRowHeight must be a positive number of pixels.");
+  const sortCodec: Schema.Codec<Sort> =
+    options.sort ?? Schema.Literals(options.sorts);
+  const decodeSort = Schema.decodeUnknownSync(sortCodec);
+  const inspectLabel =
+    options.inspectLabel ?? ((row: Row) => `Inspect ${options.key(row)}`);
+  const list = recordList({
+    row: options.row,
+    query: sortCodec,
+    error: Schema.String,
+    load: options.load,
+  });
+  const inspection = recordInspector({
+    row: options.row,
+    detail: options.detail,
+    error: Schema.String,
+    key: options.key,
+    inspect: options.inspect,
+    ...(options.comments
+      ? { comments: { ...options.comments, note: Note, cursor: Schema.String } }
+      : {}),
+  });
+  const columns = options.columns.map((column) =>
+    "cell" in column ? column : { header: column.header, cell: column.value },
+  );
   const M = defineMessageUnion({
-    Sort: { sort: options.sort },
+    ...list.messageFields,
+    ...inspection.messageFields,
+    Sort: { sort: sortCodec },
     RetryList: {},
-    Scrolled: { generation: Schema.Int, viewport: RecordViewport },
-    Listed: { revision, rows },
-    ListFailed: { revision, error: Schema.String },
-    Inspect: { row: options.row },
-    RetryDetail: {},
-    Close: {},
-    Inspected: { revision, detail: options.detail },
-    InspectFailed: { revision, error: Schema.String },
     LoadNotes: {},
-    NotesLoaded: { revision, page: Notes },
-    NotesFailed: { revision, error: Schema.String },
-    Edit: { body: Schema.String },
-    Post: {},
-    Posted: { revision, comment: Note },
-    PostFailed: { revision, id: Schema.String, error: Schema.String },
+    Scrolled: { generation: Schema.Int, viewport: RecordViewport },
   });
   const Model = Schema.Struct({
-    sort: options.sort,
-    revision,
-    listGeneration: Schema.Int,
+    ...list.Model.fields,
+    ...inspection.Model.fields,
+    sort: sortCodec,
     viewport: Schema.NullOr(RecordViewport),
-    rows: AsyncData.Schema(rows, Schema.String).schema,
-    selected: Schema.NullOr(options.row),
-    detail: AsyncData.Schema(options.detail, Schema.String).schema,
-    notes: Notes,
-    reading: Schema.Boolean,
-    readError: Schema.String,
-    drafts: Schema.Record(Schema.String, Draft),
-    posting: Schema.Boolean,
   });
   type Model = typeof Model.Type;
   type Message = typeof M.Type;
-  const list = Command.define("LoadRecords", {
-    args: { sort: options.sort, revision },
-    messages: [M.Listed, M.ListFailed],
-    execute: ({ sort, revision }) =>
-      options.load(sort).pipe(
-        Effect.match({
-          onSuccess: (rows) => M.Listed({ revision, rows }),
-          onFailure: (error) => M.ListFailed({ revision, error }),
-        }),
-      ),
-  });
-  const inspect = Command.define("InspectRecord", {
-    args: { row: options.row, revision },
-    messages: [M.Inspected, M.InspectFailed],
-    execute: ({ row, revision }) =>
-      options.inspect(row).pipe(
-        Effect.match({
-          onSuccess: (detail) => M.Inspected({ revision, detail }),
-          onFailure: (error) => M.InspectFailed({ revision, error }),
-        }),
-      ),
-  });
-  const comments = options.comments;
-  const read = Command.define("ReadRecordNotes", {
-    args: { row: options.row, revision, cursor: Schema.NullOr(Schema.String) },
-    messages: [M.NotesLoaded, M.NotesFailed],
-    execute: ({ row, revision, cursor }) =>
-      (comments
-        ? comments.list(row, cursor)
-        : Effect.succeed({ rows: [], nextCursor: null })
-      ).pipe(
-        Effect.match({
-          onSuccess: (page) => M.NotesLoaded({ revision, page }),
-          onFailure: (error) => M.NotesFailed({ revision, error }),
-        }),
-      ),
-  });
-  const post = Command.define("PostRecordNote", {
-    args: {
-      row: options.row,
-      revision,
-      retryId: Schema.NullOr(Schema.String),
-      body: Schema.String,
-    },
-    messages: [M.Posted, M.PostFailed],
-    execute: ({ row, revision, retryId, body }) =>
-      Effect.gen(function* () {
-        const id = retryId ?? crypto.randomUUID();
-        return yield* (
-          comments
-            ? comments.post(row, id, body)
-            : Effect.fail("Comments are unavailable.")
-        ).pipe(
-          Effect.match({
-            onSuccess: (comment) => M.Posted({ revision, comment }),
-            onFailure: (error) => M.PostFailed({ revision, id, error }),
-          }),
-        );
-      }),
-  });
-  const reset = {
-    selected: null,
-    detail: AsyncData.Idle(),
-    notes: { rows: [], nextCursor: null },
-    reading: false,
-    readError: "",
-    posting: false,
-  };
-  const draftFor = (model: Model) => {
-    const key = model.selected && options.key(model.selected);
-    return key !== null && Object.hasOwn(model.drafts, key)
-      ? (model.drafts[key] ?? blank)
-      : blank;
-  };
-  function load(sort: Sort, revision: number, drafts: Model["drafts"]) {
-    return {
-      model: {
-        ...reset,
-        drafts,
-        sort,
-        revision,
-        listGeneration: revision,
-        viewport: null,
-        rows: AsyncData.Loading(),
-      },
-      commands: [list({ sort, revision })],
-    };
-  }
-  function update(model: Model, msg: Message) {
-    if ("revision" in msg && msg.revision !== model.revision) return { model };
-    const next = model.revision + 1;
+  const load = (model: Model, sort: Sort) =>
+    list.load<Model>(
+      { ...model, inspector: Option.none(), sort, viewport: null },
+      sort,
+    );
+  function update(model: Model, msg: Message): Update.Return<Model, Message> {
     switch (msg._tag) {
-      case "Sort":
-        return model.posting ? { model } : load(msg.sort, next, model.drafts);
-      case "RetryList":
-        return load(model.sort, next, model.drafts);
       case "Scrolled":
-        return msg.generation === model.listGeneration
-          ? { model: { ...model, viewport: msg.viewport } }
-          : { model };
-      case "Listed":
         return {
-          model: { ...model, rows: AsyncData.Success({ data: msg.rows }) },
+          model:
+            msg.generation === model.loadGeneration
+              ? { ...model, viewport: msg.viewport }
+              : model,
         };
-      case "ListFailed":
-        return {
-          model: { ...model, rows: AsyncData.Failure({ error: msg.error }) },
-        };
-      case "Close":
-        return model.posting
+      case "Sort":
+        return Option.isSome(model.postingId)
           ? { model }
-          : { model: { ...model, ...reset, revision: next } };
+          : load(model, msg.sort);
+      case "RetryList":
+        return load(model, model.sort);
+      case "Listed":
+      case "RecordBatch":
+      case "RecordsFinished":
+        return { model: list.update(model, msg) };
       case "Inspect":
-        if (model.posting) return { model };
-        return {
-          model: {
-            ...model,
-            ...reset,
-            revision: next,
-            selected: msg.row,
-            detail: AsyncData.Loading(),
-            reading: !!comments,
-          },
-          commands: [
-            inspect({ row: msg.row, revision: next }),
-            ...(comments
-              ? [read({ row: msg.row, cursor: null, revision: next })]
-              : []),
-          ],
-        };
-      case "RetryDetail":
-        return model.selected && model.detail._tag === "Failure"
-          ? {
-              model: { ...model, detail: AsyncData.Loading() },
-              commands: [
-                inspect({ row: model.selected, revision: model.revision }),
-              ],
-            }
-          : { model };
-      case "Inspected":
-        return {
-          model: { ...model, detail: AsyncData.Success({ data: msg.detail }) },
-        };
-      case "InspectFailed":
-        return {
-          model: { ...model, detail: AsyncData.Failure({ error: msg.error }) },
-        };
-      case "LoadNotes":
-        return model.selected &&
-          !model.reading &&
-          (model.notes.nextCursor || model.readError)
-          ? {
-              model: { ...model, reading: true, readError: "" },
-              commands: [
-                read({
-                  row: model.selected,
-                  revision: model.revision,
-                  cursor: model.notes.nextCursor,
-                }),
-              ],
-            }
-          : { model };
-      case "NotesLoaded": {
-        const ids = new Set(model.notes.rows.map((note) => note.id));
-        return {
-          model: {
-            ...model,
-            reading: false,
-            notes: {
-              rows: [
-                ...model.notes.rows,
-                ...msg.page.rows.filter((note) => !ids.has(note.id)),
-              ],
-              nextCursor: msg.page.nextCursor,
-            },
-          },
-        };
-      }
-      case "NotesFailed":
-        return { model: { ...model, reading: false, readError: msg.error } };
+      case "Close":
       case "Edit":
-        if (!model.selected || model.posting) return { model };
-        return {
-          model: {
-            ...model,
-            drafts: {
-              ...model.drafts,
-              [options.key(model.selected)]: { ...blank, body: msg.body },
-            },
-          },
-        };
-      case "Post": {
-        const { body, retryId } = draftFor(model);
-        if (!model.selected || !comments || model.posting || !body.trim())
-          return { model };
-        return {
-          model: { ...model, posting: true },
-          commands: [
-            post({
-              row: model.selected,
-              revision: model.revision,
-              body,
-              retryId,
-            }),
-          ],
-        };
-      }
-      case "PostFailed":
-        if (!model.selected) return { model };
-        return {
-          model: {
-            ...model,
-            posting: false,
-            drafts: {
-              ...model.drafts,
-              [options.key(model.selected)]: {
-                ...draftFor(model),
-                retryId: msg.id,
-                error: msg.error,
-              },
-            },
-          },
-        };
-      case "Posted": {
-        if (!model.selected) return { model };
-        const drafts = { ...model.drafts };
-        delete drafts[options.key(model.selected)];
-        return {
-          model: {
-            ...model,
-            posting: false,
-            drafts,
-            notes: {
-              ...model.notes,
-              rows: [
-                msg.comment,
-                ...model.notes.rows.filter(
-                  (note) => note.id !== msg.comment.id,
-                ),
-              ],
-            },
-          },
-        };
-      }
+        if (Option.isSome(model.postingId)) return { model };
+        break;
     }
+    const message =
+      msg._tag === "LoadNotes"
+        ? M.LoadComments({
+            more: Option.exists(model.inspector, ({ comments }) =>
+              Option.exists(comments.data, (page) => page.nextCursor !== null),
+            ),
+          })
+        : msg;
+    const changed = inspection.update(model, message);
+    return { model: changed.model, commands: changed.commands ?? [] };
   }
-
   function view(model: Model, h: H<Message>) {
     const action = (
       text: string,
@@ -398,8 +212,19 @@ export function createRecordExplorer<
       );
     const status = (text: string) => h.p([h.Role("status")], [text]);
     const alert = (text: string) => h.p([h.Role("alert")], [text]);
-    const selected = model.selected;
-    const draft = draftFor(model);
+    const inspector = Option.getOrUndefined(model.inspector);
+    const selected = inspector?.row;
+    const draft =
+      selected && Object.hasOwn(model.commentDrafts, options.key(selected))
+        ? model.commentDrafts[options.key(selected)]
+        : undefined;
+    const posting = Option.isSome(model.postingId);
+    const notes = inspector && Option.getOrUndefined(inspector.comments.data);
+    const reading = inspector && Option.isSome(inspector.comments.read);
+    const comments = options.comments;
+    const readError =
+      inspector && Option.getOrUndefined(inspector.comments.error);
+    const postError = Option.getOrUndefined(model.postError);
     const sort = h.label(
       [],
       [
@@ -408,84 +233,106 @@ export function createRecordExplorer<
           [
             h.AriaLabel("Sort records"),
             h.Value(model.sort),
-            h.Disabled(model.posting),
-            h.OnChange((value) =>
-              M.Sort({ sort: Schema.decodeUnknownSync(options.sort)(value) }),
-            ),
+            h.Disabled(posting),
+            h.OnChange((value) => M.Sort({ sort: decodeSort(value) })),
           ],
           options.sorts.map((value) =>
-            h.option([h.Value(value)], [options.sortLabel(value)]),
+            h.option([h.Value(value)], [options.sortLabel?.(value) ?? value]),
           ),
         ),
       ],
     );
-    const records = model.rows;
-    const details = model.detail;
+    const records = model.preview;
+    const details = inspector?.details;
     return h.main(
       [h.Class("record-explorer")],
       [
-        ...options.heading(h),
+        ...(options.heading?.(h) ?? []),
         card(h, [
-          panelHeader(h, { title: options.caption, actions: [sort] }),
-          ...(records._tag === "Success"
-            ? records.data.length
+          panelHeader(h, {
+            title: options.caption,
+            actions: options.sorts.length > 1 ? [sort] : [],
+          }),
+          ...(records._tag === "Ready"
+            ? records.rows.length
               ? [
-                  recordGrid(h, records.data, {
+                  recordGrid(h, records.rows, {
                     caption: options.caption,
                     headers: [
-                      ...options.columns.map((column) => column.header),
+                      ...columns.map((column) => column.header),
                       "Inspect",
                     ],
-                    window: recordWindow(
-                      records.data.length,
-                      model.viewport ?? undefined,
-                    ),
                     region: [
-                      h.Key(`records-${model.listGeneration}`),
+                      h.Key(`records-${model.loadGeneration}`),
+                      ...(fixedRowHeight === undefined
+                        ? []
+                        : [
+                            h.DataAttribute("fixed-rows", ""),
+                            h.OnMount(
+                              recordViewportMount(
+                                model.loadGeneration,
+                                M.Scrolled,
+                                fixedRowHeight,
+                              ),
+                            ),
+                          ]),
                       h.Role("region"),
                       h.AriaLabel(options.caption),
                       h.Tabindex(0),
-                      h.OnMount(
-                        recordViewportMount(
-                          model.listGeneration,
-                          ({ generation, viewport }) =>
-                            M.Scrolled({ generation, viewport }),
-                        ),
-                      ),
                     ],
+                    ...(fixedRowHeight === undefined
+                      ? {}
+                      : {
+                          window: recordWindow(
+                            records.rows.length,
+                            model.viewport ?? undefined,
+                            fixedRowHeight,
+                          ),
+                        }),
                     key: options.key,
-                    cells: (row, tabbable) => [
-                      ...options.columns.map((column) => column.value(row)),
-                      action(
-                        options.inspectLabel(row),
-                        M.Inspect({ row }),
-                        model.posting,
-                        tabbable,
-                      ),
-                    ],
+                    cells: (row, tabbable) => {
+                      const cells = [
+                        ...columns.map((column) => column.cell(row)),
+                        action(
+                          inspectLabel(row),
+                          M.Inspect({ row }),
+                          posting,
+                          tabbable,
+                        ),
+                      ];
+                      return fixedRowHeight === undefined
+                        ? cells
+                        : cells.map((cell) =>
+                            h.div(
+                              [
+                                h.Class("record-fixed-cell"),
+                                h.Style({ height: `${fixedRowHeight}px` }),
+                              ],
+                              [cell],
+                            ),
+                          );
+                    },
                   }),
                 ]
               : [status("No matching records.")]
-            : records._tag === "Failure"
+            : records._tag === "Failed"
               ? [
                   alert(records.error),
                   action("Retry loading records", M.RetryList()),
                 ]
               : [status("Loading records…")]),
         ]),
-        ...(selected
+        ...(selected && inspector && details
           ? [
               h.section(
                 [
                   h.Class("record-inspector card"),
-                  h.AriaLabel(options.inspectLabel(selected)),
+                  h.AriaLabel(inspectLabel(selected)),
                 ],
                 [
                   panelHeader(h, {
-                    title: options.inspectLabel(selected),
-                    actions: [
-                      action("Close details", M.Close(), model.posting),
-                    ],
+                    title: inspectLabel(selected),
+                    actions: [action("Close details", M.Close(), posting)],
                   }),
                   ...(details._tag === "Success"
                     ? options.inspector(h, details.data)
@@ -498,17 +345,17 @@ export function createRecordExplorer<
                   ...(comments
                     ? [
                         h.h3([], ["Comments"]),
-                        commentList(h, model.notes.rows),
-                        ...(model.reading
+                        commentList(h, notes?.rows ?? []),
+                        ...(reading
                           ? [status("Loading comments…")]
-                          : model.readError
+                          : readError
                             ? [
-                                alert(model.readError),
+                                alert(readError),
                                 action("Retry loading comments", M.LoadNotes()),
                               ]
-                            : model.notes.nextCursor
+                            : notes?.nextCursor
                               ? [action("Load older comments", M.LoadNotes())]
-                              : model.notes.rows.length
+                              : (notes?.rows ?? []).length
                                 ? []
                                 : [h.p([], ["No comments yet."])]),
                         h.form(
@@ -519,22 +366,24 @@ export function createRecordExplorer<
                               [
                                 "Add a comment",
                                 h.textarea([
-                                  h.Value(draft.body),
+                                  h.Value(draft?.body ?? ""),
                                   h.OnInput((body) => M.Edit({ body })),
                                   h.Maxlength(4000),
-                                  h.Disabled(model.posting),
+                                  h.Disabled(posting),
                                 ]),
                               ],
                             ),
-                            ...(!model.posting && draft.error
-                              ? [alert(draft.error)]
+                            ...(!posting && postError
+                              ? [alert(postError)]
                               : []),
                             h.button(
                               [
                                 h.Type("submit"),
-                                h.Disabled(model.posting || !draft.body.trim()),
+                                h.Disabled(
+                                  posting || !(draft?.body ?? "").trim(),
+                                ),
                               ],
-                              [model.posting ? "Posting…" : "Post comment"],
+                              [posting ? "Posting…" : "Post comment"],
                             ),
                           ],
                         ),
@@ -551,7 +400,16 @@ export function createRecordExplorer<
   return {
     Model,
     Message: M,
-    init: () => load(options.sorts[0], 1, {}),
+    init: () =>
+      load(
+        {
+          ...list.init(),
+          ...inspection.init(),
+          viewport: null,
+          sort: options.sorts[0],
+        },
+        options.sorts[0],
+      ),
     update,
     view,
   };

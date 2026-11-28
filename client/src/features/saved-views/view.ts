@@ -1,6 +1,5 @@
 import { defineView } from "foldkit/submodel";
 import { type Filters, sameFilters } from "@dsiem/analytics-shared/filters";
-import { Option } from "effect";
 import { savedViewBrowser } from "./browser-view";
 import type { Model } from "./model";
 import { appliedView } from "./selection";
@@ -12,13 +11,17 @@ type ViewInputs = {
 };
 
 export const savedViewsView = defineView<Model, typeof M.Type, ViewInputs>(
-  (model, { filters, canSave }, h) =>
-    savedViewBrowser(h, {
+  (model, { filters, canSave }, h) => {
+    const panel = model.writes.panel;
+    return savedViewBrowser(h, {
       ...model.browser,
       selected: appliedView(model, filters),
       customFilters: !sameFilters(filters, {}),
-      canSave,
-      mutationBusy: model.savedViewBusy,
-      mutationError: Option.isSome(model.deleting) ? "" : model.savedViewError,
-    }),
+      canSave: canSave && panel._tag === "Browse",
+      canMutate: panel._tag === "Browse",
+      mutationBusy:
+        panel._tag === "Pinning" || (panel._tag === "Delete" && panel.busy),
+      mutationError: panel._tag === "Browse" ? (panel.error ?? "") : "",
+    });
+  },
 );

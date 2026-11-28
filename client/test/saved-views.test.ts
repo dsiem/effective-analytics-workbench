@@ -6,7 +6,10 @@ import type {
   SavedView,
   SavedViewsPage,
 } from "@dsiem/analytics-shared/saved-views";
-import { Message as M } from "../src/features/saved-views/messages";
+import {
+  findingSearch,
+  Message as M,
+} from "../src/features/saved-views/messages";
 import { init as initBrowser } from "../src/features/saved-views/browser-model";
 import {
   refreshBrowser,
@@ -18,7 +21,8 @@ import {
   visibleSavedViews,
 } from "../src/features/saved-views/picker";
 import { updateSavedViews as update } from "../src/features/saved-views/update";
-import { fail, succeed } from "../src/lib/command-result";
+import { succeed } from "../src/lib/command-result";
+import { search } from "../src/features/saved-views/workflow";
 
 const context = { filters: {} };
 const row = (index: number): SavedView => ({
@@ -43,17 +47,15 @@ const openedBrowser = () =>
     M.GotSavedViewsPickerMessage({ message: Popover.Message.RequestedOpen() }),
   ).model;
 const result = (
-  version: number,
+  generation: number,
   rows: SavedView[],
-  more = false,
   nextCursor: SavedViewsPage["nextCursor"] = null,
 ) =>
-  M.LoadedSavedViews({
-    version,
-    result: succeed({ rows, nextCursor }),
-    more,
-    pages: 1,
-  });
+  findingSearch(
+    search.Message.Listed({ generation, page: { rows, nextCursor } }),
+  );
+const canceled = (generation: number) =>
+  findingSearch(search.Message.Canceled({ generation }));
 
 test("a replaced search cannot start from an old cancellation or accept an old response", () => {
   const first = updateBrowser(
@@ -64,21 +66,18 @@ test("a replaced search cannot start from an old cancellation or accept an old r
     first,
     M.SavedViewSearchChanged({ value: "latest" }),
   ).model;
-  const staleCancel = updateBrowser(
-    latest,
-    M.CompletedCancelLoadSavedViews({
-      version: first.searchVersion,
-      more: false,
-      debounce: true,
-    }),
-  );
+  const staleCancel = updateBrowser(latest, canceled(first.search.generation));
   assert.equal(staleCancel.commands?.length ?? 0, 0);
-  const stale = result(first.searchVersion, [row(1)]);
+  const stale = result(first.search.generation, [row(1)]);
   const pending = updateBrowser(staleCancel.model, stale).model;
   assert.deepEqual(visibleSavedViews(pending), []);
-  const current = updateBrowser(
+  const active = updateBrowser(
     pending,
-    result(latest.searchVersion, [row(2)]),
+    canceled(latest.search.generation),
+  ).model;
+  const current = updateBrowser(
+    active,
+    result(latest.search.generation, [row(2)]),
   ).model;
   const staleResponse = updateBrowser(current, stale).model;
   assert.deepEqual(
@@ -102,16 +101,12 @@ test("closing and reopening cannot accept a previous session's search or shortcu
   ).model;
   const staleCancel = updateBrowser(
     reopened,
-    M.CompletedCancelLoadSavedViews({
-      version: first.searchVersion,
-      more: false,
-      debounce: true,
-    }),
+    canceled(first.search.generation),
   );
   assert.equal(staleCancel.commands?.length ?? 0, 0);
   const late = updateBrowser(
     staleCancel.model,
-    result(first.searchVersion, [row(1)]),
+    result(first.search.generation, [row(1)]),
   ).model;
   const hydrated = updateBrowser(
     late,
@@ -134,30 +129,39 @@ test("a failed continuation keeps results and its retry cursor, and a successful
   };
   const first = updateBrowser(
     searching,
-    result(searching.searchVersion, [row(1)], false, cursor),
+    result(searching.search.generation, [row(1)], cursor),
   ).model;
-  const pending = updateBrowser(first, M.LoadSavedViews({ more: true })).model;
-  const duplicate = updateBrowser(pending, M.LoadSavedViews({ more: true }));
+  const pending = updateBrowser(
+    first,
+    findingSearch(search.Message.More()),
+  ).model;
+  const duplicate = updateBrowser(
+    pending,
+    findingSearch(search.Message.More()),
+  );
   assert.equal(duplicate.commands?.length ?? 0, 0);
   const failed = updateBrowser(
     pending,
-    M.LoadedSavedViews({
-      version: pending.searchVersion,
-      result: fail("Try again"),
-      more: true,
-      pages: 1,
-    }),
+    findingSearch(
+      search.Message.ListFailed({
+        generation: pending.search.generation,
+        error: "Try again",
+      }),
+    ),
   ).model;
   assert.deepEqual(
     visibleSavedViews(failed).map((entry) => entry.id),
     [row(1).id],
   );
-  assert.ok(AsyncData.isStale(failed.savedViews));
-  assert.deepEqual(failed.savedViews.data.nextCursor, cursor);
-  const retry = updateBrowser(failed, M.LoadSavedViews({ more: true })).model;
+  assert.ok(AsyncData.isStale(failed.search.data));
+  assert.deepEqual(failed.search.data.data.nextCursor, cursor);
+  const retry = updateBrowser(
+    failed,
+    findingSearch(search.Message.More()),
+  ).model;
   const loaded = updateBrowser(
     retry,
-    result(retry.searchVersion, [row(1), row(2)], true),
+    result(retry.search.generation, [row(1), row(2)]),
   ).model;
   assert.deepEqual(
     visibleSavedViews(loaded).map((entry) => entry.id),
@@ -231,32 +235,29 @@ test("refreshing an open browser preserves loaded pages and rejects responses fr
   const browsing = updateBrowser(openedBrowser(), M.BrowseSavedViews()).model;
   const first = updateBrowser(
     browsing,
-    result(browsing.searchVersion, [row(1)]),
+    result(browsing.search.generation, [row(1)], {
+      id: row(1).id,
+      pinned: false,
+      updatedAt: "2026-01-01T00:00:00.000000Z",
+    }),
   ).model;
+  const more = updateBrowser(first, findingSearch(search.Message.More())).model;
   const loaded = updateBrowser(
-    first,
-    result(first.searchVersion, [row(2)], true),
+    more,
+    result(more.search.generation, [row(2)]),
   ).model;
   const refreshed = refreshBrowser(loaded, row(1).id);
   const stale = updateBrowser(
     refreshed.model,
-    result(loaded.searchVersion, [row(3)]),
+    result(loaded.search.generation, [row(3)]),
   ).model;
   assert.deepEqual(
     visibleSavedViews(stale).map((entry) => entry.id),
     [row(1).id, row(2).id],
   );
-  const replacement = updateBrowser(
-    stale,
-    M.CompletedCancelLoadSavedViews({
-      version: stale.searchVersion,
-      more: false,
-      debounce: false,
-    }),
-  );
   assert.equal(
-    replacement.commands?.find((command) => command.name === "LoadSavedViews")
-      ?.args?.pages,
+    refreshed.commands?.find((command) => command.name === "ListFindings")?.args
+      ?.pages,
     2,
   );
   assert.equal(

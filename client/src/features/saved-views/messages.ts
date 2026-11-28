@@ -2,8 +2,9 @@ import { Completion } from "../../lib/command-result";
 import { Dialog, Popover } from "@foldkit/ui";
 import { Schema } from "effect";
 import { defineMessageUnion } from "foldkit/message";
-import { SavedView, SavedViewsPage } from "@dsiem/analytics-shared/saved-views";
+import { SavedView } from "@dsiem/analytics-shared/saved-views";
 import { RecentIds, Shortcuts } from "./browser-model";
+import { search, writes } from "./workflow";
 
 const browserMessages = {
   GotSavedViewsPickerMessage: { message: Popover.Message },
@@ -11,7 +12,7 @@ const browserMessages = {
   CompletedPersistRecentSavedViews: {},
   CompletedRememberRecentSavedView: {},
   CompletedFocusSavedViewSearch: {},
-  LoadSavedViews: { more: Schema.Boolean },
+  GotFindingSearchMessage: { message: search.Message },
   SavedViewSearchChanged: { value: Schema.String },
   BrowseSavedViews: {},
   ShowSavedViewShortcuts: {},
@@ -21,17 +22,6 @@ const browserMessages = {
     result: Completion(Shortcuts),
     recentIds: RecentIds,
   },
-  CompletedCancelLoadSavedViews: {
-    version: Schema.Number,
-    more: Schema.Boolean,
-    debounce: Schema.Boolean,
-  },
-  LoadedSavedViews: {
-    result: Completion(SavedViewsPage),
-    more: Schema.Boolean,
-    pages: Schema.Number,
-    version: Schema.Number,
-  },
 };
 
 export const BrowserMessage = defineMessageUnion(browserMessages);
@@ -39,28 +29,16 @@ export type BrowserMessage = typeof BrowserMessage.Type;
 
 export const Message = defineMessageUnion({
   ...browserMessages,
-  CloseSavedView: {},
-  CloseDelete: {},
   GotSavedViewDialogMessage: { message: Dialog.Message },
   GotDeleteDialogMessage: { message: Dialog.Message },
+  GotFindingWriteMessage: { message: writes.Message },
   ClearView: {},
   NewSavedView: {},
-  CreatedSavedView: { id: Schema.String },
-  EditSavedView: { savedView: SavedView },
-  SavedViewChanged: {
-    field: Schema.Literals(["title", "body"]),
-    value: Schema.String,
-  },
-  SaveSavedView: {},
-  SavedViewSaved: {
-    result: Completion(SavedView),
-  },
-  PinSavedView: { savedView: SavedView },
-  DeleteSavedView: { savedView: SavedView },
-  ConfirmDelete: {},
-  MutatedSavedView: {
-    result: Completion(Schema.Struct({ removed: Schema.Boolean })),
-  },
   RestoreView: { savedView: SavedView },
 });
 export type Message = typeof Message.Type;
+
+export const findingSearch = (message: typeof search.Message.Type) =>
+  Message.GotFindingSearchMessage({ message });
+export const findingWrite = (message: typeof writes.Message.Type) =>
+  Message.GotFindingWriteMessage({ message });

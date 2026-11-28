@@ -24,7 +24,7 @@ type H = HtmlBuilder<typeof M.Type>;
 const close = (h: H, label = "Close") =>
   button(h, {
     label: icon(h, "x"),
-    onClick: M.CloseTrip(),
+    onClick: M.Close(),
     attributes: [h.AriaLabel(label)],
     className: " dialog-close",
     variant: "ghost",
@@ -35,7 +35,7 @@ function inspector(h: H, model: Model) {
   const { details: tripDetails, comments: thread } = inspector;
   const loadedTrip = Option.getOrUndefined(AsyncData.getData(tripDetails));
   const loadError = Option.getOrUndefined(AsyncData.getError(tripDetails));
-  const trip = loadedTrip ?? inspector.trip;
+  const trip = loadedTrip ?? inspector.row;
   const details = loadedTrip?.details;
   const location = (point: typeof Coordinates.Type | null) =>
     point
@@ -53,6 +53,8 @@ function inspector(h: H, model: Model) {
     "Voided trip",
   ];
   const draft = model.commentDrafts[trip.trip_id];
+  const readError = Option.getOrUndefined(thread.error);
+  const postError = Option.getOrUndefined(model.postError);
   const threadData = Option.getOrUndefined(thread.data);
   const loadingComments = Option.isSome(thread.read);
   const rows = threadData?.rows ?? [];
@@ -69,8 +71,8 @@ function inspector(h: H, model: Model) {
   const comments: Child[] =
     loadingComments && !threadData
       ? [loading(h, "Loading comments…")]
-      : thread.error && !threadData
-        ? [error(h, thread.error, M.LoadComments({ more: false }))]
+      : readError && !threadData
+        ? [error(h, readError, M.LoadComments({ more: false }))]
         : [
             ...(!rows.length
               ? [
@@ -90,13 +92,13 @@ function inspector(h: H, model: Model) {
                 ]
               : []),
             commentList(h, rows),
-            ...(thread.error ? [alert(h, thread.error)] : []),
-            ...(threadData?.nextCursor || thread.error
+            ...(readError ? [alert(h, readError)] : []),
+            ...(threadData?.nextCursor || readError
               ? [
                   button(h, {
                     label: loadingComments
                       ? "Loading…"
-                      : thread.error
+                      : readError
                         ? "Retry loading comments"
                         : "Load older comments",
                     onClick: M.LoadComments({
@@ -178,7 +180,7 @@ function inspector(h: H, model: Model) {
                     alert(h, loadError),
                     button(h, {
                       label: "Retry loading trip details",
-                      onClick: M.RetryTripDetails(),
+                      onClick: M.RetryDetail(),
                     }),
                   ]
                 : []),
@@ -245,9 +247,9 @@ function inspector(h: H, model: Model) {
       h.form(
         [
           h.Class(
-            `comment-composer${draft?.body.length || model.postError ? " is-expanded" : ""}`,
+            `comment-composer${draft?.body.length || postError ? " is-expanded" : ""}`,
           ),
-          h.OnSubmit(M.PostComment()),
+          h.OnSubmit(M.Post()),
         ],
         [
           h.label(
@@ -258,7 +260,7 @@ function inspector(h: H, model: Model) {
             {
               id: "trip-comment",
               value: draft?.body ?? "",
-              onInput: (body) => M.CommentChanged({ body }),
+              onInput: (body) => M.Edit({ body }),
               placeholder: "Add a comment…",
               toView: (attributes) =>
                 h.textarea([
@@ -270,18 +272,18 @@ function inspector(h: H, model: Model) {
             },
             h,
           ),
-          ...(model.postError
+          ...(postError
             ? [
                 alert(
                   h,
-                  model.postError,
-                  typeof model.postError === "string"
+                  postError,
+                  typeof postError === "string"
                     ? " Your draft is kept here. Retry when ready."
                     : " Your draft is kept here.",
                 ),
               ]
             : []),
-          ...(model.posted === trip.trip_id
+          ...(Option.contains(model.posted, trip.trip_id)
             ? [
                 h.p(
                   [h.Role("status"), h.Class("muted text-xs")],
@@ -292,9 +294,9 @@ function inspector(h: H, model: Model) {
           button(h, {
             type: "submit",
             variant: "primary",
-            disabled: Option.isSome(model.postingTripId) || !draft?.body.trim(),
+            disabled: Option.isSome(model.postingId) || !draft?.body.trim(),
             label:
-              Option.getOrUndefined(model.postingTripId) === trip.trip_id
+              Option.getOrUndefined(model.postingId) === trip.trip_id
                 ? "Posting…"
                 : "Post comment",
           }),

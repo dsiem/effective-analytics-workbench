@@ -1,12 +1,12 @@
 import { Dialog, Menu } from "@foldkit/ui";
-import { Option, Struct } from "effect";
-import { AsyncData, Command } from "foldkit";
+import { Match, Option, Struct } from "effect";
+import { Command } from "foldkit";
 import { modifyFields } from "foldkit/struct";
 import type { Filters } from "@dsiem/analytics-shared/filters";
 import { tripCommentCountLimit } from "@dsiem/analytics-shared/trip-comments";
-import type { TripSummary } from "@dsiem/analytics-shared/trips";
 import { syncDialog } from "../../lib/dialog";
 import type { FeatureUpdate } from "../../lib/feature-update";
+import { inspection, records } from "./records";
 import * as TripsCommands from "./commands";
 import { Message as M, type Message } from "./messages";
 import {
@@ -16,7 +16,6 @@ import {
   type Sort,
   previewRows,
   SortMenu,
-  TripPreview,
   tripWindow,
 } from "./model";
 
@@ -70,64 +69,11 @@ function invalidateCommentCounts(
 }
 
 function resetList(model: Model): Model {
-  return modifyFields(model, {
-    viewport: Option.none,
-    preview: () => TripPreview.Idle(),
-    loadGeneration: (generation) => generation + 1,
-    commentCounts: ({ version }) => emptyCommentCounts(version),
-    inspector: Option.none,
-  });
-}
-
-function comments(model: Model, more = false): FeatureUpdate<Model, Message> {
-  if (Option.isNone(model.inspector)) return { model };
-  const inspector = model.inspector.value;
-  const thread = inspector.comments;
-  const cursor = more
-    ? Option.flatMapNullishOr(thread.data, ({ nextCursor }) => nextCursor)
-    : Option.none();
   return {
-    model: modifyFields(model, {
-      commentLoadGeneration: (generation) => generation + 1,
-      inspector: () =>
-        Option.some({
-          ...inspector,
-          comments: {
-            ...thread,
-            error: "",
-            read: Option.some({ cursor }),
-          },
-        }),
-    }),
-  };
-}
-
-function inspect(
-  model: Model,
-  trip: TripSummary,
-  focusSelector: string,
-): FeatureUpdate<Model, Message> {
-  return {
-    model: modifyFields(model, {
-      inspectorDialog: (dialog) =>
-        modifyFields(dialog, {
-          maybeFocusSelector: () => Option.some(focusSelector),
-        }),
-      inspector: () =>
-        Option.some({
-          trip,
-          details: AsyncData.Loading(),
-          comments: {
-            data: Option.none(),
-            error: "",
-            read: Option.some({ cursor: Option.none() }),
-          },
-        }),
-      detailLoadGeneration: (generation) => generation + 1,
-      commentLoadGeneration: (generation) => generation + 1,
-      postError: () => "",
-      posted: () => "",
-    }),
+    ...records.reset(model),
+    viewport: Option.none(),
+    inspector: Option.none(),
+    commentCounts: emptyCommentCounts(model.commentCounts.version),
   };
 }
 
@@ -135,267 +81,130 @@ function updateTripsState(
   model: Model,
   message: Message,
 ): FeatureUpdate<Model, Message, Out> {
-  return M.match<FeatureUpdate<Model, Message, Out>>(message, {
-    ResetTrips: () => ({ model: resetList(model) }),
-    CloseTrip: () => ({
-      model: modifyFields(model, { inspector: Option.none }),
-    }),
-    GotInspectorDialogMessage: (message) => {
-      const changed = Dialog.update(model.inspectorDialog, message.message);
-      return {
-        model: modifyFields(model, {
-          inspectorDialog: () => changed.model,
-          inspector: (inspector) =>
-            changed.outMessage?._tag === "Closed" ? Option.none() : inspector,
-        }),
-        commands: (changed.commands ?? []).map((command) =>
-          Command.mapMessage(command, (message) =>
-            M.GotInspectorDialogMessage({ message }),
-          ),
-        ),
-      };
-    },
-    TripBatchReceived: (message) => {
-      const { preview } = model;
-      if (
-        message.generation !== model.loadGeneration ||
-        preview._tag !== "Loading"
-      )
-        return { model };
-      const rows = preview.rows.concat(message.rows);
-      return countComments(
-        modifyFields(model, {
-          preview: () => TripPreview.Loading({ query: preview.query, rows }),
-        }),
-      );
-    },
-    TripPreviewFinished: (message) => {
-      const { preview } = model;
-      if (
-        message.generation !== model.loadGeneration ||
-        preview._tag !== "Loading"
-      )
-        return { model };
-      const { result } = message;
-      return {
-        model: modifyFields(model, {
-          preview: () =>
-            result._tag === "Complete"
-              ? TripPreview.Ready({
-                  rows: preview.rows,
-                  hasMore: result.hasMore,
-                })
-              : TripPreview.Failed({ rows: preview.rows, error: result.error }),
-        }),
-      };
-    },
-    LoadedCommentCounts: (message) => {
-      const counts = model.commentCounts;
-      if (counts.phase._tag !== "Loading" || message.version !== counts.version)
-        return { model };
-      const { result } = message;
-      return countComments(
-        modifyFields(model, {
-          commentCounts: (counts) =>
-            modifyFields(counts, {
-              data: (data) =>
-                result._tag === "Success"
-                  ? Struct.assign(data, result.data)
-                  : data,
-              phase: () =>
-                result._tag === "Failure"
-                  ? CommentCountPhase.Failed({ error: result.error })
-                  : CommentCountPhase.Idle(),
-            }),
-        }),
-      );
-    },
-    RetryCommentCounts: () => {
-      return model.commentCounts.phase._tag === "Failed"
-        ? countComments(model, true)
-        : { model };
-    },
-    TripsScrolled: (message) => {
-      const { generation, viewport } = message;
-      if (generation !== model.loadGeneration || model.preview._tag === "Idle")
-        return { model };
-      return countComments(
-        modifyFields(model, { viewport: () => Option.some(viewport) }),
-      );
-    },
-    SortTrips: (message) => ({
+  function inspect(
+    message: ReturnType<typeof M.InspectTrip | typeof M.InspectComments>,
+  ) {
+    const focusSelector =
+      message._tag === "InspectTrip"
+        ? "#trip-details-dialog-title"
+        : "#trip-comments-heading";
+    const changed = inspection.update(
       model,
-      outMessage: { _tag: "SortChanged", sort: message.sort },
-    }),
-    GotSortMenuMessage: (message) => {
-      const changed = SortMenu.update(model.sortMenu, message.message);
-      const sort = changed.outMessage?.value;
-      return {
-        model: modifyFields(model, { sortMenu: () => changed.model }),
-        commands:
-          changed.commands?.map((command) =>
-            Command.mapMessage(command, (message) =>
-              M.GotSortMenuMessage({ message }),
-            ),
-          ) ?? [],
-        ...(sort === undefined
-          ? {}
-          : { outMessage: { _tag: "SortChanged", sort } }),
-      };
-    },
-    InspectTrip: (message) =>
-      inspect(model, message.trip, "#trip-details-dialog-title"),
-    InspectComments: (message) =>
-      inspect(model, message.trip, "#trip-comments-heading"),
-    RetryTripDetails: () => {
-      const inspector = Option.getOrUndefined(model.inspector);
-      if (!inspector || !AsyncData.hasError(inspector.details))
-        return { model };
-      return {
-        model: modifyFields(model, {
-          inspector: () =>
-            Option.some({
-              ...inspector,
-              details: AsyncData.Loading(),
-            }),
-          detailLoadGeneration: (generation) => generation + 1,
-        }),
-      };
-    },
-    LoadedTripDetails: (message) => {
-      const { generation, tripId } = message;
-      const inspector = Option.getOrUndefined(model.inspector);
-      if (
-        generation !== model.detailLoadGeneration ||
-        tripId !== inspector?.trip.trip_id ||
-        !AsyncData.isPending(inspector.details)
-      )
-        return { model };
-      return {
-        model: modifyFields(model, {
-          inspector: () =>
-            Option.some({
-              ...inspector,
-              details: message.result,
-            }),
-        }),
-      };
-    },
-    LoadComments: (message) => {
-      return Option.exists(model.inspector, ({ comments }) =>
-        Option.isSome(comments.read),
-      )
-        ? { model }
-        : comments(model, message.more);
-    },
-    LoadedComments: (message) => {
-      const inspector = Option.getOrUndefined(model.inspector);
-      if (
-        message.generation !== model.commentLoadGeneration ||
-        message.tripId !== inspector?.trip.trip_id ||
-        Option.isNone(inspector.comments.read)
-      )
-        return { model };
-      const { data, read } = inspector.comments;
-      const page = Option.getOrUndefined(AsyncData.getData(message.result));
-      return {
-        model: modifyFields(model, {
-          inspector: () =>
-            Option.some({
-              ...inspector,
-              comments: {
-                read: Option.none(),
-                error: Option.getOrElse(
-                  AsyncData.getError(message.result),
-                  () => "",
-                ),
-                data:
-                  page && Option.isSome(read.value.cursor)
-                    ? Option.some({
-                        ...page,
-                        rows: [
-                          ...(Option.getOrUndefined(data)?.rows ?? []),
-                          ...page.rows,
-                        ],
-                      })
-                    : Option.orElse(Option.fromNullishOr(page), () => data),
-              },
-            }),
-        }),
-      };
-    },
-    CommentChanged: (message) => {
-      const id = Option.getOrUndefined(model.inspector)?.trip.trip_id;
-      if (!id || model.commentDrafts[id]?.body === message.body)
-        return { model };
-      return {
-        model: modifyFields(model, {
-          commentDrafts: (drafts) => ({
-            ...drafts,
-            [id]: { state: "editing", body: message.body },
-          }),
-          postError: () => "",
-          posted: () => "",
-        }),
-      };
-    },
-    PostComment: () => {
-      const inspector = Option.getOrUndefined(model.inspector);
-      const selection = inspector?.trip;
-      const draft = selection && model.commentDrafts[selection.trip_id];
-      const trip =
-        draft?.state === "retry"
-          ? draft.trip
-          : inspector && AsyncData.isSuccess(inspector.details)
-            ? inspector.details.data
-            : selection;
-      if (!trip || !draft?.body.trim() || Option.isSome(model.postingTripId))
-        return { model };
-      return {
-        model: modifyFields(model, {
-          postingTripId: () => Option.some(trip.trip_id),
-          commentDrafts: (drafts) => ({
-            ...drafts,
-            [trip.trip_id]: { state: "posting", body: draft.body },
-          }),
-          postError: () => "",
-          posted: () => "",
-        }),
-        commands: [
-          TripsCommands.PostComment({
-            trip,
-            body: draft.body,
-            retryId: draft.state === "retry" ? draft.id : null,
-          }),
-        ],
-      };
-    },
-    PostedComment: (message) => {
-      const { result } = message;
-      const failed = result._tag === "Failure";
-      const key = message.input.trip.trip_id;
-      const drafts = { ...model.commentDrafts };
-      if (drafts[key]?.state === "posting") {
-        if (failed) drafts[key] = { state: "retry", ...message.input };
-        else delete drafts[key];
-      }
-      const selectedId = Option.getOrUndefined(model.inspector)?.trip.trip_id;
-      const next = modifyFields(model, {
-        postingTripId: Option.none,
-        commentDrafts: () => drafts,
-        posted: () => (failed ? "" : key),
-        postError: () => (selectedId === key && failed ? result.error : ""),
+      inspection.Message.Inspect({ row: message.trip }),
+    );
+    return {
+      model: {
+        ...changed.model,
+        inspectorDialog: {
+          ...model.inspectorDialog,
+          maybeFocusSelector: Option.some(focusSelector),
+        },
+      },
+    };
+  }
+  const updateInspection = (
+    message: typeof inspection.Message.Type,
+  ): FeatureUpdate<Model, Message> => {
+    const changed = inspection.update(model, message);
+    if (changed.outMessage)
+      return countComments({
+        ...changed.model,
+        commentCounts: invalidateCommentCounts(changed.model.commentCounts),
       });
-      if (failed) return { model: next };
-      const counted = countComments(
-        modifyFields(next, {
-          commentCounts: invalidateCommentCounts,
-        }),
-      );
-      if (selectedId !== key) return counted;
-      return { ...counted, model: comments(counted.model).model };
-    },
-  });
+    return {
+      model: changed.model,
+      ...(changed.commands ? { commands: changed.commands } : {}),
+    };
+  };
+  return Match.value(message).pipe(
+    Match.tags({
+      ResetTrips: () => ({ model: resetList(model) }),
+      GotInspectorDialogMessage: (message) => {
+        const changed = Dialog.update(model.inspectorDialog, message.message);
+        return {
+          model: modifyFields(model, {
+            inspectorDialog: () => changed.model,
+            inspector: (inspector) =>
+              changed.outMessage?._tag === "Closed" ? Option.none() : inspector,
+          }),
+          commands: (changed.commands ?? []).map((command) =>
+            Command.mapMessage(command, (message) =>
+              M.GotInspectorDialogMessage({ message }),
+            ),
+          ),
+        };
+      },
+      RecordBatch: (message) => {
+        const next = records.update(model, message);
+        return next === model ? { model } : countComments(next);
+      },
+      RecordsFinished: (message) => ({ model: records.update(model, message) }),
+      Listed: (message) => ({ model: records.update(model, message) }),
+      LoadedCommentCounts: (message) => {
+        const counts = model.commentCounts;
+        if (
+          counts.phase._tag !== "Loading" ||
+          message.version !== counts.version
+        )
+          return { model };
+        const { result } = message;
+        return countComments(
+          modifyFields(model, {
+            commentCounts: (counts) =>
+              modifyFields(counts, {
+                data: (data) =>
+                  result._tag === "Success"
+                    ? Struct.assign(data, result.data)
+                    : data,
+                phase: () =>
+                  result._tag === "Failure"
+                    ? CommentCountPhase.Failed({ error: result.error })
+                    : CommentCountPhase.Idle(),
+              }),
+          }),
+        );
+      },
+      RetryCommentCounts: () => {
+        return model.commentCounts.phase._tag === "Failed"
+          ? countComments(model, true)
+          : { model };
+      },
+      TripsScrolled: (message) => {
+        const { generation, viewport } = message;
+        if (
+          generation !== model.loadGeneration ||
+          model.preview._tag === "Idle"
+        )
+          return { model };
+        return countComments(
+          modifyFields(model, { viewport: () => Option.some(viewport) }),
+        );
+      },
+      SortTrips: (message) => ({
+        model,
+        outMessage: { _tag: "SortChanged" as const, sort: message.sort },
+      }),
+      GotSortMenuMessage: (message) => {
+        const changed = SortMenu.update(model.sortMenu, message.message);
+        const sort = changed.outMessage?.value;
+        return {
+          model: modifyFields(model, { sortMenu: () => changed.model }),
+          commands:
+            changed.commands?.map((command) =>
+              Command.mapMessage(command, (message) =>
+                M.GotSortMenuMessage({ message }),
+              ),
+            ) ?? [],
+          ...(sort === undefined
+            ? {}
+            : { outMessage: { _tag: "SortChanged" as const, sort } }),
+        };
+      },
+      InspectTrip: inspect,
+      InspectComments: inspect,
+    }),
+    Match.orElse(updateInspection),
+  );
 }
 
 export type Out = {
@@ -407,13 +216,15 @@ export function reloadTrips(
   model: Model,
   { filters, sort }: { filters: Filters; sort: typeof Sort.Type },
 ): FeatureUpdate<Model, Message> {
-  const reset = resetList(model);
-  return {
-    model: modifyFields(reset, {
-      preview: () =>
-        TripPreview.Loading({ query: { filters, sort }, rows: [] }),
-    }),
-  };
+  return records.load<Model>(
+    {
+      ...model,
+      viewport: Option.none(),
+      inspector: Option.none(),
+      commentCounts: emptyCommentCounts(model.commentCounts.version),
+    },
+    { filters, sort },
+  );
 }
 
 export function updateTrips(

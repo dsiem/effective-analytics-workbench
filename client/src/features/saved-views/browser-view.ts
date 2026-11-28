@@ -12,18 +12,20 @@ import type { Model } from "./browser-model";
 import {
   resultId,
   searchId,
-  searchText,
   shortcutGroups,
   visibleSavedViews,
 } from "./picker";
 import type { H } from "./view-messages";
 import { Message as M } from "./view-messages";
+import { findingSearch, findingWrite } from "./messages";
+import { search, writes } from "./workflow";
 
 type PickerModel = Model & {
   readonly selected: Pick<SavedView, "id" | "title"> | null;
   readonly customFilters: boolean;
   readonly canSave: boolean;
   readonly mutationBusy: boolean;
+  readonly canMutate: boolean;
   readonly mutationError: Notice;
 };
 
@@ -75,7 +77,8 @@ function viewRow(
         actions: [
           button(h, {
             label: icon(h, savedView.pinned ? "pin" : "pin-off"),
-            onClick: M.PinSavedView({ savedView }),
+            onClick: findingWrite(writes.Message.Pin({ row: savedView })),
+            disabled: !model.canMutate,
             busy: model.mutationBusy,
             size: "icon",
             variant: "ghost",
@@ -87,14 +90,16 @@ function viewRow(
           }),
           button(h, {
             label: icon(h, "pencil"),
-            onClick: M.EditSavedView({ savedView }),
+            onClick: findingWrite(writes.Message.Edit({ row: savedView })),
+            disabled: !model.canMutate,
             size: "icon",
             variant: "ghost",
             attributes: [h.AriaLabel(`Edit ${savedView.title}`)],
           }),
           button(h, {
             label: icon(h, "trash-2"),
-            onClick: M.DeleteSavedView({ savedView }),
+            onClick: findingWrite(writes.Message.Delete({ row: savedView })),
+            disabled: !model.canMutate,
             size: "icon",
             variant: "ghost",
             attributes: [h.AriaLabel(`Delete ${savedView.title}`)],
@@ -143,18 +148,18 @@ function matchingViews(
   model: PickerModel,
   renderedRows: Child[],
 ): Child[] {
-  const data = Option.getOrUndefined(AsyncData.getData(model.savedViews));
-  const busy = AsyncData.isPending(model.savedViews);
-  const problem = Option.getOrUndefined(AsyncData.getError(model.savedViews));
+  const data = Option.getOrUndefined(AsyncData.getData(model.search.data));
+  const busy = AsyncData.isPending(model.search.data);
+  const problem = Option.getOrUndefined(AsyncData.getError(model.search.data));
   if (busy && !data) return [loading(h, "Searching saved views…")];
   if (problem && !data)
-    return [error(h, problem, M.LoadSavedViews({ more: false }))];
+    return [error(h, problem, findingSearch(search.Message.Refresh()))];
   const rows = data?.rows ?? [];
   return [
     h.p(
       [h.Class("view-picker-count"), h.AriaLive("polite"), h.Role("status")],
       [
-        `${rows.length} ${model.pickerMode._tag === "Search" ? "matching " : "saved "}${rows.length === 1 ? "view" : "views"} shown${data?.nextCursor ? " · more available" : ""}`,
+        `${rows.length} ${model.pickerMode === "Search" ? "matching " : "saved "}${rows.length === 1 ? "view" : "views"} shown${data?.nextCursor ? " · more available" : ""}`,
       ],
     ),
     ...renderedRows,
@@ -187,7 +192,11 @@ function matchingViews(
               : problem
                 ? "Retry loading views"
                 : "Load more views",
-            onClick: M.LoadSavedViews({ more: !!data?.nextCursor }),
+            onClick: findingSearch(
+              data?.nextCursor
+                ? search.Message.More()
+                : search.Message.Refresh(),
+            ),
             busy,
             attributes: [h.Key("load-saved-views")],
             className: "w-full mt-2",
@@ -247,7 +256,7 @@ export function savedViewBrowser(h: H, model: PickerModel) {
             {
               id: searchId,
               type: "search",
-              value: searchText(model),
+              value: model.search.query,
               placeholder: "Search name, finding, date, or ZIP…",
               onInput: (value) => M.SavedViewSearchChanged({ value }),
               toView: ({ input }) =>
@@ -260,9 +269,9 @@ export function savedViewBrowser(h: H, model: PickerModel) {
                       h.Class("input"),
                       h.AriaLabel("Search all saved views"),
                       h.AriaBusy(
-                        model.pickerMode._tag === "Quick"
+                        model.pickerMode === "Quick"
                           ? AsyncData.isPending(model.shortcuts)
-                          : AsyncData.isPending(model.savedViews),
+                          : AsyncData.isPending(model.search.data),
                       ),
                       h.Maxlength(200),
                       h.Autocomplete("off"),
@@ -292,7 +301,7 @@ export function savedViewBrowser(h: H, model: PickerModel) {
       h.div(
         [h.Class("view-picker-list")],
         [
-          ...(model.pickerMode._tag !== "Search"
+          ...(model.pickerMode !== "Search"
             ? [
                 viewOption(h, {
                   title: "All trips",
@@ -306,7 +315,7 @@ export function savedViewBrowser(h: H, model: PickerModel) {
                 }),
               ]
             : []),
-          ...(model.pickerMode._tag === "Quick"
+          ...(model.pickerMode === "Quick"
             ? quickViews(h, model, renderedRows)
             : matchingViews(h, model, renderedRows)),
           ...(model.mutationError ? [alert(h, model.mutationError)] : []),
@@ -317,11 +326,11 @@ export function savedViewBrowser(h: H, model: PickerModel) {
         [
           button(h, {
             label:
-              model.pickerMode._tag === "Quick"
+              model.pickerMode === "Quick"
                 ? "Browse all views"
                 : "Pinned and recent views",
             onClick:
-              model.pickerMode._tag === "Quick"
+              model.pickerMode === "Quick"
                 ? M.BrowseSavedViews()
                 : M.ShowSavedViewShortcuts(),
             size: "small",

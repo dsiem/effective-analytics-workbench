@@ -1,6 +1,5 @@
 import { Dialog } from "@foldkit/ui";
 import { findingFields } from "@dsiem/workbench-ui/findings";
-import { Option } from "effect";
 import { defineView } from "foldkit/submodel";
 import { filterSummary } from "../../domain/filter-summary";
 import { dialog } from "../../ui/dialog";
@@ -8,18 +7,21 @@ import { icon } from "../../ui/icons";
 import { alert, button } from "../../ui/primitives";
 import type { Model } from "./model";
 import { type H, Message as M } from "./view-messages";
+import { findingWrite } from "./messages";
+import { writes } from "./workflow";
 
 const close = (h: H, label = "Close") =>
   button(h, {
     label: icon(h, "x"),
-    onClick: M.CloseSavedView(),
+    onClick: findingWrite(writes.Message.Cancel()),
     attributes: [h.AriaLabel(label)],
     className: " dialog-close",
     variant: "ghost",
   });
 function editor(h: H, model: Model) {
-  const editor = Option.getOrUndefined(model.editor);
-  if (!editor) return null;
+  const panel = model.writes.panel;
+  if (panel._tag !== "Editor") return null;
+  const { editor } = panel;
   const { draft, saving } = editor;
   const name =
     draft.version === null
@@ -46,7 +48,10 @@ function editor(h: H, model: Model) {
         ],
       ),
       h.form(
-        [h.OnSubmit(M.SaveSavedView()), h.Class("p-6 space-y-5")],
+        [
+          h.OnSubmit(findingWrite(writes.Message.Save())),
+          h.Class("p-6 space-y-5"),
+        ],
         [
           ...findingFields(h, {
             id: "saved-view",
@@ -58,7 +63,8 @@ function editor(h: H, model: Model) {
             titlePlaceholder: "e.g. Midtown fare review",
             bodyPlaceholder:
               "What is worth returning to? Add context or a next step…",
-            onChange: (field, value) => M.SavedViewChanged({ field, value }),
+            onChange: (field, value) =>
+              findingWrite(writes.Message.Change({ field, value })),
           }),
           h.div(
             [h.Class("inset-panel")],
@@ -81,7 +87,7 @@ function editor(h: H, model: Model) {
             [
               button(h, {
                 label: "Cancel",
-                onClick: M.CloseSavedView(),
+                onClick: findingWrite(writes.Message.Cancel()),
                 disabled: saving,
               }),
               button(h, {
@@ -98,6 +104,8 @@ function editor(h: H, model: Model) {
   });
 }
 function deleteDialog(h: H, model: Model) {
+  const panel = model.writes.panel;
+  if (panel._tag !== "Delete") return null;
   return dialog(h, {
     model: model.dialogs.delete,
     onMessage: (message) => M.GotDeleteDialogMessage({ message }),
@@ -112,25 +120,23 @@ function deleteDialog(h: H, model: Model) {
           ),
           h.p(
             [h.Class("muted text-sm mt-2")],
-            [
-              `“${Option.getOrUndefined(model.deleting)?.title ?? ""}” will be removed from saved views.`,
-            ],
+            [`“${panel.row.title}” will be removed from saved views.`],
           ),
         ],
       ),
-      ...(model.savedViewError ? [alert(h, model.savedViewError)] : []),
+      ...(panel.error ? [alert(h, panel.error)] : []),
       h.div(
         [h.Class("dialog-footer")],
         [
           button(h, {
             label: "Cancel",
-            onClick: M.CloseDelete(),
-            disabled: model.savedViewBusy,
+            onClick: findingWrite(writes.Message.Cancel()),
+            disabled: panel.busy,
           }),
           button(h, {
-            label: model.savedViewBusy ? "Deleting…" : "Delete view",
-            onClick: M.ConfirmDelete(),
-            disabled: model.savedViewBusy,
+            label: panel.busy ? "Deleting…" : "Delete view",
+            onClick: findingWrite(writes.Message.Confirm()),
+            disabled: panel.busy,
             variant: "destructive",
           }),
         ],

@@ -2,7 +2,7 @@ import { Dialog } from "@foldkit/ui";
 import { Option } from "effect";
 import { dateField } from "../../ui/date-field";
 import { dialog } from "../../ui/dialog";
-import { field } from "../../ui/field";
+import { field } from "@dsiem/workbench-ui/filters";
 import { alert, button, type H } from "../../ui/primitives";
 import { Message as M, type Message } from "./messages";
 import type { Model, WeekField } from "./model";

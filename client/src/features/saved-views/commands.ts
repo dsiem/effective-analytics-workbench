@@ -1,12 +1,7 @@
 import { Effect, Schema } from "effect";
-import { readFindingPages } from "@dsiem/workbench-ui/findings";
 import { Command } from "foldkit";
 import * as Dom from "foldkit/dom";
-import {
-  SavedView,
-  SavedViewCursor,
-  SavedViewInput,
-} from "@dsiem/analytics-shared/saved-views";
+import { SavedView } from "@dsiem/analytics-shared/saved-views";
 import { request } from "../../lib/api-client";
 import { result } from "../../lib/command-result";
 import { Message as M } from "./messages";
@@ -102,80 +97,4 @@ export const LoadSavedViewShortcuts = Command.define("LoadSavedViewShortcuts", {
             : ids,
       });
     }),
-});
-export const CreateSavedViewDraft = Command.define("CreateSavedViewDraft", {
-  args: {},
-  messages: [M.CreatedSavedView],
-  execute: () =>
-    Effect.sync(() => M.CreatedSavedView({ id: crypto.randomUUID() })),
-});
-export const SaveSavedView = Command.define("SaveSavedView", {
-  args: { draft: SavedViewInput },
-  messages: [M.SavedViewSaved],
-  execute: ({ draft }) =>
-    result(
-      request((client) =>
-        client.savedViews.save({
-          payload: { ...draft, title: draft.title.trim() },
-        }),
-      ),
-    ).pipe(Effect.map((result) => M.SavedViewSaved({ result }))),
-});
-export const LoadSavedViews = Command.define("LoadSavedViews", {
-  args: {
-    cursor: Schema.NullOr(SavedViewCursor),
-    pages: Schema.Number,
-    more: Schema.Boolean,
-    query: Schema.String,
-    version: Schema.Number,
-    debounce: Schema.Boolean,
-  },
-  interrupt: true,
-  messages: [M.LoadedSavedViews],
-  execute: ({ cursor, pages, more, query, version, debounce }) =>
-    result(
-      Effect.gen(function* () {
-        if (debounce) yield* Effect.sleep("180 millis");
-        return yield* readFindingPages({ cursor, pages }, (next) =>
-          request((client) =>
-            client.savedViews.list({
-              query: {
-                ...(query ? { q: query } : {}),
-                ...(next ? { cursor: next } : {}),
-              },
-            }),
-          ),
-        );
-      }),
-    ).pipe(
-      Effect.map((result) =>
-        M.LoadedSavedViews({ result, more, pages, version }),
-      ),
-    ),
-});
-export const PinSavedView = Command.define("PinSavedView", {
-  args: { savedView: SavedView },
-  messages: [M.MutatedSavedView],
-  execute: ({ savedView }) =>
-    result(
-      request((client) =>
-        client.savedViews.pin({
-          params: { id: savedView.id },
-          payload: { pinned: !savedView.pinned, version: savedView.version },
-        }),
-      ).pipe(Effect.as({ removed: false })),
-    ).pipe(Effect.map((result) => M.MutatedSavedView({ result }))),
-});
-export const DeleteSavedView = Command.define("DeleteSavedView", {
-  args: { savedView: SavedView },
-  messages: [M.MutatedSavedView],
-  execute: ({ savedView }) =>
-    result(
-      request((client) =>
-        client.savedViews.remove({
-          params: { id: savedView.id },
-          query: { version: savedView.version },
-        }),
-      ).pipe(Effect.as({ removed: true })),
-    ).pipe(Effect.map((result) => M.MutatedSavedView({ result }))),
 });

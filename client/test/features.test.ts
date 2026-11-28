@@ -26,13 +26,16 @@ import {
   updateOverview,
 } from "../src/features/overview/update";
 import { Message as OverviewViewMessage } from "../src/features/overview/view-messages";
-import { Message as SavedMessage } from "../src/features/saved-views/messages";
+import {
+  findingWrite,
+  Message as SavedMessage,
+} from "../src/features/saved-views/messages";
+import { writes } from "../src/features/saved-views/workflow";
 import * as SavedViews from "../src/features/saved-views/model";
 import { updateSavedViews } from "../src/features/saved-views/update";
-import { PostComment } from "../src/features/trips/commands";
 import { Message as TripMessage } from "../src/features/trips/messages";
 import * as Trips from "../src/features/trips/model";
-import { subscriptions } from "../src/features/trips/subscription";
+import { subscriptions } from "../src/features/trips/records";
 import { reloadTrips, updateTrips } from "../src/features/trips/update";
 import { ApiClient } from "../src/lib/api-client";
 import { fail, succeed } from "../src/lib/command-result";
@@ -148,14 +151,14 @@ test("Records completes an empty trip page", async () => {
       ),
     );
   });
-  const { trips } = subscriptions;
+  const { records } = subscriptions;
   const start = reloadTrips(Trips.init(), {
     filters: {},
     sort: "newest",
   }).model;
-  const deps = trips.modelToDependencies(start);
+  const deps = records.modelToDependencies(start);
   const messages = await Effect.runPromise(
-    trips.dependenciesToStream(deps).pipe(
+    records.dependenciesToStream(deps).pipe(
       Stream.runCollect,
       Effect.provideServiceEffect(
         ApiClient,
@@ -188,7 +191,7 @@ test("returning to a filter ignores batches and errors from its original stream"
     given(returned.model),
     message(
       trips(
-        TripMessage.TripBatchReceived({
+        TripMessage.RecordBatch({
           generation,
           rows: [tripSummaryFor(trip)],
         }),
@@ -196,7 +199,7 @@ test("returning to a filter ignores batches and errors from its original stream"
     ),
     message(
       trips(
-        TripMessage.TripBatchReceived({
+        TripMessage.RecordBatch({
           generation: oldGeneration,
           rows: [tripSummaryFor({ ...trip, trip_id: "old" })],
         }),
@@ -204,7 +207,7 @@ test("returning to a filter ignores batches and errors from its original stream"
     ),
     message(
       trips(
-        TripMessage.TripPreviewFinished({
+        TripMessage.RecordsFinished({
           generation: oldGeneration,
           result: { _tag: "Failed", error: "Timed out" },
         }),
@@ -212,7 +215,7 @@ test("returning to a filter ignores batches and errors from its original stream"
     ),
     message(
       trips(
-        TripMessage.TripPreviewFinished({
+        TripMessage.RecordsFinished({
           generation,
           result: { _tag: "Complete", hasMore: false },
         }),
@@ -271,7 +274,7 @@ test("reopening the same trip keeps fresh comments when the original list arrive
   const opened = update(app("/trips"), inspect);
   const closed = update(
     opened.model,
-    Features.trips.toParentMessage(TripMessage.CloseTrip()),
+    Features.trips.toParentMessage(TripMessage.Close()),
   );
   const reopened = update(closed.model, inspect);
   const note = {
@@ -284,7 +287,7 @@ test("reopening the same trip keeps fresh comments when the original list arrive
   const reply = (model: ReturnType<typeof app>, rows: [typeof note] | []) =>
     Features.trips.toParentMessage(
       TripMessage.LoadedComments({
-        tripId: trip.trip_id,
+        rowId: trip.trip_id,
         generation: model.tripsState.commentLoadGeneration,
         result: succeed({ rows, nextCursor: null }),
       }),
@@ -315,7 +318,7 @@ test("lost comment responses replay the attempted payload until the draft is edi
     next = update(next.model, Features.trips.toParentMessage(action));
   };
   async function post() {
-    send(TripMessage.PostComment());
+    send(TripMessage.Post());
     const reply = await runRequest(
       next,
       "PostComment",
@@ -330,24 +333,24 @@ test("lost comment responses replay the attempted payload until the draft is edi
     next = update(next.model, reply);
   }
   const detailReply = (record: typeof trip) =>
-    TripMessage.LoadedTripDetails({
-      tripId: record.trip_id,
+    TripMessage.LoadedDetail({
+      rowId: record.trip_id,
       generation: next.model.tripsState.detailLoadGeneration,
       result: succeed(record),
     });
   const submissions: TripCommentInput[] = [];
   send(TripMessage.InspectTrip({ trip }));
   send(detailReply(trip));
-  send(TripMessage.CommentChanged({ body: "First finding" }));
+  send(TripMessage.Edit({ body: "First finding" }));
   await post();
-  send(TripMessage.CloseTrip());
+  send(TripMessage.Close());
   send(TripMessage.InspectTrip({ trip: { ...trip, fare: 14 } }));
   const refreshedDetails = detailReply({ ...trip, fare: 14 });
   await post();
   const [first, retry] = submissions;
   assert.ok(first);
   assert.deepEqual(retry, first);
-  send(TripMessage.CommentChanged({ body: "Edited finding" }));
+  send(TripMessage.Edit({ body: "Edited finding" }));
   send(refreshedDetails);
   await post();
   const edited = submissions[2];
@@ -372,22 +375,25 @@ test("a post completion keeps a newer draft available as a new submission", () =
   );
   const drafted = updateTrips(
     opened.model,
-    TripMessage.CommentChanged({ body: input.body }),
+    TripMessage.Edit({ body: input.body }),
   );
-  const posting = updateTrips(drafted.model, TripMessage.PostComment());
+  const posting = updateTrips(drafted.model, TripMessage.Post());
   assert.deepEqual(
-    posting.commands?.find(({ name }) => name === PostComment.name)?.args,
-    { trip: snapshot, body: input.body, retryId: null },
+    posting.commands?.find(({ name }) => name === "PostComment")?.args,
+    {
+      row: snapshot,
+      body: input.body,
+      retryId: null,
+      generation: posting.model.postGeneration,
+    },
   );
 
-  const edited = updateTrips(
-    posting.model,
-    TripMessage.CommentChanged({ body: newer }),
-  );
+  const edited = updateTrips(posting.model, TripMessage.Edit({ body: newer }));
   const completed = updateTrips(
     edited.model,
     TripMessage.PostedComment({
-      input,
+      input: { row: input.trip, id: input.id, body: input.body },
+      generation: posting.model.postGeneration,
       result: succeed({
         ...input,
         author: null,
@@ -396,10 +402,15 @@ test("a post completion keeps a newer draft available as a new submission", () =
     }),
   );
   assert.equal(completed.model.commentDrafts[trip.trip_id]?.body, newer);
-  const next = updateTrips(completed.model, TripMessage.PostComment());
+  const next = updateTrips(completed.model, TripMessage.Post());
   assert.deepEqual(
-    next.commands?.find(({ name }) => name === PostComment.name)?.args,
-    { trip: snapshot, body: newer, retryId: null },
+    next.commands?.find(({ name }) => name === "PostComment")?.args,
+    {
+      row: snapshot,
+      body: newer,
+      retryId: null,
+      generation: next.model.postGeneration,
+    },
   );
 });
 
@@ -410,14 +421,14 @@ test("trip details ignore an earlier selection and retry independently", () => {
   const other = { ...trip, trip_id: "trip-2" };
   const opened = send(first, TripMessage.InspectTrip({ trip: other }));
   const reply = (model: typeof first, record: typeof trip, error = "") =>
-    TripMessage.LoadedTripDetails({
-      tripId: record.trip_id,
+    TripMessage.LoadedDetail({
+      rowId: record.trip_id,
       generation: model.tripsState.detailLoadGeneration,
       result: error ? fail(error) : succeed(record),
     });
   const failed = send(opened, reply(opened, other, "Details timed out"));
   assert.equal(send(failed, reply(first, trip)), failed);
-  const retry = send(failed, TripMessage.RetryTripDetails());
+  const retry = send(failed, TripMessage.RetryDetail());
   assert.equal(
     retry.tripsState.commentLoadGeneration,
     opened.tripsState.commentLoadGeneration,
@@ -455,7 +466,7 @@ test("a standalone trip feature closes its inspector and ignores late comments",
   const late = updateTrips(
     closed.model,
     TripMessage.LoadedComments({
-      tripId: trip.trip_id,
+      rowId: trip.trip_id,
       generation: opened.model.commentLoadGeneration,
       result: succeed({ rows: [], nextCursor: null }),
     }),
@@ -558,7 +569,7 @@ test("comment counts from an older trip window cannot replace the current rows' 
   const loaded = (model: Trips.Model) => {
     const response = updateTrips(
       model,
-      TripMessage.TripBatchReceived({
+      TripMessage.RecordBatch({
         generation: model.loadGeneration,
         rows: [tripSummaryFor(trip)],
       }),
@@ -614,7 +625,7 @@ test("comment-count denial needs an explicit retry and uses the current window",
   };
   const loaded = updateTrips(
     start.model,
-    TripMessage.TripBatchReceived({
+    TripMessage.RecordBatch({
       generation: start.model.loadGeneration,
       rows: rows.map(tripSummaryFor),
     }),
@@ -667,7 +678,7 @@ test("comment-count denial needs an explicit retry and uses the current window",
   }).model;
   const newRows = updateTrips(
     nextSearch,
-    TripMessage.TripBatchReceived({
+    TripMessage.RecordBatch({
       generation: nextSearch.loadGeneration,
       rows: [tripSummaryFor(trip)],
     }),
@@ -710,57 +721,80 @@ test("analysis links distinguish valid, malformed, and absent run IDs", () => {
 
 test("a saved-view draft accepts an empty title and freezes while saving", () => {
   const context = { filters: {} };
-  const created = updateSavedViews(
+  const starting = updateSavedViews(
     SavedViews.init(),
-    SavedMessage.CreatedSavedView({
-      id: "f9ca0a62-e2bc-4bc6-b27a-8c37cdd7d784",
-    }),
+    SavedMessage.NewSavedView(),
+    context,
+  );
+  const created = updateSavedViews(
+    starting.model,
+    findingWrite(
+      writes.Message.DraftPrepared({
+        generation: starting.model.writes.generation,
+        draft: {
+          id: "f9ca0a62-e2bc-4bc6-b27a-8c37cdd7d784",
+          filters: {},
+          title: "",
+          body: "",
+          version: null,
+        },
+      }),
+    ),
     context,
   );
   assert.equal(created.model.dialogs.savedView.isOpen, true);
   assert.ok(Schema.is(SavedViews.Model)(created.model));
   const named = updateSavedViews(
     created.model,
-    SavedMessage.SavedViewChanged({ field: "title", value: "My view" }),
+    findingWrite(writes.Message.Change({ field: "title", value: "My view" })),
     context,
   );
   const saving = updateSavedViews(
     named.model,
-    SavedMessage.SaveSavedView(),
+    findingWrite(writes.Message.Save()),
     context,
   );
   for (const message of [
-    SavedMessage.SavedViewChanged({ field: "title", value: "Later name" }),
-    SavedMessage.SavedViewChanged({ field: "body", value: "Later finding" }),
-    SavedMessage.CloseSavedView(),
+    findingWrite(
+      writes.Message.Change({ field: "title", value: "Later name" }),
+    ),
+    findingWrite(
+      writes.Message.Change({ field: "body", value: "Later finding" }),
+    ),
+    findingWrite(writes.Message.Cancel()),
     SavedMessage.GotSavedViewDialogMessage({
       message: Dialog.Message.RequestedClose(),
     }),
   ]) {
     const blocked = updateSavedViews(saving.model, message, context);
-    assert.deepEqual(blocked.model.editor, saving.model.editor);
+    assert.deepEqual(blocked.model.writes, saving.model.writes);
     assert.equal(blocked.model.dialogs.savedView.isOpen, true);
   }
   const failed = updateSavedViews(
     saving.model,
-    SavedMessage.SavedViewSaved({ result: fail("Try again") }),
+    findingWrite(
+      writes.Message.WriteFailed({
+        generation: saving.model.writes.generation,
+        error: "Try again",
+      }),
+    ),
     context,
   );
   const retried = updateSavedViews(
     failed.model,
-    SavedMessage.SavedViewChanged({ field: "body", value: "Revised finding" }),
+    findingWrite(
+      writes.Message.Change({ field: "body", value: "Revised finding" }),
+    ),
     context,
   );
-  assert.equal(
-    Option.getOrThrow(retried.model.editor).draft.body,
-    "Revised finding",
-  );
+  assert.equal(retried.model.writes.panel._tag, "Editor");
+  assert.equal(retried.model.writes.panel.editor.draft.body, "Revised finding");
   const closed = updateSavedViews(
     failed.model,
-    SavedMessage.CloseSavedView(),
+    findingWrite(writes.Message.Cancel()),
     context,
   );
-  assert.ok(Option.isNone(closed.model.editor));
+  assert.equal(closed.model.writes.panel._tag, "Browse");
   assert.equal(closed.model.dialogs.savedView.isOpen, false);
 });
 
@@ -778,36 +812,37 @@ test("saved views keep deletion open during a write and close it after success",
   };
   const opened = updateSavedViews(
     SavedViews.init(),
-    SavedMessage.DeleteSavedView({ savedView }),
+    findingWrite(writes.Message.Delete({ row: savedView })),
     context,
   );
   assert.equal(opened.model.dialogs.delete.isOpen, true);
   const busy = updateSavedViews(
     opened.model,
-    SavedMessage.ConfirmDelete(),
+    findingWrite(writes.Message.Confirm()),
     context,
   );
   for (const message of [
-    SavedMessage.CloseDelete(),
+    findingWrite(writes.Message.Cancel()),
     SavedMessage.GotDeleteDialogMessage({
       message: Dialog.Message.RequestedClose(),
     }),
   ]) {
     const blocked = updateSavedViews(busy.model, message, context);
-    assert.equal(
-      Option.getOrUndefined(blocked.model.deleting)?.id,
-      savedView.id,
-    );
+    assert.equal(blocked.model.writes.panel._tag, "Delete");
+    assert.equal(blocked.model.writes.panel.row.id, savedView.id);
     assert.equal(blocked.model.dialogs.delete.isOpen, true);
   }
   const deleted = updateSavedViews(
     busy.model,
-    SavedMessage.MutatedSavedView({
-      result: succeed({ removed: true }),
-    }),
+    findingWrite(
+      writes.Message.Deleted({
+        generation: busy.model.writes.generation,
+        id: savedView.id,
+      }),
+    ),
     context,
   );
-  assert.ok(Option.isNone(deleted.model.deleting));
+  assert.equal(deleted.model.writes.panel._tag, "Browse");
   assert.equal(deleted.model.dialogs.delete.isOpen, false);
 });
 

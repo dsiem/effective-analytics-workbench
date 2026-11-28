@@ -17,9 +17,15 @@ import {
   recordTable,
   seriesChart,
   type H,
+  type TableColumn,
 } from "@dsiem/workbench-ui";
 
 type Bin = { name: string; available: number; target: number };
+
+const binColumns = [
+  { header: "Bin", cell: (bin) => bin.name },
+  { header: "In stock", cell: (bin) => String(bin.available) },
+] satisfies readonly TableColumn<Bin>[];
 
 export function replenishmentReport<Message>(
   h: H<Message>,
@@ -46,10 +52,7 @@ export function replenishmentReport<Message>(
       recordTable(h, bins, {
         caption: "Bin stock levels",
         key: (row) => row.name,
-        columns: [
-          { header: "Bin", cell: (row) => row.name },
-          { header: "In stock", cell: (row) => String(row.available) },
-        ],
+        columns: binColumns,
       }),
     ],
   );
@@ -63,6 +66,38 @@ callbacks can return Foldkit HTML, including links or buttons with your
 application's messages. A metric's optional `icon` accepts a rendered child.
 
 `card`, `title` and `panelHeader` arrange these report components.
+
+Pass `binColumns` to the `columns` option of `createRecordExplorer` to use
+the same cells in a sortable list with an inspector.
+
+## Compose filters with a report
+
+Import `@dsiem/workbench-ui/workspace.css` after the report stylesheet for
+form and button styles. The filter panel renders your fields and submits a
+message to your page. An inventory report can use one text field:
+
+```ts
+import { field, filterPanel } from "@dsiem/workbench-ui/filters";
+
+filterPanel(h, {
+  label: "Inventory filters",
+  fields: [
+    field(h, {
+      id: "bin",
+      label: "Storage bin",
+      value: draft.bin,
+      onInput: (bin) => ChangedBin({ bin }),
+    }),
+  ],
+  hasChanges: draft.bin !== applied.bin,
+  onApply: ApplyFilters(),
+});
+```
+
+Add a reset message with `onReset`. Put a saved-view picker or export button
+in the optional `toolbar` array. The app owns draft values, URL encoding,
+validation and the Effect that loads matching rows. It can pass an `error`
+to the panel and an `appliedSummary` to show alongside unapplied changes.
 
 ## Mount a report with loading and retry
 
@@ -183,30 +218,74 @@ write fails, the component refreshes the list and keeps an editor's draft
 available. The user can save a stale edit as a new finding or cancel and
 open the current version.
 
-The taxi dialog uses the exported `findingEditor` and `findingFields` to
-provide the same versioned draft behavior inside its saved-view picker.
-Pass the generated HTTP group to `findingsClient`, which supplies all four operations, closes request scopes and preserves server conflict messages. Supply a filter codec, description and reopen link.
+For a custom picker, compose `createFindingSearch` and `createFindingWrites`.
+The first owns typed search, cursor paging, and cancellation. The second owns
+the draft, confirmed deletion, and version sent with each change. The taxi
+picker uses both and handles its own recent views, shortcuts, focus and
+navigation. [Picker integration](../../client/src/features/saved-views/workflow.ts)
+
+Pass a generated saved-views HTTP group to `findingsClient` to bind all four
+operations. It closes each request scope and preserves server conflict
+messages. An app can supply `{ onError, timeout }` to map failures to its
+own permission notices and set its request deadline.
+
+For existing embeddings, user actions such as `Message.Search({ value })`,
+`Message.Edit({ row })` and `Message.Save()` keep their signatures. A custom
+view reads `model.search.query`, `model.search.data` and `model.writes.panel`.
+Feed command completions back into `update` to settle pending operations.
 
 ## Browse and annotate individual records
 
 Import `mountRecordExplorer` from `@dsiem/workbench-ui/record-explorer` to
-mount a sorted list and inspector into a container. Supply the row, detail and
-sort schemas, column formatters, a stable row key, and two Effects. `load(sort)`
+mount a sorted list and inspector into a container. Supply the row and detail
+schemas, a nonempty list of sort keys, column formatters, a stable row key,
+and two Effects. `load(sort)`
 returns the selected records in the requested order. `inspect(row)` fetches the
 full record on demand. Capture the current filters when creating these Effects.
-Use the heading and inspector callbacks to render your domain's controls and
-details.
+Render domain-specific details with `inspector`. Add a `heading`, a
+`sortLabel` or an `inspectLabel` when the defaults need more context.
+
+```ts
+const stock = createRecordExplorer({
+  row: BinSummary,
+  detail: BinDetail,
+  sorts: ["name", "available"],
+  key: (bin) => bin.name,
+  caption: "Stock levels",
+  columns: binColumns,
+  load: (sort) => inventory.list(sort),
+  inspect: (bin) => inventory.lookup(bin.name),
+  inspector: (h, bin) => [h.p([], [bin.location])],
+});
+```
 
 For a discussion thread, supply `comments.list(row, cursor)` and
 `comments.post(row, id, body)`. Return a cursor with each page that has older
 comments. Persist the supplied posting ID to support retries after an uncertain
 response. The explorer retains drafts by row while the page is mounted.
 
-Use `createRecordExplorer(options)` to obtain the Foldkit model, messages,
-init, update and view for embedding in a larger application. A custom inspector
-can also use the exported `recordGrid`, `recordWindow`, `recordViewportMount`
-and `commentList`. The taxi app uses these pieces for its virtualized table
-and discussion sheet.
+Use `createRecordExplorer(options)` to embed the explorer in a larger Foldkit
+program. Its initial load, sort changes and inspection requests use ordinary
+Foldkit commands. The list and inspection track their requests independently.
+The default grid renders every returned row and accepts cells of different
+heights. For large lists, set `fixedRowHeight` in CSS pixels to render only
+the visible window and a few nearby rows. Cells clip content to that height.
+
+For a custom record screen, the same module exports `recordList` and
+`recordInspector`. Supply `pages(query)` for progressive results and install
+the list subscriptions in the parent. A single-response list supplies
+`load(query)` as an Effect. In either case, call `list.load(model, query)`
+and fold its result into the parent. The inspector owns detail requests, comment paging,
+per-row drafts and post retry IDs. Its optional comment source defines the
+note and cursor schemas. It emits read commands by default. A host that
+sets `reads: "subscriptions"` installs the inspector subscriptions so closing
+a selection interrupts its detail and comment reads. The taxi screen uses these two components, adds
+comment counts and renders a window of uniform-height rows.
+[Taxi record integration](../../client/src/features/trips/records.ts)
+
+Embedded callers that previously read `model.rows` can read `model.preview`
+for loading, partial rows, failure and completion. Selection and detail now
+live under `model.inspector`. Per-row drafts live in `model.commentDrafts`.
 
 ## Submit an analysis and open its history
 

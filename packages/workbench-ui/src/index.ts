@@ -4,6 +4,7 @@ export {
   seriesChart,
   type Metric,
   type RecordTable,
+  type TableColumn,
   type Series,
 } from "./report.js";
 export {

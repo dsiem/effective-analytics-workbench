@@ -1,5 +1,6 @@
 import { chart } from "./chart.js";
-import { metric, table, type Child, type H } from "./primitives.js";
+import { recordGrid } from "./record-grid.js";
+import { metric, type Child, type H } from "./primitives.js";
 
 export type Metric<Summary> = {
   readonly label: string;
@@ -43,13 +44,15 @@ export function seriesChart<Message, Row>(
   });
 }
 
+export type TableColumn<Row> = {
+  readonly header: Child;
+  readonly cell: (row: Row) => Child;
+};
+
 export type RecordTable<Row> = {
   readonly caption: string;
   readonly key: (row: Row) => string;
-  readonly columns: ReadonlyArray<{
-    readonly header: Child;
-    readonly cell: (row: Row) => Child;
-  }>;
+  readonly columns: ReadonlyArray<TableColumn<Row>>;
 };
 
 export function recordTable<Message, Row>(
@@ -57,12 +60,10 @@ export function recordTable<Message, Row>(
   rows: ReadonlyArray<Row>,
   spec: RecordTable<Row>,
 ) {
-  return table(h, {
+  return recordGrid(h, rows, {
     caption: spec.caption,
     headers: spec.columns.map(({ header }) => header),
-    rows: rows.map((row) => ({
-      key: spec.key(row),
-      cells: spec.columns.map(({ cell }) => cell(row)),
-    })),
+    key: spec.key,
+    cells: (row) => spec.columns.map(({ cell }) => cell(row)),
   });
 }

@@ -1,12 +1,9 @@
 import { Option } from "effect";
 import { AsyncData } from "foldkit";
-export { mergeFindingPages as mergeSavedViews } from "@dsiem/workbench-ui/findings";
 import type { Model } from "./browser-model";
 
 export const searchId = "saved-view-search";
 export const resultId = (id: string) => `saved-view-result-${id}`;
-export const searchText = (model: Model) =>
-  model.pickerMode._tag === "Search" ? model.pickerMode.query : "";
 
 export function shortcutGroups(model: Model) {
   if (!AsyncData.isSuccess(model.shortcuts)) return [];
@@ -35,9 +32,9 @@ export function shortcutGroups(model: Model) {
 }
 
 export const visibleSavedViews = (model: Model) =>
-  model.pickerMode._tag === "Quick"
+  model.pickerMode === "Quick"
     ? shortcutGroups(model).flatMap((group) => group.rows)
-    : (Option.getOrUndefined(AsyncData.getData(model.savedViews))?.rows ?? []);
+    : (Option.getOrUndefined(AsyncData.getData(model.search.data))?.rows ?? []);
 
 export const rememberRecent = (ids: readonly string[], id: string) =>
   [id, ...ids.filter((entry) => entry !== id)].slice(0, 5);

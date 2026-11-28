@@ -40,7 +40,7 @@ test("retrying older comments preserves the thread through a failed page", () =>
     generation: number,
     result: ReturnType<typeof Message.LoadedComments>["result"],
   ) =>
-    emit(Message.LoadedComments({ tripId: trip.trip_id, generation, result }));
+    emit(Message.LoadedComments({ rowId: trip.trip_id, generation, result }));
   const comments = within(inspector, role("list", { name: "Record comments" }));
   const recentComment = within(comments, text(recent.body));
   const olderComment = within(comments, text(older.body));

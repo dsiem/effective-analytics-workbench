@@ -1,3 +1,4 @@
+import { recordGrid } from "./record-grid.js";
 import type { Html, HtmlBuilder } from "foldkit/html";
 
 export type H<Message> = HtmlBuilder<Message>;
@@ -89,32 +90,9 @@ export const table = <Message>(
     }>;
   },
 ) =>
-  h.div(
-    [h.Class("table-scroll")],
-    [
-      h.table(
-        [],
-        [
-          h.caption([h.Class("sr-only")], [options.caption]),
-          h.thead(
-            [],
-            [
-              h.tr(
-                [],
-                options.headers.map((text) => h.th([h.Scope("col")], [text])),
-              ),
-            ],
-          ),
-          h.tbody(
-            [],
-            options.rows.map(({ key, cells }) =>
-              h.tr(
-                [h.Key(key)],
-                cells.map((child) => h.td([], [child])),
-              ),
-            ),
-          ),
-        ],
-      ),
-    ],
-  );
+  recordGrid(h, options.rows, {
+    caption: options.caption,
+    headers: options.headers,
+    key: (row) => row.key,
+    cells: (row) => row.cells,
+  });
