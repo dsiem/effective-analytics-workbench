@@ -112,10 +112,10 @@ function filters(h: H, model: Model) {
         onClick: Features.savedViews.toParentMessage(
           SavedViewMessage.NewSavedView(),
         ),
-        disabled:
-          !applied ||
-          hasChanges ||
-          model.savedViewsState.writes.panel._tag !== "Browse",
+        disabled: !applied || hasChanges,
+        busy:
+          model.savedViewsState.writes.panel._tag === "Preparing" ||
+          model.savedViewsState.writes.panel._tag === "Pinning",
         attributes: [
           h.Attribute(
             "title",
