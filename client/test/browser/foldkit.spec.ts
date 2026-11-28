@@ -53,7 +53,7 @@ test("overview charts and browser history work through the runtime", async ({
       .getByRole("img", { name: "Fare revenue by pickup date" })
       .locator("circle title")
       .first(),
-  ).toHaveText("01-01: $200.00");
+  ).toHaveText("Jan 1: $200.00");
   await page.getByRole("link", { name: "Trip explorer", exact: true }).click();
   await expect(
     page.getByRole("table", { name: "Matching trips", exact: true }),

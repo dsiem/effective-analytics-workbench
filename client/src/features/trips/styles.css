@@ -76,10 +76,84 @@
     min-width: 2.75rem;
     min-height: 2.75rem;
   }
-  @media (max-width: 767px) {
-    .trip-records .table-scroll[data-more-columns] {
-      --trip-actions-shadow:
-        -1px 0 var(--row-border), -0.375rem 0 0.5rem -0.25rem rgb(0 0 0 / 0.22);
+  .trip-scroll-help {
+    display: none;
+    margin: 0;
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+    color: var(--secondary);
+    background: var(--surface-soft);
+    border-bottom: 1px solid var(--border);
+  }
+  .trip-grid-wrap:has([data-scrollable-columns]) .trip-scroll-help {
+    display: block;
+  }
+  .trip-records .table-scroll[data-more-columns] {
+    --trip-actions-shadow:
+      -1px 0 var(--row-border), -0.375rem 0 0.5rem -0.25rem rgb(0 0 0 / 0.22);
+  }
+  @media (max-width: 1279px) {
+    .trip-records .table-scroll :is(th, td) {
+      padding-inline: 0.5rem;
+    }
+    .trip-records
+      .table-scroll
+      tr:not(.record-spacer)
+      > :is(:first-child, :nth-child(3)) {
+      white-space: normal;
+      line-height: 1.35;
+    }
+  }
+  @media (max-width: 959px) {
+    .trip-records .table-scroll table {
+      /* Fixed secondary columns leave the visible space to pickup, route and actions. */
+      --dropoff-width: 7.5rem;
+      --distance-width: 5rem;
+      --duration-width: 5.5rem;
+      --fare-width: 5.5rem;
+      table-layout: fixed;
+      width: calc(
+        100% + var(--dropoff-width) + var(--distance-width) +
+          var(--duration-width) + var(--fare-width)
+      );
+    }
+    .trip-records .table-scroll th:nth-child(3) {
+      width: var(--dropoff-width);
+    }
+    .trip-records .table-scroll th:nth-child(4) {
+      width: var(--distance-width);
+    }
+    .trip-records .table-scroll th:nth-child(5) {
+      width: var(--duration-width);
+    }
+    .trip-records .table-scroll th:nth-child(6) {
+      width: var(--fare-width);
+    }
+    .trip-records .table-scroll tr:not(.record-spacer) > :nth-child(-n + 2) {
+      white-space: normal;
+      line-height: 1.35;
+    }
+    .trip-records .table-scroll :is(th, td):last-child {
+      width: 6.25rem;
+      padding-inline: 0.25rem;
+      text-align: center;
+    }
+    .trip-row-actions {
+      gap: 0.125rem;
+    }
+    .trip-records .table-scroll .trip-comments-button,
+    .trip-records .table-scroll .trip-details-button {
+      min-width: 2.75rem;
+    }
+  }
+  @media (min-width: 480px) and (max-width: 959px) {
+    .trip-records .table-scroll table {
+      width: calc(
+        100% + var(--distance-width) + var(--duration-width) + var(--fare-width)
+      );
+    }
+    .trip-records .table-scroll th:nth-child(3) {
+      width: auto;
     }
   }
   .trip-refine {

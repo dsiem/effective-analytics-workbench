@@ -6,7 +6,7 @@ import type { GenieContext } from "@dsiem/analytics-shared/genie";
 import type { GpsEndpoint } from "@dsiem/analytics-shared/map-dataset";
 import { ask } from "../../domain/analysis";
 import { activityColors } from "../../lib/map-colors";
-import { badge, type Child, card, error, title } from "../../ui/primitives";
+import { type Child, card, error } from "../../ui/primitives";
 import { gpsContext } from "./context";
 import { mapInsights } from "./insights-view";
 import { dataKey, endpointName, frameKey, type Model } from "./model";
@@ -172,19 +172,12 @@ function mapCard(h: H, model: Model, inputs: ViewInputs) {
 }
 
 function gpsMap(h: H, model: Model, inputs: ViewInputs): Child[] {
-  const heading = title(
-    h,
-    "Trip hotspots",
-    "See where journeys begin and end, beyond ZIP boundaries.",
-    [badge(h, "NYC yellow taxis")],
-  );
   const loadError = Option.getOrElse(
     AsyncData.getError(model.activity),
     () => model.mapError,
   );
-  if (loadError) return [heading, error(h, loadError, M.Reload())];
+  if (loadError) return [error(h, loadError, M.Reload())];
   return [
-    heading,
     h.div(
       [h.Class("gps-layout")],
       [mapCard(h, model, inputs), mapInsights(h, model)],

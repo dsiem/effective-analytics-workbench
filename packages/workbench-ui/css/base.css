@@ -15,13 +15,13 @@
     -webkit-font-smoothing: antialiased;
   }
   h1 {
-    font-size: 1.625rem;
-    line-height: 1.3;
-    letter-spacing: -0.035em;
-    font-weight: 650;
+    font-size: clamp(1.875rem, 2.65vw, 2.625rem);
+    line-height: 1.14;
+    letter-spacing: -0.05em;
+    font-weight: 700;
   }
   h2 {
-    font-size: 0.9375rem;
+    font-size: 1rem;
     line-height: 1.5;
     font-weight: 600;
     letter-spacing: -0.015em;
@@ -60,7 +60,7 @@
 @layer components {
   @media (max-width: 767px) {
     h1 {
-      font-size: 1.375rem;
+      font-size: 1.875rem;
     }
   }
 }

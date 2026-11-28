@@ -305,7 +305,7 @@ for (const colorScheme of ["light", "dark"] as const) {
         map.getByRole("button", { name: "Zoom in", exact: true }),
       ).toHaveCSS(
         "background-color",
-        colorScheme === "dark" ? "rgb(27, 32, 44)" : "rgb(255, 255, 255)",
+        colorScheme === "dark" ? "rgb(28, 40, 36)" : "rgb(255, 255, 255)",
       );
       await fitsViewport(page);
       await capture(page, info, "pickup-map");
@@ -372,4 +372,59 @@ test("loading, empty, and error states retain the workspace layout", async ({
     page.getByRole("button", { name: "Try again", exact: true }),
   ).toBeVisible();
   await capture(page, info, "error");
+});
+
+test.describe("compact record layouts", () => {
+  test.use({ hasTouch: true });
+  for (const width of [320, 390, 768, 1024]) {
+    test(`dates and leading record columns are readable at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto(`/trips${query}`);
+      const table = page.getByRole("table", { name: "Matching trips" });
+      await expect(table.getByRole("row")).toHaveCount(9);
+
+      for (const input of await page.locator(".date-input").all()) {
+        const { available, required } = await input.evaluate(
+          (node: HTMLInputElement) => {
+            const style = getComputedStyle(node);
+            const sample = document.createElement("span");
+            Object.assign(sample.style, {
+              position: "absolute",
+              visibility: "hidden",
+              fontFamily: style.fontFamily,
+              fontSize: style.fontSize,
+              fontWeight: style.fontWeight,
+              fontVariantNumeric: style.fontVariantNumeric,
+            });
+            sample.textContent = node.value;
+            document.body.append(sample);
+            const required = sample.getBoundingClientRect().width;
+            sample.remove();
+            const available =
+              node.getBoundingClientRect().width -
+              parseFloat(style.borderLeftWidth) -
+              parseFloat(style.borderRightWidth) -
+              parseFloat(style.paddingLeft) -
+              parseFloat(style.paddingRight);
+            return { available, required };
+          },
+        );
+        expect(required).toBeLessThanOrEqual(available);
+      }
+
+      const row = table.getByRole("row").nth(1);
+      const lastVisibleValue = row.getByRole("cell").nth(width >= 1024 ? 5 : 1);
+      const textRight = await lastVisibleValue.evaluate((cell) => {
+        const text = document.createRange();
+        text.selectNodeContents(cell);
+        return text.getBoundingClientRect().right;
+      });
+      const actions = await row.getByRole("cell").last().boundingBox();
+      if (!actions) throw new Error("Missing pinned record actions");
+      expect(textRight).toBeLessThanOrEqual(actions.x);
+      await fitsViewport(page);
+    });
+  }
 });

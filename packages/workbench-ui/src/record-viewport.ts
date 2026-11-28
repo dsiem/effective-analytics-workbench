@@ -26,6 +26,10 @@ const RecordsViewport = Mount.defineStream("RecordsViewport", {
         const report = () => {
           if (!live) return;
           element.toggleAttribute(
+            "data-scrollable-columns",
+            element.scrollWidth - element.clientWidth > 1,
+          );
+          element.toggleAttribute(
             "data-more-columns",
             element.scrollWidth - element.clientWidth - element.scrollLeft > 1,
           );

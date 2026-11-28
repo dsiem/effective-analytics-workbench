@@ -33,6 +33,12 @@ export const tripMetrics = <Message>(
   },
 ];
 
+const dayLabel = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
+
 export function dailySeries(
   series: Model["series"],
 ): Series<Overview["daily"][number]> {
@@ -42,7 +48,10 @@ export function dailySeries(
       series === "trips"
         ? "Trips by pickup date"
         : "Fare revenue by pickup date",
-    label: (row) => row.day.slice(5),
+    label: (row) => {
+      const timestamp = Date.parse(row.day);
+      return Number.isFinite(timestamp) ? dayLabel.format(timestamp) : row.day;
+    },
     value: (row) => row[series],
     formatValue: series === "revenue" ? (value) => money(value, 2) : number,
     formatTick: series === "revenue" ? money : compact,
@@ -52,7 +61,7 @@ export function dailySeries(
 export const hourlySeries: Series<Overview["hourly"][number]> = {
   kind: "bar",
   title: "Trips by pickup hour",
-  label: (row) => `${row.hour}:00`,
+  label: (row) => `${row.hour % 12 || 12} ${row.hour < 12 ? "am" : "pm"}`,
   value: (row) => row.trips,
   width: 400,
 };
