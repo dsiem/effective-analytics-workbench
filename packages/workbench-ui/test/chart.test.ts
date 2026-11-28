@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Html } from "foldkit/html";
 import { inertHtml } from "foldkit/html";
-import { chart } from "../src/ui/chart";
+import { chart } from "../src/index.js";
 
 function elements(html: Html | string | undefined): NonNullable<Html>[] {
   return html && typeof html !== "string"

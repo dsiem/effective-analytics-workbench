@@ -2,8 +2,8 @@
 @import "./theme.css";
 @import "./base.css";
 @import "./primitives.css";
+@import "@dsiem/workbench-ui/styles.css";
 @import "./field.css";
-@import "./chart.css";
 @import "./dialog.css";
 @import "./date-field.css";
 @import "./filter-panel.css";

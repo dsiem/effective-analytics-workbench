@@ -29,6 +29,9 @@ importers:
       '@dsiem/sql-warehouse':
         specifier: workspace:*
         version: link:packages/sql-warehouse
+      '@dsiem/workbench-ui':
+        specifier: workspace:*
+        version: link:packages/workbench-ui
       '@effect/platform-browser':
         specifier: 4.1.5
         version: 4.1.5(effect@4.1.5)
@@ -132,6 +135,15 @@ importers:
       effect:
         specifier: ~4.1.4
         version: 4.1.5
+
+  packages/workbench-ui:
+    dependencies:
+      effect:
+        specifier: ~4.1.4
+        version: 4.1.5
+      foldkit:
+        specifier: ^0.171.0
+        version: 0.171.0(@effect/platform-browser@4.1.5(effect@4.1.5))(effect@4.1.5)
 
 packages:
 

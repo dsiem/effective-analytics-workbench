@@ -2,10 +2,10 @@ import { AsyncData } from "foldkit";
 import { defineView } from "foldkit/submodel";
 import type { Filters } from "@dsiem/analytics-shared/filters";
 import type { Overview } from "@dsiem/analytics-shared/overview";
+import { metricGrid, recordTable, seriesChart } from "@dsiem/workbench-ui";
 import { ask } from "../../domain/analysis";
 import { href, queryFor } from "../../domain/filters";
-import { compact, money, number } from "../../lib/format";
-import { chart } from "../../ui/chart";
+import { money, number } from "../../lib/format";
 import { icon } from "../../ui/icons";
 import {
   button,
@@ -13,9 +13,7 @@ import {
   card,
   error,
   loading,
-  metric,
   panelHeader,
-  table,
   title,
 } from "../../ui/primitives";
 import {
@@ -24,6 +22,7 @@ import {
   zonesChartContext,
 } from "./context";
 import { MetricTabs } from "./metric-tabs";
+import { dailySeries, hourlySeries, tripMetrics } from "./report";
 import type { Model } from "./model";
 import type { H } from "./view-messages";
 import { Message as M } from "./view-messages";
@@ -42,38 +41,9 @@ function overviewData(
 ): Child[] {
   const { summary, daily, hourly, zones, queriedAt } = data;
   const series = model.series;
-  const dailyTitle =
-    series === "trips" ? "Trips by pickup date" : "Fare revenue by pickup date";
+  const dailyChart = dailySeries(series);
   return [
-    h.div(
-      [h.Class("metrics")],
-      [
-        metric(h, {
-          label: "Total trips",
-          value: number(summary.trips),
-          detail: "Recorded taxi trips",
-          icon: icon(h, "car-taxi-front"),
-        }),
-        metric(h, {
-          label: "Total fare revenue",
-          value: money(summary.revenue),
-          detail: "USD · excludes tips & tolls",
-          icon: icon(h, "circle-dollar-sign"),
-        }),
-        metric(h, {
-          label: "Average fare",
-          value: money(summary.avg_fare, 2),
-          detail: "Per recorded trip",
-          icon: icon(h, "activity"),
-        }),
-        metric(h, {
-          label: "Average distance",
-          value: `${summary.avg_distance.toFixed(2)} mi`,
-          detail: `${summary.avg_duration.toFixed(1)} min average duration`,
-          icon: icon(h, "route"),
-        }),
-      ],
-    ),
+    metricGrid(h, summary, tripMetrics(h)),
     ...(summary.trips === 0
       ? [
           card(
@@ -102,15 +72,19 @@ function overviewData(
                         [h.DataAttribute("slot", "tabs")],
                         [
                           panelHeader(h, {
-                            title: dailyTitle,
+                            title: dailyChart.title,
                             description: "Activity over the selected period",
                             actions: [
                               ask(
                                 h,
                                 (context, question) =>
                                   M.Analyze({ context, question }),
-                                `Ask Genie about ${dailyTitle.toLowerCase()}`,
-                                dailyChartContext(dailyTitle, data, series),
+                                `Ask Genie about ${dailyChart.title.toLowerCase()}`,
+                                dailyChartContext(
+                                  dailyChart.title,
+                                  data,
+                                  series,
+                                ),
                                 "Explain the pattern in this chart and highlight any unusual days.",
                               ),
                               h.div(
@@ -131,20 +105,9 @@ function overviewData(
                           h.div(
                             [...(tabs[activeIndex]?.panel ?? [])],
                             [
-                              chart(h, {
-                                kind: "area",
+                              seriesChart(h, daily, {
+                                ...dailyChart,
                                 width: mobile ? 400 : 700,
-                                title: dailyTitle,
-                                data: daily.map((row) => ({
-                                  label: row.day.slice(5),
-                                  value: row[series],
-                                })),
-                                formatValue:
-                                  series === "revenue"
-                                    ? (value) => money(value, 2)
-                                    : number,
-                                formatTick:
-                                  series === "revenue" ? money : compact,
                               }),
                             ],
                           ),
@@ -162,7 +125,7 @@ function overviewData(
               ]),
               card(h, [
                 panelHeader(h, {
-                  title: "Trips by pickup hour",
+                  title: hourlySeries.title,
                   description: "Distribution across the day",
                   actions: [
                     ask(
@@ -174,15 +137,7 @@ function overviewData(
                     ),
                   ],
                 }),
-                chart(h, {
-                  kind: "bar",
-                  title: "Trips by pickup hour",
-                  width: 400,
-                  data: hourly.map((row) => ({
-                    label: `${row.hour}:00`,
-                    value: row.trips,
-                  })),
-                }),
+                seriesChart(h, hourly, hourlySeries),
                 h.p(
                   [h.Class("panel-footer")],
                   ["Hours as recorded in the source"],
@@ -215,40 +170,41 @@ function overviewData(
                     ),
                   ],
                 }),
-                table(h, {
+                recordTable(h, zones.slice(0, 5), {
                   caption: "Top pickup ZIP codes",
-                  headers: [
-                    "Pickup ZIP",
-                    "Trips",
-                    "Fare revenue",
-                    "Avg. fare",
-                    "Explore",
-                  ],
-                  rows: zones.slice(0, 5).map((zone) => ({
-                    key: zone.zip,
-                    cells: [
-                      zone.zip,
-                      number(zone.trips),
-                      money(zone.revenue),
-                      money(zone.avg_fare, 2),
-                      h.a(
-                        [
-                          h.Href(
-                            href(
-                              "/trips",
-                              queryFor({
-                                ...filters,
-                                zip: zone.zip,
-                              }),
+                  key: (zone) => zone.zip,
+                  columns: [
+                    { header: "Pickup ZIP", cell: (zone) => zone.zip },
+                    { header: "Trips", cell: (zone) => number(zone.trips) },
+                    {
+                      header: "Fare revenue",
+                      cell: (zone) => money(zone.revenue),
+                    },
+                    {
+                      header: "Avg. fare",
+                      cell: (zone) => money(zone.avg_fare, 2),
+                    },
+                    {
+                      header: "Explore",
+                      cell: (zone) =>
+                        h.a(
+                          [
+                            h.Href(
+                              href(
+                                "/trips",
+                                queryFor({
+                                  ...filters,
+                                  zip: zone.zip,
+                                }),
+                              ),
                             ),
-                          ),
-                          h.AriaLabel(`View trips in ${zone.zip}`),
-                          h.Class("btn btn-ghost btn-icon"),
-                        ],
-                        [icon(h, "arrow-up-right")],
-                      ),
-                    ],
-                  })),
+                            h.AriaLabel(`View trips in ${zone.zip}`),
+                            h.Class("btn btn-ghost btn-icon"),
+                          ],
+                          [icon(h, "arrow-up-right")],
+                        ),
+                    },
+                  ],
                 }),
               ]),
               card(

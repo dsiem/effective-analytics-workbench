@@ -1,0 +1,228 @@
+@layer components {
+  .card {
+    min-width: 0;
+    border: 1px solid var(--border, #e4e7ee);
+    border-radius: var(--radius, 0.75rem);
+    background: var(--surface, #fff);
+    box-shadow: var(
+      --shadow,
+      0 1px 3px rgb(16 24 40 / 0.04),
+      0 1px 2px rgb(16 24 40 / 0.02)
+    );
+  }
+  .page-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .page-title p {
+    max-width: 48rem;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+  }
+  .metric {
+    padding: 1.125rem 1.25rem;
+  }
+  .metric-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    color: var(--placeholder, #9299a8);
+  }
+  .metric-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--muted, #667085);
+    letter-spacing: 0;
+  }
+  .metric-value {
+    margin-top: 0.625rem;
+    font-size: clamp(1.5rem, 2.2vw, 1.875rem);
+    line-height: 1.2;
+    font-weight: 650;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+  .metric-detail {
+    margin-top: 0.5rem;
+    font-size: 0.6875rem;
+    color: var(--muted, #667085);
+  }
+  .panel-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1.125rem 1.25rem;
+  }
+  .panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+  .table-scroll table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    white-space: nowrap;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .table-scroll th {
+    padding: 0.75rem 1.25rem;
+    border-block: 1px solid var(--border, #e4e7ee);
+    background: var(--surface-soft, #fafbfc);
+    color: var(--muted, #667085);
+    font-size: 0.6875rem;
+    font-weight: 500;
+  }
+  .table-scroll td {
+    height: 3.25rem;
+    padding: 0.5rem 1.25rem;
+    border-bottom: 1px solid var(--row-border, #eef0f4);
+  }
+  .table-scroll tr:last-child td {
+    border-bottom: 0;
+  }
+  .table-scroll tbody tr:hover {
+    background: var(--surface-hover, #fafbff);
+  }
+  .metric-label,
+  .panel-header h2,
+  .page-title h1 {
+    margin: 0;
+  }
+  .metric-value,
+  .metric-detail {
+    margin-bottom: 0;
+  }
+  .panel-description,
+  .page-description {
+    color: var(--muted, #667085);
+    margin: 0;
+  }
+  .panel-description {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+  .page-title .page-description {
+    margin-top: 0.5rem;
+  }
+  .page-title-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .table-scroll caption.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  @media (max-width: 767px) {
+    .page-title {
+      margin-bottom: 1.25rem;
+    }
+    .panel-header {
+      padding: 1rem;
+    }
+    .metric {
+      padding: 1rem;
+    }
+    .metric-value {
+      font-size: 1.5rem;
+    }
+    .metric-detail {
+      line-height: 1.5;
+    }
+  }
+  @media (max-width: 399px) {
+    .metric {
+      padding: 0.875rem;
+    }
+    .metric-value {
+      font-size: 1.375rem;
+    }
+    .metric-label {
+      font-size: 0.6875rem;
+    }
+    .metric-detail {
+      font-size: 0.625rem;
+    }
+  }
+}
+@layer components {
+  .chart {
+    display: block;
+    width: 100%;
+    height: 15rem;
+    padding: 0 0.5rem;
+    overflow: visible;
+  }
+  .chart-grid {
+    stroke: var(--border, #e4e7ee);
+    stroke-dasharray: 3 4;
+  }
+  .chart-tick {
+    fill: var(--muted, #667085);
+    font-variant-numeric: tabular-nums;
+  }
+  .chart-line {
+    stroke: var(--chart-color, #4f46e5);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .chart-point {
+    fill: var(--surface, #fff);
+    stroke: var(--chart-color, #4f46e5);
+    stroke-width: 2;
+  }
+  .chart-bar {
+    fill: var(--chart-color, #4f46e5);
+    opacity: 0.8;
+  }
+  .chart-bar:hover {
+    opacity: 1;
+  }
+  @media (max-width: 767px) {
+    .chart {
+      height: 14rem;
+    }
+  }
+}
+@layer components {
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  @media (max-width: 1279px) {
+    .metrics {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 767px) {
+    .metrics {
+      gap: 0.75rem;
+    }
+  }
+}
