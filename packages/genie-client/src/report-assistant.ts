@@ -1,7 +1,15 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { Effect, type Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { analysisQuestion } from "./analysis-context.js";
 import { makeGenieClient, type GenieRequest } from "./chat.js";
+
+import { GenieOperation } from "./protocol.js";
+
+export const AcceptedReportTurn = Schema.Struct({
+  ...GenieOperation.fields,
+  signature: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{43}$/)),
+});
+export type AcceptedReportTurn = typeof AcceptedReportTurn.Type;
 
 export function makeReportAssistant(
   { spaceId, token, host }: { spaceId: string; token: string; host: string },
@@ -44,7 +52,7 @@ export function makeReportAssistant(
   const sign = (id: string) =>
     createHmac("sha256", key).update(id).digest("base64url");
   const client = makeGenieClient({ spaceId, request });
-  return (input: {
+  const submit = (input: {
     question: string;
     continuation: string | null;
     filters: Schema.JsonObject;
@@ -68,14 +76,60 @@ export function makeReportAssistant(
           !signature ||
           !timingSafeEqual(Buffer.from(signature), Buffer.from(sign(id)))
         )
-          return yield* Effect.fail({ message: "Start a new conversation." });
+          return yield* Effect.fail({
+            _tag: "ExpiredContinuation" as const,
+            message: "Start a new conversation.",
+          });
         conversationId = id;
       }
-      const operation = yield* client.submit({
-        content,
-        ...(conversationId ? { conversationId } : {}),
-      });
-      const result = yield* client.complete(operation);
+      const operation = yield* client
+        .submit({
+          content,
+          ...(conversationId ? { conversationId } : {}),
+        })
+        .pipe(
+          Effect.timeout("2 minutes"),
+          Effect.mapError(() => ({
+            _tag: "SubmissionUnconfirmed" as const,
+            message:
+              "Could not confirm submission. Check the conversation history before retrying.",
+          })),
+        );
+      return {
+        ...operation,
+        signature: sign(
+          `turn:${operation.conversationId}:${operation.messageId}`,
+        ),
+      };
+    });
+
+  const resume = (accepted: AcceptedReportTurn) =>
+    Effect.gen(function* () {
+      if (
+        !Schema.is(AcceptedReportTurn)(accepted) ||
+        !timingSafeEqual(
+          Buffer.from(accepted.signature),
+          Buffer.from(
+            sign(`turn:${accepted.conversationId}:${accepted.messageId}`),
+          ),
+        )
+      ) {
+        return yield* Effect.fail({
+          _tag: "InvalidReceipt" as const,
+          message: "This server cannot resume that turn.",
+        });
+      }
+      const operation = {
+        conversationId: accepted.conversationId,
+        messageId: accepted.messageId,
+      };
+      const result = yield* client.complete(operation).pipe(
+        Effect.mapError(() => ({
+          _tag: "AnswerUnavailable" as const,
+          accepted,
+          message: "Could not retrieve the answer for the accepted turn.",
+        })),
+      );
       return {
         continuation:
           operation.conversationId + "." + sign(operation.conversationId),
@@ -98,11 +152,8 @@ export function makeReportAssistant(
             : [],
         ),
       };
-    }).pipe(
-      Effect.timeout("2 minutes"),
-      Effect.mapError(() => ({
-        message:
-          "Genie did not return an answer. Check the space and conversation history before retrying.",
-      })),
-    );
+    });
+  const ask = (input: Parameters<typeof submit>[0]) =>
+    submit(input).pipe(Effect.flatMap(resume));
+  return Object.assign(ask, { submit, resume });
 }
