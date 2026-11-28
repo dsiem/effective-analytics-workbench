@@ -2,8 +2,8 @@ import { Effect, Option, pipe, Schema, SchemaGetter } from "effect";
 import * as Route from "foldkit/route";
 import { defineTaggedUnion } from "foldkit/schema";
 import {
-  AnalysisRunId,
-  AnalysisRunIdFromString,
+  JobRunId,
+  JobRunIdFromString,
 } from "@dsiem/analytics-shared/analysis-runs";
 import { Filters } from "@dsiem/analytics-shared/filters";
 import { pagePaths } from "@dsiem/analytics-shared/page-paths";
@@ -13,7 +13,7 @@ import { filtersFromQuery, href } from "../domain/filters";
 const AnalysisRunLink = defineTaggedUnion({
   NoRun: {},
   InvalidRun: {},
-  SelectedRun: { id: AnalysisRunId },
+  SelectedRun: { id: JobRunId },
 });
 export type AnalysisRunLink = typeof AnalysisRunLink.Type;
 
@@ -51,14 +51,14 @@ const TripSortQuery = Schema.Struct({
   }),
 );
 
-const decodeAnalysisRunId = Schema.decodeUnknownOption(AnalysisRunIdFromString);
+const decodeJobRunId = Schema.decodeUnknownOption(JobRunIdFromString);
 const AnalysisRunQuery = Schema.Struct({
   run: Schema.optionalKey(Schema.String),
 }).pipe(
   Schema.decodeTo(Schema.Struct({ run: Schema.toType(AnalysisRunLink) }), {
     decode: SchemaGetter.transform(({ run }) => {
       if (run === undefined) return { run: AnalysisRunLink.NoRun() };
-      const id = decodeAnalysisRunId(run);
+      const id = decodeJobRunId(run);
       return {
         run: Option.isSome(id)
           ? AnalysisRunLink.SelectedRun({ id: id.value })
@@ -135,7 +135,7 @@ export const historyHref = (query: string) =>
   href(pageUrls.AnalysisRuns, withoutRun(query));
 
 const encodeAnalysisRunQuery = Schema.encodeSync(AnalysisRunQuery);
-export const runHref = (id: AnalysisRunId, query: string) => {
+export const runHref = (id: JobRunId, query: string) => {
   const params = new URLSearchParams(query);
   const encoded = encodeAnalysisRunQuery({
     run: AnalysisRunLink.SelectedRun({ id }),

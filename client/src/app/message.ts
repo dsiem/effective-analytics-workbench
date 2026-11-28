@@ -2,7 +2,7 @@ import { Completion } from "../lib/command-result";
 import { Schema } from "effect";
 import { Calendar } from "foldkit";
 import { defineMessageUnion } from "foldkit/message";
-import { CurrentUser } from "@dsiem/analytics-shared/current-user";
+import { UserIdentity } from "@dsiem/analytics/contracts";
 import { DatasetMetadata } from "@dsiem/analytics-shared/dataset";
 import * as AnalysisRuns from "../features/analysis-runs/messages";
 import * as Filters from "../features/filters/messages";
@@ -31,7 +31,7 @@ export const Message = defineMessageUnion({
     today: Calendar.CalendarDate,
   },
   LoadedUser: {
-    result: Completion(Schema.NullOr(CurrentUser)),
+    result: Completion(Schema.NullOr(UserIdentity)),
   },
   GotFiltersMessage: { message: Filters.Message },
   GotOverviewMessage: { message: Overview.Message },

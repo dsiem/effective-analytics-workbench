@@ -6,8 +6,8 @@ import { defineMessageUnion } from "foldkit/message";
 import {
   AnalysisInput,
   AnalysisRun,
-  AnalysisRunReference,
-  AnalysisRunSummary,
+  JobRunReference,
+  JobRunSummary,
   RouteReliabilityReport,
 } from "@dsiem/analytics-shared/analysis-runs";
 import { Id } from "@dsiem/analytics-shared/schema";
@@ -26,12 +26,12 @@ export const Message = defineMessageUnion({
   AnalysisSubmitted: {
     requestId: Id,
     generation: Schema.Int,
-    result: Completion(AnalysisRunReference),
+    result: Completion(JobRunReference),
   },
   RefreshAnalysisHistory: {},
   LoadedAnalysisHistory: {
     generation: Schema.Int,
-    result: Schema.Result(Schema.Array(AnalysisRunSummary), Notice),
+    result: Schema.Result(Schema.Array(JobRunSummary), Notice),
   },
   RetryAnalysisStatus: {},
   LoadedAnalysisStatus: {

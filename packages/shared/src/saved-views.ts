@@ -4,7 +4,6 @@ export {
   SavedViewCursor,
   SavedViewPin,
   SavedViewSearch,
-  SavedViewVersion,
 } from "@dsiem/analytics/contracts";
 
 export const { SavedViewInput, SavedView, SavedViewsPage } =

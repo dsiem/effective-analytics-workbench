@@ -4,3 +4,5 @@ export const boundedText = (max: number) =>
   Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(max));
 
 export const Id = Schema.String.check(Schema.isUUID(4));
+
+export const Version = Schema.Int.check(Schema.isGreaterThan(0));

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  AnalysisRunId,
+  JobRunId,
   type AnalysisRun,
 } from "@dsiem/analytics-shared/analysis-runs";
 import { Option, Result, Schema } from "effect";
@@ -18,7 +18,7 @@ import {
 import { fail, succeed } from "../src/lib/command-result";
 import { AccessDenied } from "../src/lib/request-state";
 
-const id = Schema.decodeUnknownSync(AnalysisRunId)(123);
+const id = Schema.decodeUnknownSync(JobRunId)(123);
 const initial = openAnalysisRuns(init(), { _tag: "SelectedRun", id }).model;
 const selection = { id, generation: initial.generation };
 const running: typeof AnalysisRun.Type = {

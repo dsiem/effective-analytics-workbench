@@ -1,5 +1,5 @@
 import { Context, Effect, Exit, Layer, Schema } from "effect";
-import type { CurrentUser } from "@dsiem/analytics-shared/current-user";
+import type { UserIdentity } from "@dsiem/analytics/contracts";
 import { Settings } from "./settings.js";
 import { Workspace } from "./workspace.js";
 
@@ -15,7 +15,7 @@ const makeCurrentUser = Effect.gen(function* () {
     workspace.request("/api/2.0/preview/scim/v2/Me"),
   ).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(WorkspaceUser)),
-    Effect.map((user): CurrentUser => ({
+    Effect.map((user): UserIdentity => ({
       name: user.displayName?.trim() || user.userName,
       email: user.userName,
     })),
@@ -24,7 +24,7 @@ const makeCurrentUser = Effect.gen(function* () {
 
   return (
     headers: Readonly<Record<string, string | undefined>>,
-  ): Effect.Effect<CurrentUser | null> => {
+  ): Effect.Effect<UserIdentity | null> => {
     const email = headers["x-forwarded-email"]?.trim() || null;
     const name = headers["x-forwarded-preferred-username"]?.trim() || email;
     if (name) return Effect.succeed({ name, email });

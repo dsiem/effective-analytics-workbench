@@ -3,7 +3,7 @@ import {
   AnalysisInput,
   RouteReliabilityReport,
 } from "@dsiem/analytics-shared/analysis-runs";
-import { makeAnalysisJob } from "@dsiem/analytics/jobs";
+import { bindJob } from "@dsiem/analytics/jobs";
 import { Workspace } from "./workspace.js";
 import { warehouseJsonReport } from "./jobs/sql-json-report.js";
 import { Settings } from "./settings.js";
@@ -25,15 +25,22 @@ const parameters = Schema.Struct({
 const makeAnalysisRuns = Effect.gen(function* () {
   const { analysisJobId, analysisResultsTable } = yield* Settings;
   const warehouse = yield* Warehouse;
-  return makeAnalysisJob((yield* Workspace).request, {
-    jobId: analysisJobId || null,
-    parameters,
-    readReport: warehouseJsonReport({
-      warehouse,
-      tableName: analysisResultsTable,
-      report: RouteReliabilityReport,
-    }),
-  });
+  return bindJob(
+    {
+      request: (yield* Workspace).request,
+      statusOf: (error) =>
+        error._tag === "UpstreamError" ? error.upstreamStatus : undefined,
+    },
+    {
+      jobId: analysisJobId || null,
+      parameters,
+      readReport: warehouseJsonReport({
+        warehouse,
+        tableName: analysisResultsTable,
+        report: RouteReliabilityReport,
+      }),
+    },
+  );
 });
 
 export class AnalysisRuns extends Context.Service<

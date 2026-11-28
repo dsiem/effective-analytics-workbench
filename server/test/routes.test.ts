@@ -37,6 +37,7 @@ type Services = {
   genie?: Partial<GenieViewer> | "live";
   workspace?: Partial<typeof Workspace.Service>;
   analytics?: Partial<typeof Analytics.Service>;
+  tripComments?: Partial<typeof TripComments.Service>;
   savedViews?: Partial<typeof SavedViews.Service>;
 };
 const appFor = (
@@ -65,7 +66,7 @@ const appFor = (
                       : {}),
                   }),
               }),
-          Layer.mock(TripComments, {}),
+          Layer.mock(TripComments, overrides.tripComments ?? {}),
           Layer.mock(SavedViews, overrides.savedViews ?? {}),
         ).pipe(
           Layer.provideMerge(
@@ -224,6 +225,12 @@ for (const { request, services, status, error } of [
   {
     request: new Request("http://localhost/api/saved-views"),
     services: { savedViews: { list: () => Effect.fail(outage) } },
+    status: 503,
+    error: { code: "lakebase_unavailable", message: outage.message },
+  },
+  {
+    request: new Request("http://localhost/api/trip-comments?tripId=trip-1"),
+    services: { tripComments: { list: () => Effect.fail(outage) } },
     status: 503,
     error: { code: "lakebase_unavailable", message: outage.message },
   },

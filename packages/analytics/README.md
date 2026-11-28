@@ -146,10 +146,14 @@ the encoded filter field names. Comment retries preserve the originally stored
 snapshot and author. [Saved views with required filters](../../server/test/custom-saved-views.test.ts) ·
 [Order annotations](../../server/test/custom-record-comments.test.ts)
 
+A comment author and the signed-in viewer both use `UserIdentity`. Versioned saves, pins and deletes use the same positive-integer `Version` schema.
+
 ## Bind a Databricks job
 
-Import `makeAnalysisJob` and `sqlJsonReport` from `@dsiem/analytics/jobs`.
-Pass an authenticated request function and a definition containing the job ID,
+Import `bindJob` and `sqlJsonReport` from `@dsiem/analytics/jobs`.
+Pass a transport with an authenticated `request` and a `statusOf(error)` function. Return the HTTP status for response failures and `undefined` for failures without a response. A run lookup maps 404 to `JobRunNotFound`. A 403 on any Jobs operation maps to `PermissionDenied`. Other transport failures propagate to the caller.
+
+Supply a `JobDefinition` containing the job ID,
 a parameter codec, and a report reader. The codec maps application inputs to
 Databricks string parameters and decodes history. The binding reserves
 `requested_by` for viewer attribution.
@@ -159,6 +163,8 @@ same request UUID when retrying a submission. A report reader returns an
 Effect containing an Option. Use `sqlJsonReport(sql, table, schema)` for a
 table with a BIGINT `run_id` and a JSON string `report_json`. Supply another
 reader for reports stored elsewhere. [Taxi job binding](../../server/src/analysis-runs.ts)
+
+The shared contracts use `JobRunId`, `JobRunState`, and `JobRunSummary` for both remote and local runs where applicable. A report requested before a run succeeds returns `JobReportPending`. The taxi HTTP API maps these failures to its existing analysis error codes.
 
 Import the boundary schemas from `@dsiem/analytics/contracts` to build an
 HTTP API. Import the tagged errors from `@dsiem/analytics/errors` when mapping

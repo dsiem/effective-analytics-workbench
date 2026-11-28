@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { CurrentUser } from "./current-user.js";
+import { UserIdentity } from "./user-identity.js";
 import { CursorPage, CursorTimestamp } from "./cursor-page.js";
 import { boundedText, Id } from "./fields.js";
 
@@ -22,7 +22,7 @@ export const commentSchemas = <RecordFields extends Schema.Struct.Fields>(
   });
   const Comment = Schema.Struct({
     ...Input.fields,
-    author: Schema.NullOr(CurrentUser),
+    author: Schema.NullOr(UserIdentity),
     created_at: Schema.String,
   });
   return { Input, Comment, Page: CursorPage(Comment, CommentCursor) };

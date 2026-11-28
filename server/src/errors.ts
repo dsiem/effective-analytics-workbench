@@ -8,8 +8,8 @@ import {
   InvalidRequest,
   PermissionDenied,
   SavedViewNotFound,
-  AnalysisRunNotFound,
-  AnalysisReportPending,
+  JobRunNotFound,
+  JobReportPending,
   SavedViewConflict,
   UpstreamError,
   ServiceUnavailable,
@@ -18,8 +18,8 @@ export {
   InvalidRequest,
   PermissionDenied,
   SavedViewNotFound,
-  AnalysisRunNotFound,
-  AnalysisReportPending,
+  JobRunNotFound,
+  JobReportPending,
   SavedViewConflict,
   UpstreamError,
   ServiceUnavailable,
@@ -62,11 +62,11 @@ export type ServiceError =
   | PermissionDenied
   | SavedViewNotFound
   | TripNotFound
-  | AnalysisRunNotFound
-  | AnalysisReportPending
+  | JobRunNotFound
+  | JobReportPending
   | SavedViewConflict
-  | ServiceUnavailable<UnavailableService>
-  | UpstreamError<UpstreamService>
+  | ServiceUnavailable<Exclude<UnavailableService, "analysis"> | "jobs">
+  | UpstreamError<Exclude<UpstreamService, "analysis"> | "jobs">
   | OperationTimeout
   | GenieFailed
   | GenieAgentModeUnavailable;

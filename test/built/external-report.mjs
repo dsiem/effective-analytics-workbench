@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import * as Statement from "effect/sql/Statement";
 import { inertHtml } from "foldkit/html";
 import { dataset } from "@dsiem/analytics";
-import { makeAnalysisJob } from "@dsiem/analytics/jobs";
+import { bindJob } from "@dsiem/analytics/jobs";
 import { makeSavedViewStore } from "@dsiem/analytics/saved-views";
 import { makeRecordComments } from "@dsiem/analytics/record-comments";
 import { makeRecordPreview } from "@dsiem/analytics/record-preview";
@@ -50,7 +50,7 @@ try {
   );
   assert.match(css, /\.metric-grid|\.metrics/);
   assert.equal(typeof mountQueryPage, "function");
-  assert.equal(typeof makeAnalysisJob, "function");
+  assert.equal(typeof bindJob, "function");
   assert.equal(typeof makeSavedViewStore, "function");
   assert.equal(typeof makeRecordComments, "function");
   assert.equal(typeof makeRecordPreview, "function");

@@ -26,7 +26,7 @@ type ApiErrorResponse<E extends ServiceError> = E extends {
   readonly _tag: infer Tag extends keyof typeof serviceErrorSuffixes;
   readonly service: infer Service extends string;
 }
-  ? ErrorBody<`${Service}${(typeof serviceErrorSuffixes)[Tag]}`>
+  ? ErrorBody<`${Service extends "jobs" ? "analysis" : Service}${(typeof serviceErrorSuffixes)[Tag]}`>
   : E extends { readonly _tag: infer Tag extends keyof typeof apiErrorCodes }
     ? ErrorBody<(typeof apiErrorCodes)[Tag]>
     : never;
@@ -37,7 +37,7 @@ function encodeError(error: ServiceError) {
     error: {
       code:
         "service" in error
-          ? `${error.service}${serviceErrorSuffixes[error._tag]}`
+          ? `${error.service === "jobs" ? "analysis" : error.service}${serviceErrorSuffixes[error._tag]}`
           : apiErrorCodes[error._tag],
       message: error.message,
       ...upstreamStatusFields(error),

@@ -1,8 +1,8 @@
 import { Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/sql/SqlClient";
 import * as SqlSchema from "effect/sql/SqlSchema";
-import { AnalysisRunId, localRunSchema } from "./contracts/job-runs.js";
-import { AnalysisRunNotFound, InvalidRequest } from "./errors.js";
+import { JobRunId, localRunSchema } from "./contracts/job-runs.js";
+import { JobRunNotFound, InvalidRequest } from "./errors.js";
 import { sqlJsonReport } from "./jobs.js";
 
 interface RunTable {
@@ -69,7 +69,7 @@ export function makeLocalRuns<
                 "This request ID already belongs to a run with different inputs.",
             });
           return {
-            id: yield* Schema.decodeUnknownEffect(AnalysisRunId)(existing.id),
+            id: yield* Schema.decodeUnknownEffect(JobRunId)(existing.id),
           };
         }
         const report = yield* options.calculate(input);
@@ -80,7 +80,7 @@ export function makeLocalRuns<
           yield* sql`INSERT INTO ${target} (request_id, input_json, report_json)
         VALUES (${requestId}::uuid, ${encoded}::jsonb, ${json}) RETURNING run_id AS id`;
         return yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ id: AnalysisRunId }),
+          Schema.Struct({ id: JobRunId }),
         )(row);
       }),
     );
@@ -91,10 +91,10 @@ export function makeLocalRuns<
       sql`SELECT ${columns} FROM ${target} ORDER BY completed_at DESC, run_id DESC LIMIT 10`,
   })(undefined);
   const notFound = () =>
-    new AnalysisRunNotFound({
-      message: "This analysis run could not be found.",
+    new JobRunNotFound({
+      message: "This job run could not be found.",
     });
-  const get = (id: AnalysisRunId) =>
+  const get = (id: JobRunId) =>
     SqlSchema.findAll({
       Request: Schema.Void,
       Result: run,
@@ -105,7 +105,7 @@ export function makeLocalRuns<
       ),
     );
   const readReport = sqlJsonReport(sql, target, options.report);
-  const result = (id: AnalysisRunId) =>
+  const result = (id: JobRunId) =>
     readReport(id).pipe(
       Effect.flatMap(
         Option.match({

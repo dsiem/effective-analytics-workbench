@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { AsyncData } from "foldkit";
-import { CurrentUser } from "@dsiem/analytics-shared/current-user";
+import { UserIdentity } from "@dsiem/analytics/contracts";
 import { DatasetMetadata } from "@dsiem/analytics-shared/dataset";
 import * as AnalysisRuns from "../features/analysis-runs/model";
 import * as Filters from "../features/filters/model";
@@ -18,7 +18,7 @@ export const Model = Schema.Struct({
   layout: Layout.Model,
   theme: Theme.Model,
   metadata: AsyncData.Schema(DatasetMetadata, Notice).schema,
-  user: Schema.Option(CurrentUser),
+  user: Schema.Option(UserIdentity),
   filtersState: Filters.Model,
   overviewState: Overview.Model,
   tripsState: Trips.Model,

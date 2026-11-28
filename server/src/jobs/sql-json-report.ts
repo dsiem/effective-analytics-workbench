@@ -1,5 +1,5 @@
 import { Effect, Option, type Schema } from "effect";
-import type { AnalysisRunId } from "@dsiem/analytics/contracts";
+import type { JobRunId } from "@dsiem/analytics/contracts";
 import { sqlJsonReport } from "@dsiem/analytics/jobs";
 import { unavailable } from "../errors.js";
 import type { Warehouse } from "../warehouse.js";
@@ -14,18 +14,15 @@ export const warehouseJsonReport =
     readonly tableName: string;
     readonly report: Schema.Decoder<Report>;
   }) =>
-  (id: AnalysisRunId) =>
+  (id: JobRunId) =>
     Effect.gen(function* () {
       if (Option.isNone(warehouse))
-        return yield* unavailable(
-          "analysis",
-          "Configure the report warehouse.",
-        );
+        return yield* unavailable("jobs", "Configure the report warehouse.");
       const { sql, queries } = warehouse.value;
       const [catalog, schema, table, extra] = tableName.split(".");
       if (!catalog || !schema || !table || extra !== undefined)
         return yield* unavailable(
-          "analysis",
+          "jobs",
           "Configure the analysis results table.",
         );
 
@@ -34,7 +31,7 @@ export const warehouseJsonReport =
           "This report is under lock. You need permission to read it.",
         unavailable: (cause) =>
           unavailable(
-            "analysis",
+            "jobs",
             "The report could not be read. Check SELECT access to the results table.",
             cause,
           ),
