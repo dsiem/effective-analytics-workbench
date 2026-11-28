@@ -2,24 +2,24 @@ import { Cache, DateTime, Effect, Exit, Schema } from "effect";
 import { DatasetMetadata } from "@dsiem/analytics-shared/dataset";
 import type { Filters } from "@dsiem/analytics-shared/filters";
 import { Daily, Hourly, Summary, Zone } from "@dsiem/analytics-shared/overview";
-import {
-  taxiQueryUnavailable,
-  type TaxiSnapshot,
-  tripWhere,
-} from "./snapshot.js";
+import { taxiQueryUnavailable, type TaxiSnapshot } from "./snapshot.js";
 
 export const makeOverview = (taxi: TaxiSnapshot) =>
   Effect.gen(function* () {
     const metadataCache = yield* Cache.makeWith(
       (_key: "dataset") =>
         Effect.gen(function* () {
-          const { sql, snapshot, read } = yield* taxi;
+          const { sql, source, read } = yield* taxi;
           const [row] = yield* read(
             Schema.toCodecStringTree(DatasetMetadata),
-            sql`SELECT
-      CAST(MIN(tpep_pickup_datetime) AS DATE)::STRING AS from,
-      CAST(MAX(tpep_pickup_datetime) AS DATE)::STRING AS to,
-      CAST(COUNT(*) AS DOUBLE) AS trips FROM ${snapshot}`,
+            source.aggregate({
+              filters: {},
+              measures: {
+                from: sql`CAST(MIN(tpep_pickup_datetime) AS DATE)::STRING`,
+                to: sql`CAST(MAX(tpep_pickup_datetime) AS DATE)::STRING`,
+                trips: sql`CAST(COUNT(*) AS DOUBLE)`,
+              },
+            }),
           );
           return row ?? (yield* taxiQueryUnavailable());
         }),
@@ -32,18 +32,24 @@ export const makeOverview = (taxi: TaxiSnapshot) =>
     const overviewCache = yield* Cache.makeWith(
       (filters: Filters) =>
         Effect.gen(function* () {
-          const { sql, snapshot, read } = yield* taxi;
-          const predicate = tripWhere(sql, filters);
+          const { sql, source, read } = yield* taxi;
+          const trips = sql`CAST(COUNT(*) AS DOUBLE)`;
+          const revenue = sql`CAST(COALESCE(SUM(fare_amount), 0) AS DOUBLE)`;
+          const avg_fare = sql`CAST(COALESCE(AVG(fare_amount), 0) AS DOUBLE)`;
           return yield* Effect.all(
             {
               summary: read(
                 Schema.toCodecStringTree(Summary),
-                sql`SELECT CAST(COUNT(*) AS DOUBLE) AS trips,
-          CAST(COALESCE(SUM(fare_amount), 0) AS DOUBLE) AS revenue,
-          CAST(COALESCE(AVG(fare_amount), 0) AS DOUBLE) AS avg_fare,
-          CAST(COALESCE(AVG(trip_distance), 0) AS DOUBLE) AS avg_distance,
-          CAST(COALESCE(AVG(timestampdiff(SECOND, tpep_pickup_datetime, tpep_dropoff_datetime) / 60.0), 0) AS DOUBLE) AS avg_duration
-          FROM ${snapshot} ${predicate}`,
+                source.aggregate({
+                  filters,
+                  measures: {
+                    trips,
+                    revenue,
+                    avg_fare,
+                    avg_distance: sql`CAST(COALESCE(AVG(trip_distance), 0) AS DOUBLE)`,
+                    avg_duration: sql`CAST(COALESCE(AVG(timestampdiff(SECOND, tpep_pickup_datetime, tpep_dropoff_datetime) / 60.0), 0) AS DOUBLE)`,
+                  },
+                }),
               ).pipe(
                 Effect.map(
                   (rows) =>
@@ -58,22 +64,36 @@ export const makeOverview = (taxi: TaxiSnapshot) =>
               ),
               daily: read(
                 Schema.toCodecStringTree(Daily),
-                sql`SELECT CAST(CAST(tpep_pickup_datetime AS DATE) AS STRING) AS day,
-          CAST(COUNT(*) AS DOUBLE) AS trips, CAST(COALESCE(SUM(fare_amount),0) AS DOUBLE) AS revenue
-          FROM ${snapshot} ${predicate} GROUP BY 1 ORDER BY 1`,
+                source.aggregate({
+                  filters,
+                  dimensions: {
+                    day: sql`CAST(CAST(tpep_pickup_datetime AS DATE) AS STRING)`,
+                  },
+                  measures: { trips, revenue },
+                  orderBy: [sql`day`],
+                }),
               ),
               hourly: read(
                 Schema.toCodecStringTree(Hourly),
-                sql`SELECT CAST(HOUR(tpep_pickup_datetime) AS DOUBLE) AS hour,
-          CAST(COUNT(*) AS DOUBLE) AS trips, CAST(COALESCE(AVG(fare_amount),0) AS DOUBLE) AS avg_fare
-          FROM ${snapshot} ${predicate} GROUP BY 1 ORDER BY 1`,
+                source.aggregate({
+                  filters,
+                  dimensions: {
+                    hour: sql`CAST(HOUR(tpep_pickup_datetime) AS DOUBLE)`,
+                  },
+                  measures: { trips, avg_fare },
+                  orderBy: [sql`hour`],
+                }),
               ),
               zones: read(
                 Schema.toCodecStringTree(Zone),
-                sql`SELECT COALESCE(CAST(pickup_zip AS STRING), 'Unknown') AS zip,
-          CAST(COUNT(*) AS DOUBLE) AS trips, CAST(COALESCE(SUM(fare_amount),0) AS DOUBLE) AS revenue,
-          CAST(COALESCE(AVG(fare_amount),0) AS DOUBLE) AS avg_fare
-          FROM ${snapshot} ${predicate} GROUP BY 1 ORDER BY trips DESC`,
+                source.aggregate({
+                  filters,
+                  dimensions: {
+                    zip: sql`COALESCE(CAST(pickup_zip AS STRING), 'Unknown')`,
+                  },
+                  measures: { trips, revenue, avg_fare },
+                  orderBy: [sql`trips DESC`],
+                }),
               ),
             },
             { concurrency: 3 },

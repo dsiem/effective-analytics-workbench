@@ -1,13 +1,18 @@
 import { Effect, Queue, Schema, Stream } from "effect";
 import { Mount } from "foldkit";
-import { Message as M } from "./messages";
+import { defineMessageUnion } from "foldkit/message";
+import { RecordViewport } from "./record-grid.js";
+
+const M = defineMessageUnion({
+  Measured: { viewport: RecordViewport, generation: Schema.Int },
+});
 
 const rowSelector = "tr[aria-rowindex]";
-type Scrolled = ReturnType<typeof M.TripsScrolled>;
+type Scrolled = ReturnType<typeof M.Measured>;
 
-export const RecordsViewport = Mount.defineStream("RecordsViewport", {
+const RecordsViewport = Mount.defineStream("RecordsViewport", {
   args: { generation: Schema.Int },
-  messages: [M.TripsScrolled],
+  messages: [M.Measured],
   execute: ({ element, viewStateChanges, generation }) =>
     Stream.callback<Scrolled>((queue) =>
       Effect.gen(function* () {
@@ -62,10 +67,7 @@ export const RecordsViewport = Mount.defineStream("RecordsViewport", {
           )
             return;
           last = { firstRow, visibleEnd, tabStart, tabEnd, rowHeight };
-          Queue.offerUnsafe(
-            queue,
-            M.TripsScrolled({ viewport: last, generation }),
-          );
+          Queue.offerUnsafe(queue, M.Measured({ viewport: last, generation }));
         };
 
         yield* Effect.acquireRelease(
@@ -93,3 +95,11 @@ export const RecordsViewport = Mount.defineStream("RecordsViewport", {
       }),
     ),
 });
+
+export const recordViewportMount = <Message>(
+  generation: number,
+  measured: (value: {
+    viewport: typeof RecordViewport.Type;
+    generation: number;
+  }) => Message,
+) => Mount.mapMessage(RecordsViewport({ generation }), measured);

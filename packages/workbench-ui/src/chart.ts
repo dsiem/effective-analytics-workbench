@@ -1,5 +1,5 @@
-import { compact, number } from "../lib/format";
-import type { H } from "./primitives";
+import { compact, number } from "./format.js";
+import type { H } from "./primitives.js";
 
 export const chart = <Message>(
   h: H<Message>,
@@ -84,7 +84,7 @@ export const chart = <Message>(
           h.Attribute("x2", String(width - 20)),
           h.Attribute("y1", String(baseline)),
           h.Attribute("y2", String(baseline)),
-          h.Stroke("var(--border)"),
+          h.Stroke("var(--border, #e4e7ee)"),
         ],
         [],
       ),
@@ -96,7 +96,7 @@ export const chart = <Message>(
                   "points",
                   `${x(0)},${baseline} ${points} ${x(data.length - 1)},${baseline}`,
                 ),
-                h.Fill("var(--chart-color)"),
+                h.Fill("var(--chart-color, #4f46e5)"),
                 h.Attribute("opacity", "0.08"),
               ],
               [],
@@ -125,7 +125,7 @@ export const chart = <Message>(
                 ),
                 h.Attribute("rx", "3"),
                 h.Class("chart-bar"),
-                h.Fill("var(--chart-color)"),
+                h.Fill("var(--chart-color, #4f46e5)"),
               ],
               [h.title([], [`${row.label}: ${formatValue(row.value)}`])],
             )
@@ -135,7 +135,7 @@ export const chart = <Message>(
                 h.Attribute("cy", String(y(row.value))),
                 h.Attribute("r", data.length > 8 ? "2.5" : "4"),
                 h.Class("chart-point"),
-                h.Fill("var(--chart-color)"),
+                h.Fill("var(--chart-color, #4f46e5)"),
               ],
               [h.title([], [`${row.label}: ${formatValue(row.value)}`])],
             ),

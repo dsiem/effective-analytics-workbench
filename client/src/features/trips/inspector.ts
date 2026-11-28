@@ -1,3 +1,4 @@
+import { commentList } from "@dsiem/workbench-ui/record-explorer";
 import { Dialog, Textarea } from "@foldkit/ui";
 import { Option } from "effect";
 import { AsyncData } from "foldkit";
@@ -88,41 +89,7 @@ function inspector(h: H, model: Model) {
                   ),
                 ]
               : []),
-            h.ol(
-              [h.AriaLabel("Record comments"), h.Class("space-y-3")],
-              rows.map((comment) =>
-                h.li(
-                  [h.Key(comment.id), h.Class("rounded-lg border p-3")],
-                  [
-                    h.div(
-                      [
-                        h.Class(
-                          "flex flex-wrap justify-between gap-1 text-xs mb-2",
-                        ),
-                      ],
-                      [
-                        h.span(
-                          [h.Class("font-medium")],
-                          [comment.author?.name ?? "Workspace viewer"],
-                        ),
-                        h.time(
-                          [h.Datetime(comment.created_at), h.Class("muted")],
-                          [new Date(comment.created_at).toLocaleString()],
-                        ),
-                      ],
-                    ),
-                    h.p(
-                      [
-                        h.Class(
-                          "whitespace-pre-wrap break-words text-sm leading-5",
-                        ),
-                      ],
-                      [comment.body],
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            commentList(h, rows),
             ...(thread.error ? [alert(h, thread.error)] : []),
             ...(threadData?.nextCursor || thread.error
               ? [

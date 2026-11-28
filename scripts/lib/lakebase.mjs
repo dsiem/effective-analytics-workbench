@@ -41,7 +41,12 @@ export function prepareLakebaseSetup(resources) {
 export function initializeLakebase({ env, principal }) {
   execFileSync(
     process.execPath,
-    ["--import", "tsx", "scripts/setup-lakebase.ts"],
+    [
+      "--import",
+      "tsx",
+      "--conditions=workbench-source",
+      "scripts/setup-lakebase.ts",
+    ],
     {
       stdio: "inherit",
       env: { ...process.env, ...env, APP_SERVICE_PRINCIPAL_ID: principal },

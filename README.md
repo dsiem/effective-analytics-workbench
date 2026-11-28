@@ -36,6 +36,10 @@ In **Analysis runs**, select **New run**. Choose the start dates for two
 seven-day windows and set the minimum trips per route in each window. Select
 **Run analysis**. Open completed reports from **Recent runs** or the run link.
 
+## Build with the workbench packages
+
+Use the analytics package to define filtered SQL datasets, bind typed Databricks jobs, and store saved views and record comments. The Foldkit package provides the report components, record explorer, and workspace frame used by the taxi app. [Analytics package](packages/analytics/README.md) · [Workbench UI package](packages/workbench-ui/README.md) · [Genie client](packages/genie-client/README.md)
+
 ## Use your own data
 
 Set up the example and run it locally with your Databricks CLI login.

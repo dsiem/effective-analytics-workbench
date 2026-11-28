@@ -99,10 +99,10 @@
   .workspace-path [aria-current] {
     font-weight: 600;
   }
-  .workspace-genie {
+  .workspace-path + * {
     margin-inline-start: auto;
   }
-  .workspace-genie .icon {
+  .workspace-header .btn:not(.workspace-navigation) .icon {
     color: var(--color-brand-600);
   }
   .workspace-content {
@@ -176,6 +176,10 @@
   .nav-link:hover {
     background: var(--subtle);
     color: var(--foreground);
+  }
+  .nav-link .sidebar-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .nav-link[aria-current="page"] {
     color: var(--color-brand-700);
@@ -268,8 +272,7 @@
     .workspace > .sidebar {
       display: none;
     }
-    .workspace-navigation,
-    .workspace-genie,
+    .workspace-header .btn,
     .sidebar-close {
       min-height: 2.75rem;
     }

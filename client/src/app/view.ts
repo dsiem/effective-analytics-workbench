@@ -1,5 +1,5 @@
-import { Nav, Tooltip } from "@foldkit/ui";
-import { Array, Option } from "effect";
+import { workspaceFrame } from "@dsiem/workbench-ui/workspace-frame";
+import { Option } from "effect";
 import type { Document } from "foldkit/html";
 import { filterSummary } from "../domain/filter-summary";
 import { filterError, href, queryFor } from "../domain/filters";
@@ -17,7 +17,6 @@ import { Message as SavedViewMessage } from "../features/saved-views/messages";
 import { savedViewsView } from "../features/saved-views/view";
 import { inspectorView } from "../features/trips/inspector";
 import { tripsView } from "../features/trips/view";
-import { dialog } from "../ui/dialog";
 import { filterPanel } from "../ui/filter-panel";
 import { icon } from "../ui/icons";
 import { button, type Child, card } from "../ui/primitives";
@@ -31,8 +30,6 @@ import {
   showsExplore,
   withoutRun,
 } from "./route";
-import { themeSelector } from "./theme-view";
-import { initTooltip, Message as LayoutMessage } from "./layout";
 import {
   openGenie,
   overviewViewMessage,
@@ -45,163 +42,6 @@ function workspaceHref(path: string, query: string) {
   return href(path, withoutRun(query));
 }
 
-function sidebar(h: H, model: Model) {
-  const { route, query } = model.location;
-  const user = Option.getOrUndefined(model.user);
-  const initials =
-    user?.name
-      .split(/\s+/)
-      .map((part) => part[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase() ?? "";
-  const tooltip = (
-    id: string,
-    text: string,
-    render: (attrs: import("foldkit/html").ChildAttribute[]) => Child,
-  ) => {
-    if (model.layout.sidebar || model.layout.mobile) return render([]);
-    return h.submodel({
-      slotId: `tooltip-${id}`,
-      view: Tooltip.view,
-      model: model.layout.tooltips[id] ?? initTooltip(id),
-      toParentMessage: (message) =>
-        Features.layout.toParentMessage(
-          LayoutMessage.GotTooltipMessage({ id, message }),
-        ),
-      viewInputs: {
-        anchor: { placement: "right", gap: 8 },
-        toView: ({ trigger, panel, isVisible }) =>
-          h.div(
-            [h.Class("tooltip-anchor")],
-            [
-              render([...trigger]),
-              ...(isVisible
-                ? [h.div([...panel, h.Class("tooltip-panel")], [text])]
-                : []),
-            ],
-          ),
-      },
-    });
-  };
-  return Nav.view({
-    items: navigation.map((item) => item.path),
-    ariaLabel: "Main navigation",
-    toHref: (path) => workspaceHref(path, query),
-    isItemCurrent: (path) => routePath(route) === path,
-    toView: ({ nav, items }) =>
-      h.nav(
-        [
-          ...nav,
-          h.Id("main-navigation"),
-          h.Class(
-            `sidebar ${!model.layout.sidebar && !model.layout.mobile ? "collapsed" : ""}`,
-          ),
-        ],
-        [
-          h.a(
-            [
-              h.Href(workspaceHref(pageUrls.Overview, query)),
-              h.Class("sidebar-brand"),
-              h.AriaLabel("NYC Taxi overview"),
-            ],
-            [
-              h.span([h.Class("icon-tile")], [icon(h, "car-taxi-front")]),
-              h.div(
-                [h.Class("sidebar-label")],
-                [
-                  h.p([h.Class("font-semibold text-sm")], ["NYC Taxi"]),
-                  h.p([h.Class("muted text-xs")], ["Analytics workspace"]),
-                ],
-              ),
-            ],
-          ),
-          ...(model.layout.mobile
-            ? [
-                button(h, {
-                  label: icon(h, "x"),
-                  onClick: Features.layout.toParentMessage(
-                    LayoutMessage.CloseNavigation(),
-                  ),
-                  attributes: [h.AriaLabel("Close navigation")],
-                  className: "sidebar-close",
-                  size: "icon",
-                  variant: "ghost",
-                }),
-              ]
-            : []),
-          h.div(
-            [h.Class("sidebar-group")],
-            [
-              h.p(
-                [h.Class("sidebar-section-label sidebar-label")],
-                ["Workspace"],
-              ),
-              ...Array.zip(navigation, items).map(([item, current]) =>
-                tooltip(item.path, item.label, (attrs) =>
-                  h.a(
-                    [
-                      ...current.link,
-                      h.Class("nav-link"),
-                      h.AriaLabel(item.label),
-                      ...attrs,
-                    ],
-                    [
-                      h.span([h.Class("nav-icon")], [icon(h, item.icon)]),
-                      h.span([h.Class("sidebar-label")], [item.label]),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          h.div(
-            [h.Class("sidebar-bottom")],
-            [
-              themeSelector(h, model),
-              ...(user
-                ? [
-                    tooltip(
-                      "profile",
-                      `${user.name}${user.email ? ` · ${user.email}` : ""}`,
-                      (attrs) =>
-                        h.div(
-                          [
-                            ...attrs,
-                            h.Tabindex(0),
-                            h.AriaLabel(`Signed in as ${user.name}`),
-                            h.Class("profile"),
-                          ],
-                          [
-                            h.span([h.Class("avatar")], [initials]),
-                            h.div(
-                              [h.Class("sidebar-label min-w-0")],
-                              [
-                                h.p(
-                                  [h.Class("text-sm font-medium truncate")],
-                                  [user.name],
-                                ),
-                                ...(user.email
-                                  ? [
-                                      h.p(
-                                        [h.Class("muted text-xs truncate")],
-                                        [user.email],
-                                      ),
-                                    ]
-                                  : []),
-                              ],
-                            ),
-                          ],
-                        ),
-                    ),
-                  ]
-                : []),
-            ],
-          ),
-        ],
-      ),
-  });
-}
 function filters(h: H, model: Model) {
   const { filters, query } = model.location;
   const applied = Option.getOrUndefined(filters);
@@ -363,86 +203,45 @@ export function view(model: Model, h: H): Document {
       route._tag === "AnalysisRuns" && route.run._tag === "SelectedRun"
         ? `NYC Taxi · Run #${route.run.id} · ${current}`
         : `NYC Taxi · ${current}`,
-    body: h.div(
-      [h.Class("workspace")],
-      [
-        ...(!model.layout.mobile ? [sidebar(h, model)] : []),
-        h.div(
-          [h.Class("workspace-main")],
-          [
-            h.header(
-              [h.Class("workspace-header")],
-              [
-                button(h, {
-                  label: icon(h, model.layout.mobile ? "menu" : "panel-left"),
-                  onClick: Features.layout.toParentMessage(
-                    LayoutMessage.ToggleSidebar(),
-                  ),
-                  attributes: [
-                    h.Id("navigation-trigger"),
-                    h.AriaLabel(
-                      model.layout.mobile
-                        ? model.layout.mobileNavigation
-                          ? "Close navigation"
-                          : "Open navigation"
-                        : model.layout.sidebar
-                          ? "Collapse sidebar"
-                          : "Expand sidebar",
-                    ),
-                    h.AriaExpanded(
-                      model.layout.mobile
-                        ? model.layout.mobileNavigation
-                        : model.layout.sidebar,
-                    ),
-                    h.AriaControls("main-navigation"),
-                  ],
-                  className: "workspace-navigation",
-                  size: "icon",
-                  variant: "ghost",
-                }),
-                h.nav(
-                  [h.AriaLabel("Breadcrumb"), h.Class("workspace-path")],
-                  [
-                    h.ol(
-                      [],
-                      [
-                        h.li(
-                          [h.Class("workspace-path-parent")],
-                          [
-                            h.a(
-                              [h.Href(workspaceHref(pageUrls.Overview, query))],
-                              ["NYC Taxi"],
-                            ),
-                            icon(h, "chevron-right"),
-                          ],
-                        ),
-                        h.li([h.Attribute("aria-current", "page")], [current]),
-                      ],
-                    ),
-                  ],
-                ),
-                ...(explore
-                  ? [
-                      button(h, {
-                        label: h.span(
-                          [h.Class("inline-flex items-center gap-2")],
-                          [icon(h, "sparkles"), "Ask Genie"],
-                        ),
-                        onClick: openGenie({ context: null, question: null }),
-                        disabled: !applied,
-                        attributes: [h.Id("genie-trigger")],
-                        className: "workspace-genie",
-                      }),
-                    ]
-                  : []),
-              ],
-            ),
-            h.main(
-              [h.Class("workspace-content")],
-              [...(explore ? [filters(h, model)] : []), ...content],
-            ),
-          ],
-        ),
+    body: workspaceFrame(h, {
+      brand: {
+        name: "NYC Taxi",
+        description: "Analytics workspace",
+        href: workspaceHref(pageUrls.Overview, query),
+        icon: "car-taxi-front",
+        ariaLabel: "NYC Taxi overview",
+      },
+      current,
+      links: navigation.map((item) => ({
+        ...item,
+        id: item.path,
+        href: workspaceHref(item.path, query),
+        current: routePath(route) === item.path,
+      })),
+      layout: model.layout,
+      onLayout: Features.layout.toParentMessage,
+      theme: model.theme,
+      onTheme: Features.theme.toParentMessage,
+      ...Option.match(model.user, {
+        onNone: () => ({}),
+        onSome: (user) => ({ user }),
+      }),
+      toolbar: explore ? [filters(h, model)] : [],
+      content,
+      headerActions: explore
+        ? [
+            button(h, {
+              label: h.span(
+                [h.Class("inline-flex items-center gap-2")],
+                [icon(h, "sparkles"), "Ask Genie"],
+              ),
+              onClick: openGenie({ context: null, question: null }),
+              disabled: !applied,
+              attributes: [h.Id("genie-trigger")],
+            }),
+          ]
+        : [],
+      overlays: [
         ...(model.genieState.genieOpen && explore
           ? [
               h.submodel({
@@ -455,20 +254,6 @@ export function view(model: Model, h: H): Document {
                   filters: applied,
                 },
                 toParentMessage: Features.genie.toParentMessage,
-              }),
-            ]
-          : []),
-        ...(model.layout.mobile && model.layout.mobileNavigation
-          ? [
-              dialog(h, {
-                model: model.layout.navigationDialog,
-                onMessage: (message) =>
-                  Features.layout.toParentMessage(
-                    LayoutMessage.GotNavigationDialogMessage({ message }),
-                  ),
-                className: "dialog-panel sheet sidebar-dialog",
-                accessibleTitle: "Sidebar",
-                children: [sidebar(h, model)],
               }),
             ]
           : []),
@@ -505,6 +290,6 @@ export function view(model: Model, h: H): Document {
             ]
           : []),
       ],
-    ),
+    }),
   };
 }

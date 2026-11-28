@@ -1,17 +1,13 @@
 import { Schema } from "effect";
-import { Day, Id, Zip } from "./schema.js";
-
-export const AnalysisRunId = Schema.Int.check(
-  Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-).pipe(Schema.brand("AnalysisRunId"));
-export type AnalysisRunId = typeof AnalysisRunId.Type;
-
-export const AnalysisRunIdFromString = Schema.String.check(
-  Schema.isPattern(/^[1-9]\d*$/),
-).pipe(
-  Schema.decodeTo(Schema.NumberFromString),
-  Schema.decodeTo(AnalysisRunId),
-);
+import { Day, Zip } from "./schema.js";
+import { jobRun, jobSubmission } from "@dsiem/analytics/contracts";
+export {
+  AnalysisRunId,
+  AnalysisRunIdFromString,
+  AnalysisRunReference,
+  AnalysisRunState,
+  AnalysisRunSummary,
+} from "@dsiem/analytics/contracts";
 
 export const AnalysisInput = Schema.Struct({
   baselineWeek: Day,
@@ -22,37 +18,8 @@ export const AnalysisInput = Schema.Struct({
 });
 export type AnalysisInput = typeof AnalysisInput.Type;
 
-export const AnalysisSubmission = Schema.Struct({
-  input: AnalysisInput,
-  requestId: Id,
-});
-export const AnalysisRunReference = Schema.Struct({ id: AnalysisRunId });
-
-export const AnalysisRunState = Schema.Literals([
-  "queued",
-  "running",
-  "succeeded",
-  "failed",
-  "canceled",
-  "unknown",
-]);
-export type AnalysisRunState = typeof AnalysisRunState.Type;
-
-export const AnalysisRunSummary = Schema.Struct({
-  id: AnalysisRunId,
-  state: AnalysisRunState,
-  startedAt: Schema.NullOr(Schema.Int),
-  endedAt: Schema.NullOr(Schema.Int),
-  requestedBy: Schema.NullOr(Schema.NonEmptyString),
-});
-export type AnalysisRunSummary = typeof AnalysisRunSummary.Type;
-
-export const AnalysisRun = Schema.Struct({
-  ...AnalysisRunSummary.fields,
-  input: Schema.NullOr(AnalysisInput),
-  reason: Schema.NullOr(Schema.String),
-  reasonCode: Schema.optionalKey(Schema.Literal("permission_denied")),
-});
+export const AnalysisSubmission = jobSubmission(AnalysisInput);
+export const AnalysisRun = jobRun(AnalysisInput);
 
 export const RouteReliabilityRow = Schema.Struct({
   pickupZip: Zip,

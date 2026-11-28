@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { readFindingPages } from "@dsiem/workbench-ui/findings";
 import { Command } from "foldkit";
 import * as Dom from "foldkit/dom";
 import {
@@ -135,22 +136,16 @@ export const LoadSavedViews = Command.define("LoadSavedViews", {
     result(
       Effect.gen(function* () {
         if (debounce) yield* Effect.sleep("180 millis");
-        let next = cursor;
-        const rows: SavedView[] = [];
-        for (let page = 0; page < pages; page++) {
-          const response = yield* request((client) =>
+        return yield* readFindingPages({ cursor, pages }, (next) =>
+          request((client) =>
             client.savedViews.list({
               query: {
                 ...(query ? { q: query } : {}),
                 ...(next ? { cursor: next } : {}),
               },
             }),
-          );
-          rows.push(...response.rows);
-          next = response.nextCursor;
-          if (!next) break;
-        }
-        return { rows, nextCursor: next };
+          ),
+        );
       }),
     ).pipe(
       Effect.map((result) =>

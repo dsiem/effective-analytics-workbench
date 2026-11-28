@@ -1,12 +1,6 @@
 import { Option, Schema } from "effect";
 import { Calendar } from "foldkit";
-export const number = (value: number) =>
-  new Intl.NumberFormat("en-US").format(Math.round(value));
-export const compact = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
+export { number, compact } from "@dsiem/workbench-ui";
 export const money = (value: number, digits = 0) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",

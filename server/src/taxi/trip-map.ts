@@ -1,4 +1,5 @@
 import { Cache, DateTime, Effect, Exit, Schema, Stream } from "effect";
+import { h3Cells } from "@dsiem/analytics/spark";
 import type { Filters } from "@dsiem/analytics-shared/filters";
 import {
   GpsCell,
@@ -7,14 +8,14 @@ import {
   mapCellLimit,
   TripMap,
 } from "@dsiem/analytics-shared/map-dataset";
-import { type TaxiSnapshot, tripWhere } from "./snapshot.js";
+import type { TaxiSnapshot } from "./snapshot.js";
 
 export const makeTripMap = (taxi: TaxiSnapshot) =>
   Effect.gen(function* () {
     const gpsCache = yield* Cache.makeWith(
       (search: Filters & { readonly endpoint: GpsEndpoint }) =>
         Effect.gen(function* () {
-          const { sql, snapshot, read } = yield* taxi;
+          const { sql, source, read } = yield* taxi;
           const { endpoint } = search;
           const longitude =
             endpoint === "pickup"
@@ -39,7 +40,13 @@ export const makeTripMap = (taxi: TaxiSnapshot) =>
                     located: TripMap.fields.locatedTrips,
                   }),
                 ),
-                sql`SELECT COUNT(*)::DOUBLE AS matching, count_if(${valid})::DOUBLE AS located FROM ${snapshot} ${tripWhere(sql, search)}`,
+                source.aggregate({
+                  filters: search,
+                  measures: {
+                    matching: sql`COUNT(*)::DOUBLE`,
+                    located: sql`count_if(${valid})::DOUBLE`,
+                  },
+                }),
               ),
               cells: read(
                 Schema.Struct({
@@ -48,17 +55,23 @@ export const makeTripMap = (taxi: TaxiSnapshot) =>
                   total_cells: TripMap.fields.totalCells,
                 }),
                 sql
-                  .arrowStream(sql`WITH bins AS (
-            SELECT h3_longlatash3(${longitude}, ${latitude}, 10) AS cell,
-              COUNT(*)::DOUBLE AS trips, AVG(fare_amount) AS avg_fare,
-              AVG(trip_distance) AS avg_distance, mode(${zip}, true) AS zip
-            FROM ${snapshot} ${tripWhere(sql, search)} AND ${valid} GROUP BY 1
-          ) SELECT h3_h3tostring(cell) AS id,
-            (h3_centerasgeojson(cell):coordinates[0])::DOUBLE AS longitude,
-            (h3_centerasgeojson(cell):coordinates[1])::DOUBLE AS latitude,
-            h3_boundaryasgeojson(cell) AS boundary, trips, avg_fare, avg_distance, zip,
-            COUNT(*) OVER()::DOUBLE AS total_cells
-          FROM bins ORDER BY trips DESC, cell LIMIT ${sql.param("INT", String(mapCellLimit))}`)
+                  .arrowStream(
+                    h3Cells(sql, source, {
+                      filters: search,
+                      longitude,
+                      latitude,
+                      where: valid,
+                      resolution: 10,
+                      measures: {
+                        trips: sql`COUNT(*)::DOUBLE`,
+                        avg_fare: sql`AVG(fare_amount)`,
+                        avg_distance: sql`AVG(trip_distance)`,
+                        zip: sql`mode(${zip}, true)`,
+                      },
+                      rankBy: { measure: "trips", direction: "desc" },
+                      limit: mapCellLimit,
+                    }),
+                  )
                   .pipe(
                     Stream.flatMap((batch) => Stream.fromIterable(batch)),
                     Stream.map((row) => row.toJSON()),

@@ -1,3 +1,7 @@
+import {
+  RecordViewport,
+  recordWindow,
+} from "@dsiem/workbench-ui/record-explorer";
 import { Dialog, Menu } from "@foldkit/ui";
 import { Option, Schema } from "effect";
 import { AsyncData } from "foldkit";
@@ -22,13 +26,7 @@ export const TripPreview = defineTaggedUnion({
   Ready: { rows: PreviewRows, hasMore: Schema.Boolean },
   Failed: { rows: PreviewRows, error: Notice },
 });
-export const TripViewport = Schema.Struct({
-  firstRow: Schema.Int,
-  visibleEnd: Schema.Int,
-  tabStart: Schema.Int,
-  tabEnd: Schema.Int,
-  rowHeight: Schema.Number,
-});
+export const TripViewport = RecordViewport;
 const CommentRead = Schema.Struct({ cursor: Schema.Option(TripCommentCursor) });
 const Inspector = Schema.Struct({
   trip: TripSummary,
@@ -86,36 +84,8 @@ export type Model = typeof Model.Type;
 export const previewRows = (preview: Model["preview"]) =>
   preview._tag === "Idle" ? [] : preview.rows;
 
-const initialTripRowHeight = 44;
-const tripWindowSize = 25;
-const leadingOverscan = 3;
-const windowStep = 8;
-
-export function tripWindow(rowCount: number, selection: Model["viewport"]) {
-  const viewport = Option.getOrUndefined(selection);
-  const firstRow = viewport?.firstRow ?? 0;
-  const size = Math.max(
-    tripWindowSize,
-    (viewport?.visibleEnd ?? 0) - firstRow + leadingOverscan + windowStep - 1,
-  );
-  const start = Math.max(
-    0,
-    Math.min(
-      rowCount - size,
-      Math.floor((firstRow - leadingOverscan) / windowStep) * windowStep,
-    ),
-  );
-  const end = Math.min(rowCount, start + size);
-  return {
-    start,
-    end,
-    visibleStart: firstRow,
-    visibleEnd: Math.min(rowCount, viewport?.visibleEnd ?? 0),
-    tabStart: viewport?.tabStart ?? 0,
-    tabEnd: Math.min(rowCount, viewport?.tabEnd ?? 0),
-    rowHeight: viewport?.rowHeight ?? initialTripRowHeight,
-  };
-}
+export const tripWindow = (rowCount: number, selection: Model["viewport"]) =>
+  recordWindow(rowCount, Option.getOrUndefined(selection));
 
 export const init = (): Model => ({
   inspectorDialog: Dialog.init({

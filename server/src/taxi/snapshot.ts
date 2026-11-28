@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect";
-import type { DatabricksClient } from "@dsiem/sql-warehouse";
+import { dataset } from "@dsiem/analytics";
 import type { Filters } from "@dsiem/analytics-shared/filters";
 import { unavailable } from "../errors.js";
 import type { Warehouse } from "../warehouse.js";
@@ -25,9 +25,20 @@ export const makeTaxiSnapshot = (
     );
 
   const { sql, queries } = warehouse.value;
+  const snapshot = sql`${sql(catalog)}.${sql(schema)}.${sql(table)}`;
+  const source = dataset(sql, {
+    table: snapshot,
+    predicates: ({ from, to, zip }: Filters) => [
+      from !== undefined &&
+        sql`tpep_pickup_datetime >= CAST(${from} AS TIMESTAMP)`,
+      to !== undefined &&
+        sql`tpep_pickup_datetime < CAST(${to} AS TIMESTAMP) + INTERVAL 1 DAY`,
+      zip !== undefined && sql`CAST(pickup_zip AS STRING) = ${zip}`,
+    ],
+  });
   return Effect.succeed({
     sql,
-    snapshot: sql`${sql(catalog)}.${sql(schema)}.${sql(table)}`,
+    source,
     ...queries({
       deniedMessage:
         "These trips are under lock. You need permission to read trip data.",
@@ -37,11 +48,3 @@ export const makeTaxiSnapshot = (
 };
 
 export type TaxiSnapshot = ReturnType<typeof makeTaxiSnapshot>;
-
-export const tripWhere = (
-  sql: DatabricksClient.DatabricksClient,
-  filters: Filters,
-) => sql`WHERE 1 = 1
-      ${filters.from ? sql`AND tpep_pickup_datetime >= CAST(${filters.from} AS TIMESTAMP)` : sql``}
-      ${filters.to ? sql`AND tpep_pickup_datetime < CAST(${filters.to} AS TIMESTAMP) + INTERVAL 1 DAY` : sql``}
-      ${filters.zip ? sql`AND CAST(pickup_zip AS STRING) = ${filters.zip}` : sql``}`;

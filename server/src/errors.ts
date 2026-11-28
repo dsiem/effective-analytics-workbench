@@ -4,58 +4,33 @@ import type {
   UnavailableService,
   UpstreamService,
 } from "@dsiem/analytics-shared/api";
-
-export class InvalidRequest extends Data.TaggedError("InvalidRequest")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
-
-export class PermissionDenied extends Data.TaggedError("PermissionDenied")<{
-  readonly message: string;
-}> {}
-
-export class SavedViewNotFound extends Data.TaggedError("SavedViewNotFound")<{
-  readonly id: string;
-  readonly message: string;
-}> {}
+import {
+  InvalidRequest,
+  PermissionDenied,
+  SavedViewNotFound,
+  AnalysisRunNotFound,
+  AnalysisReportPending,
+  SavedViewConflict,
+  UpstreamError,
+  ServiceUnavailable,
+} from "@dsiem/analytics/errors";
+export {
+  InvalidRequest,
+  PermissionDenied,
+  SavedViewNotFound,
+  AnalysisRunNotFound,
+  AnalysisReportPending,
+  SavedViewConflict,
+  UpstreamError,
+  ServiceUnavailable,
+  isWorkspacePermissionDenied,
+  mapWorkspacePermission,
+  permissionDenied,
+  unavailable,
+} from "@dsiem/analytics/errors";
 
 export class TripNotFound extends Data.TaggedError("TripNotFound")<{
   readonly message: string;
-}> {}
-
-export class AnalysisRunNotFound extends Data.TaggedError(
-  "AnalysisRunNotFound",
-)<{
-  readonly message: string;
-}> {}
-
-export class AnalysisReportPending extends Data.TaggedError(
-  "AnalysisReportPending",
-)<{
-  readonly message: string;
-}> {}
-
-export class SavedViewConflict extends Data.TaggedError("SavedViewConflict")<{
-  readonly id: string;
-  readonly message: string;
-}> {}
-
-export class ServiceUnavailable<
-  const S extends UnavailableService = UnavailableService,
-> extends Data.TaggedError("ServiceUnavailable")<{
-  readonly service: S;
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
-
-export class UpstreamError<
-  const S extends UpstreamService = UpstreamService,
-> extends Data.TaggedError("UpstreamError")<{
-  readonly service: S;
-  readonly message: string;
-  readonly upstreamStatus?: number;
-  readonly upstreamCode?: "FEATURE_DISABLED";
-  readonly cause?: unknown;
 }> {}
 
 export class OperationTimeout<
@@ -90,25 +65,8 @@ export type ServiceError =
   | AnalysisRunNotFound
   | AnalysisReportPending
   | SavedViewConflict
-  | ServiceUnavailable
-  | UpstreamError
+  | ServiceUnavailable<UnavailableService>
+  | UpstreamError<UpstreamService>
   | OperationTimeout
   | GenieFailed
   | GenieAgentModeUnavailable;
-
-export const unavailable = <const S extends UnavailableService>(
-  service: S,
-  message: string,
-  cause?: unknown,
-) => new ServiceUnavailable({ service, message, cause });
-
-export const isWorkspacePermissionDenied = (cause: unknown) =>
-  cause instanceof UpstreamError && cause.upstreamStatus === 403;
-
-export const permissionDenied = (message: string) =>
-  new PermissionDenied({ message });
-
-export const mapWorkspacePermission =
-  (message: string) =>
-  <E extends ServiceError>(error: E) =>
-    isWorkspacePermissionDenied(error) ? permissionDenied(message) : error;

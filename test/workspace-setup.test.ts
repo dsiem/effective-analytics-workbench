@@ -212,7 +212,8 @@ async function setup(
   return { calls, lakebase, server };
 }
 
-const lakebaseCommand = "--import tsx scripts/setup-lakebase.ts";
+const lakebaseCommand =
+  "--import tsx --conditions=workbench-source scripts/setup-lakebase.ts";
 const summaryCommand = "bundle summary -t prod --force-pull -o json";
 const lakebaseCalls = [
   "current-user me -o json",

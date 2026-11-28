@@ -43,6 +43,48 @@ const operation = await Effect.runPromise(
 A lost submission response can leave an accepted turn. Check Genie before
 resubmitting.
 
+## Ask about a report
+
+Pass the dataset's table and filter semantics to `analysisQuestion`. Each
+question carries its own filter values and can include a snapshot of the
+visible report. Both modes accept the resulting string as `content`.
+
+```ts
+import { analysisQuestion, recentRowsSnapshot } from "@dsiem/genie-client";
+
+const data = recentRowsSnapshot({
+  fields: { stationCount: 2, unit: "°C" },
+  rowsKey: "readings",
+  rows: [
+    { station: "Ridge", temperature: -2.5 },
+    { station: "Valley", temperature: 3.1 },
+  ],
+  maxLength: 2000,
+});
+
+const content = analysisQuestion(
+  {
+    table: "weather.daily",
+    filterInstructions: "Apply region to station_region.",
+  },
+  {
+    content: "Which stations recorded frost?",
+    filters: { region: "North" },
+    context: { title: "Daily temperatures", ...(data ? { data } : {}) },
+  },
+);
+```
+
+Supply rows in chronological order to retain the newest rows within the
+JSON character limit. When the fixed fields alone exceed the limit,
+`recentRowsSnapshot` returns `undefined` so the caller can supply a smaller
+summary. The table and filter instructions come from server configuration.
+Filter values and snapshots come from the current view.
+
+## Serve a report conversation
+
+For a local single-user server, `makeReportAssistant` from `@dsiem/genie-client/report-assistant` accepts HTTPS workspace settings and dataset instructions. Call the returned function with the question, filters, report snapshot and previous continuation. It submits once, polls for completion, and returns text plus up to 100 rows per inline table. A signed continuation identifies the next turn within that server process. For custom authentication or operation tracking, use the lower-level chat client.
+
 ## Agent mode
 
 Agent mode requires workspace access to the Databricks Agent mode API. Pass the

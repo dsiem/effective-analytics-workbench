@@ -8,7 +8,7 @@ import {
   TripSummary,
 } from "@dsiem/analytics-shared/trips";
 import { TripNotFound } from "../errors.js";
-import { type TaxiSnapshot, tripWhere } from "./snapshot.js";
+import type { TaxiSnapshot } from "./snapshot.js";
 import { makeTripPages } from "./trip-pages.js";
 
 type Sql = DatabricksClient.DatabricksClient;
@@ -16,23 +16,20 @@ type Sql = DatabricksClient.DatabricksClient;
 const tripZip = (sql: Sql, key: "pickup_zip" | "dropoff_zip") =>
   sql`COALESCE(CAST(${sql(key)} AS STRING), 'Unknown')`;
 
-const tripSummaryProjection = (sql: Sql) => sql`
-          CAST(trip_id AS STRING) AS trip_id,
-          CAST(tpep_pickup_datetime AS STRING) AS pickup_at,
-          CAST(tpep_dropoff_datetime AS STRING) AS dropoff_at,
-          ${tripZip(sql, "pickup_zip")} AS pickup_zip,
-          ${tripZip(sql, "dropoff_zip")} AS dropoff_zip,
-          CAST(trip_distance AS DOUBLE) AS distance,
-          CAST(fare_amount AS DOUBLE) AS fare,
-          CAST(COALESCE(timestampdiff(SECOND,tpep_pickup_datetime,tpep_dropoff_datetime)/60.0,0) AS DOUBLE) AS duration`;
+const tripSummaryFields = (sql: Sql) => ({
+  trip_id: sql`CAST(trip_id AS STRING)`,
+  pickup_at: sql`CAST(tpep_pickup_datetime AS STRING)`,
+  dropoff_at: sql`CAST(tpep_dropoff_datetime AS STRING)`,
+  pickup_zip: tripZip(sql, "pickup_zip"),
+  dropoff_zip: tripZip(sql, "dropoff_zip"),
+  distance: sql`CAST(trip_distance AS DOUBLE)`,
+  fare: sql`CAST(fare_amount AS DOUBLE)`,
+  duration: sql`CAST(COALESCE(timestampdiff(SECOND,tpep_pickup_datetime,tpep_dropoff_datetime)/60.0,0) AS DOUBLE)`,
+});
 
-function tripPreviewWindow(
-  sql: Sql,
-  sort: typeof TripSort.Type,
-  limit: number,
-) {
+function tripOrder(sql: Sql, sort: typeof TripSort.Type) {
   const metrics = { fare: sql`fare_amount`, distance: sql`trip_distance` };
-  const order = [
+  return [
     ...(sort === "newest" ? [] : [sql`${metrics[sort]} DESC NULLS LAST`]),
     sql`tpep_pickup_datetime DESC NULLS LAST`,
     sql`tpep_dropoff_datetime DESC NULLS LAST`,
@@ -42,7 +39,6 @@ function tripPreviewWindow(
     ...(sort === "distance" ? [] : [sql`${metrics.distance} ASC NULLS FIRST`]),
     sql`trip_id ASC`,
   ];
-  return sql`ORDER BY ${sql.csv(order)} LIMIT ${sql.param("INT", String(limit + 1))}`;
 }
 
 const isDay = Schema.is(Day);
@@ -75,7 +71,7 @@ const WarehouseTrip = Schema.Struct({
   details: Schema.fromJsonString(TripDetails),
 });
 
-const tripDetailsProjection = (sql: Sql) =>
+const tripDetailsField = (sql: Sql) =>
   sql`to_json(named_struct(
             'source_file', source_file, 'vendor_id', VendorID,
             'passenger_count', passenger_count, 'rate_code_id', RatecodeID,
@@ -88,7 +84,7 @@ const tripDetailsProjection = (sql: Sql) =>
             'mta_tax', CASE WHEN abs(mta_tax) < double('Infinity') THEN mta_tax END,
             'improvement_surcharge', CASE WHEN abs(improvement_surcharge) < double('Infinity') THEN improvement_surcharge END,
             'total_amount', CASE WHEN abs(total_amount) < double('Infinity') THEN total_amount END
-          ), map('ignoreNullFields', 'false')) AS details`;
+          ), map('ignoreNullFields', 'false'))`;
 
 const decodeTripRows = Schema.decodeUnknownEffect(
   Schema.Array(WarehouseTripSummary),
@@ -99,13 +95,16 @@ export const makeTrips = (taxi: TaxiSnapshot) =>
     const { trips, tripPage } = yield* makeTripPages(
       ({ limit, sort, ...filters }) =>
         Effect.gen(function* () {
-          const { sql, snapshot, run } = yield* taxi;
+          const { sql, source, run } = yield* taxi;
           return yield* run(
             sql
               .jsonPage(
-                sql`SELECT ${tripSummaryProjection(sql)}
-              FROM ${snapshot} ${tripWhere(sql, filters)}
-              ${tripPreviewWindow(sql, sort, limit)}`,
+                source.records({
+                  filters,
+                  fields: tripSummaryFields(sql),
+                  orderBy: tripOrder(sql, sort),
+                  limit: sql.param("INT", String(limit + 1)),
+                }),
                 { rowLimit: limit },
               )
               .pipe(
@@ -128,11 +127,18 @@ export const makeTrips = (taxi: TaxiSnapshot) =>
     );
     const tripDetails = (tripId: Trip["trip_id"]) =>
       Effect.gen(function* () {
-        const { sql, snapshot, read } = yield* taxi;
+        const { sql, source, read } = yield* taxi;
         const [row] = yield* read(
           WarehouseTrip,
-          sql`SELECT ${tripSummaryProjection(sql)}, ${tripDetailsProjection(sql)}
-            FROM ${snapshot} WHERE trip_id = ${tripId} LIMIT 1`,
+          source.records({
+            filters: {},
+            fields: {
+              ...tripSummaryFields(sql),
+              details: tripDetailsField(sql),
+            },
+            where: sql`trip_id = ${tripId}`,
+            limit: sql.param("INT", "1"),
+          }),
         );
         return (
           row ??

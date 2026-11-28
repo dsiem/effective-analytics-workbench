@@ -6,6 +6,7 @@
   "type": "module",
   "files": [
     "dist",
+    "src",
     "README.md"
   ],
   "exports": {
@@ -13,6 +14,11 @@
       "types": "./dist/index.d.ts",
       "workbench-source": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./report-assistant": {
+      "types": "./dist/report-assistant.d.ts",
+      "workbench-source": "./src/report-assistant.ts",
+      "import": "./dist/report-assistant.js"
     }
   },
   "engines": {

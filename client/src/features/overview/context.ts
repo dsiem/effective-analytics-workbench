@@ -1,3 +1,4 @@
+import { recentRowsSnapshot } from "@dsiem/genie-client";
 import { AsyncData } from "foldkit";
 import {
   genieContextDataLimit,
@@ -9,13 +10,13 @@ import type { Model } from "./model";
 function snapshot(
   title: string,
   overview: Overview,
-  data: string,
+  data: string | undefined,
 ): GenieContext {
   return {
     page: "overview",
     title,
     data:
-      data.length <= genieContextDataLimit
+      data !== undefined && data.length <= genieContextDataLimit
         ? data
         : JSON.stringify({
             scope: "summary-only",
@@ -48,22 +49,16 @@ function dailySnapshot(
       to: rows.at(-1)?.day ?? null,
       included: "Most recent recorded days in chronological order",
     },
-    daily: [],
   };
-  let remaining = genieContextDataLimit - JSON.stringify(details).length;
-  let start = rows.length;
-  // Account for each encoded row and its comma before adding it to the JSON array.
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const length =
-      JSON.stringify(rows[i]).length + (start < rows.length ? 1 : 0);
-    if (length > remaining) break;
-    remaining -= length;
-    start = i;
-  }
   return snapshot(
     title,
     overview,
-    JSON.stringify({ ...details, daily: rows.slice(start) }),
+    recentRowsSnapshot({
+      fields: details,
+      rowsKey: "daily",
+      rows,
+      maxLength: genieContextDataLimit,
+    }),
   );
 }
 
