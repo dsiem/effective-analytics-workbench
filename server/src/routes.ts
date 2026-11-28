@@ -1,7 +1,10 @@
 import { Effect, Layer } from "effect";
 import { HttpMiddleware, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
-import { savedViewHandlers } from "@dsiem/analytics/collaboration-http";
+import {
+  collaborationResponse,
+  savedViewHandlers,
+} from "@dsiem/analytics/collaboration-http";
 import { AppApi } from "@dsiem/analytics-shared/api";
 import { AnalysisRuns } from "./analysis-runs.js";
 import {
@@ -88,10 +91,10 @@ const TripCommentRoutes = HttpApiBuilder.group(
       const comments = yield* TripComments;
       const currentUser = yield* CurrentViewer;
       return handlers.handleAll({
-        list: ({ query }) => withApiErrors(comments.list(query)),
-        counts: ({ query }) => withApiErrors(comments.counts(query)),
+        list: ({ query }) => collaborationResponse(comments.list(query)),
+        counts: ({ query }) => collaborationResponse(comments.counts(query)),
         add: ({ payload, request }) =>
-          withApiErrors(
+          collaborationResponse(
             currentUser(request.headers).pipe(
               Effect.flatMap((author) => comments.add(payload, author)),
             ),

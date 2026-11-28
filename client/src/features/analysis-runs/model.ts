@@ -4,9 +4,9 @@ import { AsyncData } from "foldkit";
 import { defineTaggedUnion } from "foldkit/schema";
 import {
   AnalysisRun,
-  AnalysisRunId,
-  type AnalysisRunState,
-  AnalysisRunSummary,
+  JobRunId,
+  type JobRunState,
+  JobRunSummary,
   RouteReliabilityReport,
 } from "@dsiem/analytics-shared/analysis-runs";
 import { Id } from "@dsiem/analytics-shared/schema";
@@ -21,7 +21,7 @@ export const WeekField = Schema.Literals(["baselineWeek", "comparisonWeek"]);
 export type WeekField = typeof WeekField.Type;
 
 export const Selection = Schema.Struct({
-  id: AnalysisRunId,
+  id: JobRunId,
   generation: Schema.Int,
 });
 
@@ -59,7 +59,7 @@ export const Model = Schema.Struct({
   generation: Schema.Int,
   invalidLink: Schema.Boolean,
   historyGeneration: Schema.Int,
-  recent: AsyncData.Schema(Schema.Array(AnalysisRunSummary), Notice).schema,
+  recent: AsyncData.Schema(Schema.Array(JobRunSummary), Notice).schema,
   selected: Schema.Option(SelectedRun),
 });
 export type Model = typeof Model.Type;
@@ -86,7 +86,7 @@ export const init = (): Model => ({
   selected: Option.none(),
 });
 
-export const isActive = (state: AnalysisRunState) =>
+export const isActive = (state: JobRunState) =>
   state === "queued" || state === "running";
 
 export const watchedRun = (

@@ -1,21 +1,18 @@
 import { Schema } from "effect";
 import { Id } from "./fields.js";
 
-export const AnalysisRunId = Schema.Int.check(
+export const JobRunId = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-).pipe(Schema.brand("AnalysisRunId"));
-export type AnalysisRunId = typeof AnalysisRunId.Type;
+).pipe(Schema.brand("JobRunId"));
+export type JobRunId = typeof JobRunId.Type;
 
-export const AnalysisRunIdFromString = Schema.String.check(
+export const JobRunIdFromString = Schema.String.check(
   Schema.isPattern(/^[1-9]\d*$/),
-).pipe(
-  Schema.decodeTo(Schema.NumberFromString),
-  Schema.decodeTo(AnalysisRunId),
-);
+).pipe(Schema.decodeTo(Schema.NumberFromString), Schema.decodeTo(JobRunId));
 
-export const AnalysisRunReference = Schema.Struct({ id: AnalysisRunId });
+export const JobRunReference = Schema.Struct({ id: JobRunId });
 
-export const AnalysisRunState = Schema.Literals([
+export const JobRunState = Schema.Literals([
   "queued",
   "running",
   "succeeded",
@@ -23,27 +20,27 @@ export const AnalysisRunState = Schema.Literals([
   "canceled",
   "unknown",
 ]);
-export type AnalysisRunState = typeof AnalysisRunState.Type;
+export type JobRunState = typeof JobRunState.Type;
 
-export const AnalysisRunSummary = Schema.Struct({
-  id: AnalysisRunId,
-  state: AnalysisRunState,
+export const JobRunSummary = Schema.Struct({
+  id: JobRunId,
+  state: JobRunState,
   startedAt: Schema.NullOr(Schema.Int),
   endedAt: Schema.NullOr(Schema.Int),
   requestedBy: Schema.NullOr(Schema.NonEmptyString),
 });
-export type AnalysisRunSummary = typeof AnalysisRunSummary.Type;
+export type JobRunSummary = typeof JobRunSummary.Type;
 
 export const jobSubmission = <Input extends Schema.Top>(input: Input) =>
   Schema.Struct({ input, requestId: Id });
 
 export const jobRun = <Input extends Schema.Top>(input: Input) =>
   Schema.Struct({
-    ...AnalysisRunSummary.fields,
+    ...JobRunSummary.fields,
     input: Schema.NullOr(input),
     reason: Schema.NullOr(Schema.String),
     reasonCode: Schema.optionalKey(Schema.Literal("permission_denied")),
   });
 
 export const localRunSchema = <Input extends Schema.Top>(input: Input) =>
-  Schema.Struct({ id: AnalysisRunId, input, completedAt: Schema.String });
+  Schema.Struct({ id: JobRunId, input, completedAt: Schema.String });

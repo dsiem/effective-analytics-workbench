@@ -3,8 +3,8 @@ import { test } from "node:test";
 import { Option, Result, Schema } from "effect";
 import { AsyncData } from "foldkit";
 import {
-  AnalysisRunId,
-  type AnalysisRunSummary,
+  JobRunId,
+  type JobRunSummary,
 } from "@dsiem/analytics-shared/analysis-runs";
 import { LoadAnalysisHistory } from "../src/features/analysis-runs/commands";
 import { Message as M } from "../src/features/analysis-runs/messages";
@@ -15,8 +15,8 @@ import {
 } from "../src/features/analysis-runs/update";
 import { fail, succeed } from "../src/lib/command-result";
 
-const run: AnalysisRunSummary = {
-  id: Schema.decodeUnknownSync(AnalysisRunId)(123),
+const run: JobRunSummary = {
+  id: Schema.decodeUnknownSync(JobRunId)(123),
   state: "succeeded",
   startedAt: null,
   endedAt: null,

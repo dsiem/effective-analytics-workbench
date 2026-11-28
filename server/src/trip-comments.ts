@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect";
-import type { CurrentUser } from "@dsiem/analytics-shared/current-user";
+import type { UserIdentity } from "@dsiem/analytics/contracts";
 import type {
   TripComment,
   TripCommentInput,
@@ -38,7 +38,7 @@ const makeTripCommentsService = (database: typeof Lakebase.Service) => ({
           nextCursor,
         })),
       ),
-  add: ({ trip, ...draft }: TripCommentInput, author: CurrentUser | null) =>
+  add: ({ trip, ...draft }: TripCommentInput, author: UserIdentity | null) =>
     database
       .use((sql) =>
         makeTripComments(sql).add({ ...draft, record: trip }, author),

@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import * as SqlSchema from "effect/sql/SqlSchema";
 import type { SqlClient } from "effect/sql/SqlClient";
 import { pageWindow } from "./contracts/cursor-page.js";
-import type { CurrentUser } from "./contracts/current-user.js";
+import type { UserIdentity } from "./contracts/user-identity.js";
 import {
   CommentCursor,
   CommentCounts,
@@ -86,7 +86,7 @@ export const makeRecordComments = <Snapshot, Encoded extends Schema.Json>(
       ),
       Effect.withSpan("recordComments.list"),
     );
-  const add = (input: typeof Input.Type, author: CurrentUser | null) =>
+  const add = (input: typeof Input.Type, author: UserIdentity | null) =>
     Effect.gen(function* () {
       const encoded = yield* Schema.encodeEffect(snapshot)(input.record).pipe(
         Effect.mapError(

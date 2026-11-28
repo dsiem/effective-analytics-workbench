@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { ConfigProvider, Layer, Schema } from "effect";
 import { HttpRouter, HttpServer } from "effect/http";
 import { AnalysisRun } from "@dsiem/analytics-shared/analysis-runs";
-import { PermissionDeniedBody } from "@dsiem/analytics-shared/api";
+import { collaborationErrors } from "@dsiem/analytics/collaboration-http";
 import { AnalysisRuns } from "../src/analysis-runs.js";
 import { Analytics } from "../src/taxi/analytics.js";
 import { Genie } from "../src/genie/service.js";
@@ -256,19 +256,19 @@ test("analysis runs record the requester across retries, scope history and resul
   assert.equal(failedRun.state, "failed");
   assert.equal(failedRun.reasonCode, "permission_denied");
   assert.ok(failedRun.reason);
-  assert.match(failedRun.reason, /permission to complete the analysis/);
+  assert.match(failedRun.reason, /permission to complete the job/);
 
   denyJob = true;
   for (const [response, action] of [
-    [await submit(), /Starting an analysis requires permission/],
+    [await submit(), /permission to start this job/],
     [await api(), /permission to browse/],
     [await api("/123"), /permission to open/],
     [await api("/123/result"), /permission to open/],
   ] as const) {
     assert.equal(response.status, 403);
-    const { error } = Schema.decodeUnknownSync(PermissionDeniedBody)(
-      await response.json(),
-    );
+    const { error } = Schema.decodeUnknownSync(
+      collaborationErrors.PermissionDenied,
+    )(await response.json());
     assert.match(error.message, action);
     assert.doesNotMatch(error.message, /private diagnostic/);
   }

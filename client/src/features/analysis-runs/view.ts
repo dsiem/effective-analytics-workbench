@@ -6,8 +6,8 @@ import { defineView } from "foldkit/submodel";
 import type { ChildAttribute } from "foldkit/html";
 import type {
   AnalysisInput,
-  AnalysisRunState,
-  AnalysisRunSummary,
+  JobRunState,
+  JobRunSummary,
   RouteReliabilityReport,
   RouteReliabilityRow,
 } from "@dsiem/analytics-shared/analysis-runs";
@@ -79,7 +79,7 @@ const states = {
   failed: "Failed",
   canceled: "Canceled",
   unknown: "Status unavailable",
-} satisfies Record<AnalysisRunState, string>;
+} satisfies Record<JobRunState, string>;
 
 const bands = {
   overnight: "00:00–06:00",
@@ -97,7 +97,7 @@ const change = new Intl.NumberFormat("en-US", {
   signDisplay: "exceptZero",
 });
 
-const status = (h: H, state: AnalysisRunState) =>
+const status = (h: H, state: JobRunState) =>
   h.span(
     [h.Class("analysis-status"), h.DataAttribute("state", state)],
     [states[state]],
@@ -127,7 +127,7 @@ const newRun = (h: H, model: Model) =>
     disabled: model.submission._tag === "Submitting",
   });
 
-function historyRow(h: H, run: AnalysisRunSummary, query: string) {
+function historyRow(h: H, run: JobRunSummary, query: string) {
   return h.li(
     [h.Key(String(run.id))],
     [

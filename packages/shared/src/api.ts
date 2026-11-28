@@ -1,5 +1,7 @@
 import { Schema } from "effect";
 import {
+  collaborationCodes,
+  collaborationErrors,
   recordCommentsGroup,
   savedViewsGroup,
 } from "@dsiem/analytics/collaboration-http";
@@ -12,13 +14,13 @@ import {
 } from "effect/http-api";
 import {
   AnalysisRun,
-  AnalysisRunIdFromString,
-  AnalysisRunReference,
-  AnalysisRunSummary,
+  JobRunIdFromString,
+  JobRunReference,
+  JobRunSummary,
   AnalysisSubmission,
   RouteReliabilityReport,
 } from "./analysis-runs.js";
-import { CurrentUser } from "./current-user.js";
+import { UserIdentity } from "@dsiem/analytics/contracts";
 import {
   GenieAgentPath,
   GenieInput,
@@ -45,13 +47,13 @@ import {
 } from "./trips.js";
 
 export const apiErrorCodes = {
-  InvalidRequest: "invalid_request",
-  PermissionDenied: "permission_denied",
-  SavedViewNotFound: "saved_view_not_found",
+  InvalidRequest: collaborationCodes.InvalidRequest,
+  PermissionDenied: collaborationCodes.PermissionDenied,
+  SavedViewNotFound: collaborationCodes.SavedViewNotFound,
   TripNotFound: "trip_not_found",
-  AnalysisRunNotFound: "analysis_run_not_found",
-  AnalysisReportPending: "analysis_report_pending",
-  SavedViewConflict: "saved_view_conflict",
+  JobRunNotFound: "analysis_run_not_found",
+  JobReportPending: "analysis_report_pending",
+  SavedViewConflict: collaborationCodes.SavedViewConflict,
   GenieFailed: "genie_message_unavailable",
   GenieAgentModeUnavailable: "genie_agent_mode_unavailable",
 } as const;
@@ -67,47 +69,32 @@ const errorBody = <S extends Schema.Top>(code: S, status: number) =>
     error: Schema.Struct({ code, message: Schema.String }),
   }).pipe(HttpApiSchema.status(status));
 
-export const InvalidRequestBody = errorBody(
-  Schema.Literal(apiErrorCodes.InvalidRequest),
-  400,
-);
-const NotFoundBody = errorBody(
-  Schema.Literal(apiErrorCodes.SavedViewNotFound),
-  404,
-);
 const TripNotFoundBody = errorBody(
   Schema.Literal(apiErrorCodes.TripNotFound),
   404,
 );
-export const PermissionDeniedBody = errorBody(
-  Schema.Literal(apiErrorCodes.PermissionDenied),
-  403,
-);
-const AnalysisRunNotFoundBody = errorBody(
-  Schema.Literal(apiErrorCodes.AnalysisRunNotFound),
+const JobRunNotFoundBody = errorBody(
+  Schema.Literal(apiErrorCodes.JobRunNotFound),
   404,
 );
-const AnalysisReportPendingBody = errorBody(
-  Schema.Literal(apiErrorCodes.AnalysisReportPending),
-  409,
-);
-const SavedViewConflictBody = errorBody(
-  Schema.Literal(apiErrorCodes.SavedViewConflict),
+const JobReportPendingBody = errorBody(
+  Schema.Literal(apiErrorCodes.JobReportPending),
   409,
 );
 const GenieFailedBody = errorBody(
   Schema.Literal(apiErrorCodes.GenieFailed),
   409,
 );
-const UnavailableService = Schema.Literals([
+const OtherUnavailableServices = Schema.Literals([
   "analysis",
   "auth",
   "genie",
-  "lakebase",
   "warehouse",
   "workspace",
 ]);
-export type UnavailableService = typeof UnavailableService.Type;
+export type UnavailableService =
+  | typeof OtherUnavailableServices.Type
+  | "lakebase";
 
 const TimeoutService = Schema.Literals([
   "genie",
@@ -172,27 +159,29 @@ const timeoutBody = <
     504,
   );
 const errors = [
-  InvalidRequestBody,
-  PermissionDeniedBody,
-  NotFoundBody,
+  collaborationErrors.InvalidRequest,
+  collaborationErrors.PermissionDenied,
+  collaborationErrors.SavedViewNotFound,
   TripNotFoundBody,
-  AnalysisRunNotFoundBody,
-  AnalysisReportPendingBody,
-  SavedViewConflictBody,
+  JobRunNotFoundBody,
+  JobReportPendingBody,
+  collaborationErrors.SavedViewConflict,
   GenieFailedBody,
   AgentModeUnavailableBody,
-  unavailableBody(...UnavailableService.literals),
+  collaborationErrors.ServiceUnavailable,
+  unavailableBody(...OtherUnavailableServices.literals),
   upstreamBody(...UpstreamService.literals),
   timeoutBody(...TimeoutService.literals),
 ] as const;
 export const ApiError = Schema.Union(errors);
 
-export const invalidRequestBody = (): typeof InvalidRequestBody.Type => ({
-  error: {
-    code: apiErrorCodes.InvalidRequest,
-    message: "Check the request fields, dates, and ZIP code.",
-  },
-});
+export const invalidRequestBody =
+  (): typeof collaborationErrors.InvalidRequest.Type => ({
+    error: {
+      code: apiErrorCodes.InvalidRequest,
+      message: "Check the request fields, dates, and ZIP code.",
+    },
+  });
 
 export class ApiNoStore extends HttpApiMiddleware.Service<ApiNoStore>()(
   "app/ApiNoStore",
@@ -201,22 +190,22 @@ export class ApiNoStore extends HttpApiMiddleware.Service<ApiNoStore>()(
 
 export class RequestValidationErrors extends HttpApiMiddleware.Service<RequestValidationErrors>()(
   "app/RequestValidationErrors",
-  { error: InvalidRequestBody },
+  { error: collaborationErrors.InvalidRequest },
 ) {}
 
 const warehouseErrors = [
-  PermissionDeniedBody,
+  collaborationErrors.PermissionDenied,
   unavailableBody("warehouse"),
   timeoutBody("warehouse"),
 ] as const;
 const analysisErrors = [
-  PermissionDeniedBody,
+  collaborationErrors.PermissionDenied,
   unavailableBody("analysis", "auth", "workspace"),
   upstreamBody("analysis", "workspace"),
 ] as const;
 const workspaceTimeout = timeoutBody("workspace");
 const genieAccessErrors = [
-  PermissionDeniedBody,
+  collaborationErrors.PermissionDenied,
   unavailableBody("auth", "genie", "workspace"),
 ] as const;
 const genieErrors = [
@@ -257,7 +246,7 @@ export const AppApi = HttpApi.make("taxi")
   .add(
     HttpApiGroup.make("viewer").add(
       HttpApiEndpoint.get("current", "/api/me", {
-        success: Schema.NullOr(CurrentUser),
+        success: Schema.NullOr(UserIdentity),
       }),
     ),
     HttpApiGroup.make("analytics").add(
@@ -300,24 +289,28 @@ export const AppApi = HttpApi.make("taxi")
     HttpApiGroup.make("analysisRuns").add(
       HttpApiEndpoint.post("submit", "/api/analysis-runs", {
         payload: AnalysisSubmission,
-        success: AnalysisRunReference.pipe(HttpApiSchema.status(202)),
-        error: [InvalidRequestBody, ...analysisErrors, workspaceTimeout],
+        success: JobRunReference.pipe(HttpApiSchema.status(202)),
+        error: [
+          collaborationErrors.InvalidRequest,
+          ...analysisErrors,
+          workspaceTimeout,
+        ],
       }).middleware(RequestValidationErrors),
       HttpApiEndpoint.get("list", "/api/analysis-runs", {
-        success: Schema.Array(AnalysisRunSummary),
+        success: Schema.Array(JobRunSummary),
         error: [...analysisErrors, workspaceTimeout],
       }),
       HttpApiEndpoint.get("get", "/api/analysis-runs/:id", {
-        params: { id: AnalysisRunIdFromString },
+        params: { id: JobRunIdFromString },
         success: AnalysisRun,
-        error: [AnalysisRunNotFoundBody, ...analysisErrors, workspaceTimeout],
+        error: [JobRunNotFoundBody, ...analysisErrors, workspaceTimeout],
       }).middleware(RequestValidationErrors),
       HttpApiEndpoint.get("result", "/api/analysis-runs/:id/result", {
-        params: { id: AnalysisRunIdFromString },
+        params: { id: JobRunIdFromString },
         success: RouteReliabilityReport,
         error: [
-          AnalysisRunNotFoundBody,
-          AnalysisReportPendingBody,
+          JobRunNotFoundBody,
+          JobReportPendingBody,
           ...analysisErrors,
           timeoutBody("warehouse", "workspace"),
         ],

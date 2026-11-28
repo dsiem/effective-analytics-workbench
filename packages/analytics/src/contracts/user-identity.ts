@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
-export const CurrentUser = Schema.Struct({
+export const UserIdentity = Schema.Struct({
   name: Schema.NonEmptyString,
   email: Schema.NullOr(Schema.NonEmptyString),
 });
-export type CurrentUser = typeof CurrentUser.Type;
+export type UserIdentity = typeof UserIdentity.Type;

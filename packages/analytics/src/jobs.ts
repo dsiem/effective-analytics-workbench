@@ -1,15 +1,15 @@
 import { createHash } from "node:crypto";
 import { Effect, Option, Schema } from "effect";
 import {
-  AnalysisRunId,
-  type AnalysisRunState,
-  type AnalysisRunSummary,
+  JobRunId,
+  type JobRunState,
+  type JobRunSummary,
 } from "./contracts/job-runs.js";
 import {
-  AnalysisReportPending,
-  AnalysisRunNotFound,
+  JobReportPending,
+  JobRunNotFound,
   InvalidRequest,
-  mapWorkspacePermission,
+  permissionDenied,
   UpstreamError,
   unavailable,
 } from "./errors.js";
@@ -17,15 +17,18 @@ import type { SqlClient } from "effect/sql/SqlClient";
 import * as SqlSchema from "effect/sql/SqlSchema";
 import type { Expression } from "./index.js";
 
-export type JobRequest<E = never, R = never> = (
-  path: string,
-  method?: "GET" | "POST",
-  body?: unknown,
-) => Effect.Effect<unknown, E, R>;
+export interface JobTransport<E, R = never> {
+  readonly request: (
+    path: string,
+    method?: "GET" | "POST",
+    body?: unknown,
+  ) => Effect.Effect<unknown, E, R>;
+  readonly statusOf: (failure: E) => number | undefined;
+}
 
 const Run = Schema.Struct({
   job_id: Schema.Int,
-  run_id: AnalysisRunId,
+  run_id: JobRunId,
   start_time: Schema.optionalKey(Schema.Int),
   end_time: Schema.optionalKey(Schema.Int),
   status: Schema.optionalKey(
@@ -54,7 +57,7 @@ const Run = Schema.Struct({
 });
 type Run = typeof Run.Type;
 const Runs = Schema.Struct({ runs: Schema.optionalKey(Schema.Array(Run)) });
-const Started = Schema.Struct({ run_id: AnalysisRunId });
+const Started = Schema.Struct({ run_id: JobRunId });
 const jobs = "/api/2.2/jobs";
 const historyLimit = 10;
 
@@ -63,7 +66,7 @@ const terminationCode = (run: Run) =>
     ? "TIMEDOUT"
     : (run.status?.termination_details?.code ?? run.state?.result_state);
 
-const runState = (run: Run): AnalysisRunState => {
+const runState = (run: Run): JobRunState => {
   switch (run.status?.state ?? run.state?.life_cycle_state) {
     case "BLOCKED":
     case "PENDING":
@@ -99,7 +102,7 @@ const failureReason = (run: Run) => {
   const code = terminationCode(run);
   switch (code) {
     case "UNAUTHORIZED_ERROR":
-      return "This run stopped early. It needs permission to complete the analysis.";
+      return "This run stopped early. It needs permission to complete the job.";
     case "TIMED_OUT":
     case "TIMEDOUT":
       return "The Databricks run timed out.";
@@ -125,7 +128,7 @@ const parametersOf = (run: Run) => {
   return { requestedBy: requested_by?.trim() || null, input };
 };
 
-const summary = (run: Run, requestedBy: string | null): AnalysisRunSummary => ({
+const summary = (run: Run, requestedBy: string | null): JobRunSummary => ({
   id: run.run_id,
   state: runState(run),
   startedAt: run.start_time || null,
@@ -134,37 +137,42 @@ const summary = (run: Run, requestedBy: string | null): AnalysisRunSummary => ({
 });
 
 const notFound = () =>
-  new AnalysisRunNotFound({ message: "This analysis run could not be found." });
+  new JobRunNotFound({ message: "This job run could not be found." });
 
 type JobParameters = Readonly<Record<string, string>> & {
   readonly requested_by?: never;
 };
 
-export interface AnalysisJob<Input, Report, E = never, R = never> {
+export interface JobDefinition<Input, Report, E = never, R = never> {
   readonly jobId: number | null;
   readonly parameters: Schema.Codec<Input, JobParameters>;
   readonly readReport: (
-    id: AnalysisRunId,
+    id: JobRunId,
   ) => Effect.Effect<Option.Option<Report>, E, R>;
 }
 
-export const makeAnalysisJob = <
-  Input,
-  Report,
-  E,
-  R,
-  RequestError,
-  RequestServices,
->(
-  request: JobRequest<RequestError, RequestServices>,
-  { jobId, parameters, readReport }: AnalysisJob<Input, Report, E, R>,
+export const bindJob = <Input, Report, E, R, RequestError, RequestServices>(
+  { request, statusOf }: JobTransport<RequestError, RequestServices>,
+  { jobId, parameters, readReport }: JobDefinition<Input, Report, E, R>,
 ) => {
   const jobConfigured =
     jobId !== null
       ? Effect.void
-      : Effect.fail(unavailable("analysis", "Configure the analysis job."));
+      : Effect.fail(unavailable("jobs", "Configure the job ID."));
   const decodeInput = Schema.decodeUnknownOption(parameters);
   const encodeInput = Schema.encodeEffect(parameters);
+
+  const requestRun = (
+    path: string,
+    denied: string,
+    method?: "GET" | "POST",
+    body?: unknown,
+  ) =>
+    request(path, method, body).pipe(
+      Effect.mapError((error) =>
+        statusOf(error) === 403 ? permissionDenied(denied) : error,
+      ),
+    );
 
   const decode =
     <A>(schema: Schema.Decoder<A>) =>
@@ -173,9 +181,8 @@ export const makeAnalysisJob = <
         Effect.mapError(
           (cause) =>
             new UpstreamError({
-              service: "analysis",
-              message:
-                "Databricks returned an unexpected analysis run response.",
+              service: "jobs",
+              message: "Databricks returned an unexpected job run response.",
               cause,
             }),
         ),
@@ -213,27 +220,25 @@ export const makeAnalysisJob = <
         const token = createHash("sha256")
           .update(JSON.stringify([jobId, requestId, ordered]))
           .digest("hex");
-        return request(`${jobs}/run-now`, "POST", {
-          job_id: jobId,
-          job_parameters: { ...values, requested_by: requestedBy ?? "" },
-          idempotency_token: token,
-        });
+        return requestRun(
+          `${jobs}/run-now`,
+          "You need permission to start this job.",
+          "POST",
+          {
+            job_id: jobId,
+            job_parameters: { ...values, requested_by: requestedBy ?? "" },
+            idempotency_token: token,
+          },
+        );
       }),
-      Effect.mapError(
-        mapWorkspacePermission(
-          "This run needs a green light. Starting an analysis requires permission.",
-        ),
-      ),
       Effect.flatMap(decode(Started)),
       Effect.map(({ run_id: id }) => ({ id })),
     );
 
   const list = jobConfigured.pipe(
     Effect.andThen(
-      request(`${jobs}/runs/list?job_id=${jobId}&limit=${historyLimit}`),
-    ),
-    Effect.mapError(
-      mapWorkspacePermission(
+      requestRun(
+        `${jobs}/runs/list?job_id=${jobId}&limit=${historyLimit}`,
         "The run history is under lock. You need permission to browse it.",
       ),
     ),
@@ -246,17 +251,25 @@ export const makeAnalysisJob = <
     ),
   );
 
-  const lookup = (id: AnalysisRunId) =>
+  const lookup = (id: JobRunId) =>
     jobConfigured.pipe(
       Effect.andThen(
-        request(`${jobs}/runs/get?run_id=${id}&include_resolved_values=true`),
-      ),
-      Effect.mapError((error) =>
-        error instanceof UpstreamError && error.upstreamStatus === 404
-          ? notFound()
-          : mapWorkspacePermission(
-              "This run is under lock. You need permission to open it.",
-            )(error),
+        request(
+          `${jobs}/runs/get?run_id=${id}&include_resolved_values=true`,
+        ).pipe(
+          Effect.mapError((error) => {
+            switch (statusOf(error)) {
+              case 404:
+                return notFound();
+              case 403:
+                return permissionDenied(
+                  "This run is under lock. You need permission to open it.",
+                );
+              default:
+                return error;
+            }
+          }),
+        ),
       ),
       Effect.flatMap(decode(Run)),
       Effect.filterOrFail(
@@ -265,7 +278,7 @@ export const makeAnalysisJob = <
       ),
     );
 
-  const get = (id: AnalysisRunId) =>
+  const get = (id: JobRunId) =>
     lookup(id).pipe(
       Effect.map((run) => {
         const { requestedBy, input } = parametersOf(run);
@@ -282,12 +295,12 @@ export const makeAnalysisJob = <
       }),
     );
 
-  const result = (id: AnalysisRunId) =>
+  const result = (id: JobRunId) =>
     lookup(id).pipe(
       Effect.filterOrFail(
         (run) => runState(run) === "succeeded",
         () =>
-          new AnalysisReportPending({
+          new JobReportPending({
             message: "The report is available after the run succeeds.",
           }),
       ),
@@ -298,7 +311,7 @@ export const makeAnalysisJob = <
           onNone: () =>
             Effect.fail(
               unavailable(
-                "analysis",
+                "jobs",
                 "The completed report is missing. Check the job's results table.",
               ),
             ),
@@ -311,7 +324,7 @@ export const makeAnalysisJob = <
 
 export const sqlJsonReport =
   <Report>(sql: SqlClient, table: Expression, report: Schema.Decoder<Report>) =>
-  (id: AnalysisRunId) =>
+  (id: JobRunId) =>
     SqlSchema.findAll({
       Request: Schema.Void,
       Result: Schema.Struct({ report_json: Schema.fromJsonString(report) }),

@@ -1,9 +1,6 @@
 import { Clock, Effect, Option, Schema } from "effect";
 import { Command, Navigation } from "foldkit";
-import {
-  AnalysisInput,
-  AnalysisRunId,
-} from "@dsiem/analytics-shared/analysis-runs";
+import { AnalysisInput, JobRunId } from "@dsiem/analytics-shared/analysis-runs";
 import { Id } from "@dsiem/analytics-shared/schema";
 import { runHref } from "../../app/route";
 import { request } from "../../lib/api-client";
@@ -71,7 +68,7 @@ export const LoadAnalysisReport = Command.define("LoadAnalysisReport", {
 });
 
 export const OpenAnalysisRun = Command.define("OpenAnalysisRun", {
-  args: { id: AnalysisRunId, query: Schema.String },
+  args: { id: JobRunId, query: Schema.String },
   messages: [M.CompletedOpenAnalysisRun],
   execute: ({ id, query }) =>
     Navigation.pushUrl(runHref(id, query)).pipe(

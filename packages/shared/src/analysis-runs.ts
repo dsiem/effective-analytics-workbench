@@ -2,11 +2,11 @@ import { Schema } from "effect";
 import { Day, Zip } from "./schema.js";
 import { jobRun, jobSubmission } from "@dsiem/analytics/contracts";
 export {
-  AnalysisRunId,
-  AnalysisRunIdFromString,
-  AnalysisRunReference,
-  AnalysisRunState,
-  AnalysisRunSummary,
+  JobRunId,
+  JobRunIdFromString,
+  JobRunReference,
+  JobRunState,
+  JobRunSummary,
 } from "@dsiem/analytics/contracts";
 
 export const AnalysisInput = Schema.Struct({

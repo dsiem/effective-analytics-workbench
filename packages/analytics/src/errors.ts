@@ -15,15 +15,11 @@ export class SavedViewNotFound extends Data.TaggedError("SavedViewNotFound")<{
   readonly message: string;
 }> {}
 
-export class AnalysisRunNotFound extends Data.TaggedError(
-  "AnalysisRunNotFound",
-)<{
+export class JobRunNotFound extends Data.TaggedError("JobRunNotFound")<{
   readonly message: string;
 }> {}
 
-export class AnalysisReportPending extends Data.TaggedError(
-  "AnalysisReportPending",
-)<{
+export class JobReportPending extends Data.TaggedError("JobReportPending")<{
   readonly message: string;
 }> {}
 

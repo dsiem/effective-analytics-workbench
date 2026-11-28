@@ -7,7 +7,7 @@ import {
   HttpApiSchema,
 } from "effect/http-api";
 import { CommentCounts, commentSchemas } from "./contracts/record-comments.js";
-import { Id } from "./contracts/fields.js";
+import { Id, Version } from "./contracts/fields.js";
 import {
   SavedViewPin,
   SavedViewSearch,
@@ -21,7 +21,7 @@ import type {
   ServiceUnavailable,
 } from "./errors.js";
 
-const codes = {
+export const collaborationCodes = {
   InvalidRequest: "invalid_request",
   PermissionDenied: "permission_denied",
   SavedViewConflict: "saved_view_conflict",
@@ -29,21 +29,31 @@ const codes = {
   ServiceUnavailable: "lakebase_unavailable",
 } as const;
 
-const errorBody = <C extends keyof typeof codes>(tag: C, status: number) =>
+const errorBody = <C extends keyof typeof collaborationCodes>(
+  tag: C,
+  status: number,
+) =>
   Schema.Struct({
     error: Schema.Struct({
-      code: Schema.Literal(codes[tag]),
+      code: Schema.Literal(collaborationCodes[tag]),
       message: Schema.String,
     }),
   }).pipe(HttpApiSchema.status(status));
+export const collaborationErrors = {
+  InvalidRequest: errorBody("InvalidRequest", 400),
+  PermissionDenied: errorBody("PermissionDenied", 403),
+  SavedViewNotFound: errorBody("SavedViewNotFound", 404),
+  SavedViewConflict: errorBody("SavedViewConflict", 409),
+  ServiceUnavailable: errorBody("ServiceUnavailable", 503),
+};
 const storageErrors = [
-  errorBody("PermissionDenied", 403),
-  errorBody("ServiceUnavailable", 503),
+  collaborationErrors.PermissionDenied,
+  collaborationErrors.ServiceUnavailable,
 ] as const;
 const saveErrors = [
   ...storageErrors,
-  errorBody("SavedViewNotFound", 404),
-  errorBody("SavedViewConflict", 409),
+  collaborationErrors.SavedViewNotFound,
+  collaborationErrors.SavedViewConflict,
 ] as const;
 type StorageFailure =
   | InvalidRequest
@@ -52,12 +62,14 @@ type StorageFailure =
   | SavedViewNotFound
   | ServiceUnavailable<"lakebase">;
 type Body<E extends StorageFailure> = E extends StorageFailure
-  ? { error: { code: (typeof codes)[E["_tag"]]; message: string } }
+  ? { error: { code: (typeof collaborationCodes)[E["_tag"]]; message: string } }
   : never;
 
 function response<E extends StorageFailure>(failure: E): Body<E>;
 function response(failure: StorageFailure) {
-  return { error: { code: codes[failure._tag], message: failure.message } };
+  return {
+    error: { code: collaborationCodes[failure._tag], message: failure.message },
+  };
 }
 
 export const collaborationResponse = <A, E extends StorageFailure, R>(
@@ -132,10 +144,7 @@ export function savedViewsGroup<
     HttpApiEndpoint.delete("remove", `${path}/:id`, {
       params: { id: Id },
       query: {
-        version: Schema.NumberFromString.check(
-          Schema.isInt(),
-          Schema.isGreaterThan(0),
-        ),
+        version: Schema.NumberFromString.pipe(Schema.decodeTo(Version)),
       },
       success: Schema.Struct({ deleted: Schema.Literal(true) }),
       error: saveErrors,
@@ -173,7 +182,7 @@ export function recordCommentsGroup<
     HttpApiEndpoint.post("add", config.path, {
       payload: Input,
       success: Comment,
-      error: [...storageErrors, errorBody("InvalidRequest", 400)],
+      error: [...storageErrors, collaborationErrors.InvalidRequest],
     }),
   );
 }

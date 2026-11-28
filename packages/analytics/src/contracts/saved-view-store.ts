@@ -1,10 +1,9 @@
 import { Schema } from "effect";
 import { CursorPage, CursorTimestamp } from "./cursor-page.js";
-import { boundedText, Id } from "./fields.js";
+import { boundedText, Id, Version } from "./fields.js";
 
-export const SavedViewVersion = Schema.Int.check(Schema.isGreaterThan(0));
 export const SavedViewPin = Schema.Struct({
-  version: SavedViewVersion,
+  version: Version,
   pinned: Schema.Boolean,
 });
 export type SavedViewPin = typeof SavedViewPin.Type;
@@ -30,11 +29,11 @@ export const savedViewSchemas = <F extends Schema.Top>(filters: F) => {
     title: boundedText(160).check(Schema.isPattern(/\S/)),
     body: Schema.String.check(Schema.isMaxLength(10000)),
     filters,
-    version: Schema.NullOr(SavedViewVersion),
+    version: Schema.NullOr(Version),
   });
   const SavedView = Schema.Struct({
     ...SavedViewInput.fields,
-    version: SavedViewVersion,
+    version: Version,
     pinned: Schema.Boolean,
     created_at: Schema.String,
     updated_at: Schema.String,
