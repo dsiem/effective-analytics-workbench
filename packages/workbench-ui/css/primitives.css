@@ -74,6 +74,13 @@
     color: var(--on-accent);
     border-color: var(--color-brand-600);
   }
+  .btn-primary:disabled {
+    background: var(--subtle);
+    border-color: var(--border);
+    color: var(--muted);
+    box-shadow: none;
+    opacity: 1;
+  }
   .btn-primary:hover:not(:disabled) {
     background: var(--color-brand-700);
     border-color: var(--color-brand-700);

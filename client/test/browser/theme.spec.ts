@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
 
+const lightCanvas = "rgb(244, 243, 239)";
+const darkCanvas = "rgb(22, 25, 30)";
+
 test.beforeEach(async ({ page }) => {
   // Theme behavior is independent of warehouse connectivity.
   await page.route("**/api/**", (route) =>
@@ -17,10 +20,7 @@ test("theme menu supports keyboard selection, navigation, persistence and prepai
     exact: true,
   });
   await expect(system).toBeVisible();
-  await expect(page.locator("body")).toHaveCSS(
-    "background-color",
-    "rgb(246, 247, 244)",
-  );
+  await expect(page.locator("body")).toHaveCSS("background-color", lightCanvas);
   await system.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("menuitem")).toHaveText([
@@ -37,35 +37,26 @@ test("theme menu supports keyboard selection, navigation, persistence and prepai
   await page.keyboard.press("Enter");
   const dark = page.getByRole("button", { name: "Theme: Dark", exact: true });
   await expect(dark).toBeFocused();
-  await expect(page.locator("body")).toHaveCSS(
-    "background-color",
-    "rgb(18, 27, 27)",
-  );
+  await expect(page.locator("body")).toHaveCSS("background-color", darkCanvas);
   await expect(page.getByLabel("Pickup start date", { exact: true })).toHaveCSS(
     "color-scheme",
     "dark",
   );
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
     "content",
-    "#121b1b",
+    "#16191e",
   );
   await page.getByRole("link", { name: "Trip overview", exact: true }).click();
   await expect(dark).toBeVisible();
   await page.reload();
   await expect(dark).toBeVisible();
-  await expect(page.locator("body")).toHaveCSS(
-    "background-color",
-    "rgb(18, 27, 27)",
-  );
+  await expect(page.locator("body")).toHaveCSS("background-color", darkCanvas);
 
   // Stop the application bundle: the saved theme must already be set by the head script.
   await page.route("**/assets/index-*.js", (route) => route.abort());
   await page.reload();
   await expect(page.locator("#root")).toBeEmpty();
-  await expect(page.locator("body")).toHaveCSS(
-    "background-color",
-    "rgb(18, 27, 27)",
-  );
+  await expect(page.locator("body")).toHaveCSS("background-color", darkCanvas);
 });
 
 test("System follows appearance changes while explicit choices override them", async ({
@@ -78,33 +69,21 @@ test("System follows appearance changes while explicit choices override them", a
     exact: true,
   });
   await expect(system).toBeVisible();
-  await expect(page.locator("body")).toHaveCSS(
-    "background-color",
-    "rgb(18, 27, 27)",
-  );
+  await expect(page.locator("body")).toHaveCSS("background-color", darkCanvas);
   await page.emulateMedia({ colorScheme: "light" });
-  await expect(page.locator("body")).toHaveCSS(
-    "background-color",
-    "rgb(246, 247, 244)",
-  );
+  await expect(page.locator("body")).toHaveCSS("background-color", lightCanvas);
   await system.click();
   await page.getByRole("menuitem", { name: "Light", exact: true }).click();
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(
     page.getByRole("button", { name: "Theme: Light", exact: true }),
   ).toBeVisible();
-  await expect(page.locator("body")).toHaveCSS(
-    "background-color",
-    "rgb(246, 247, 244)",
-  );
+  await expect(page.locator("body")).toHaveCSS("background-color", lightCanvas);
   await page.reload();
   await page.getByRole("button", { name: "Theme: Light", exact: true }).click();
   await page.getByRole("menuitem", { name: "System", exact: true }).click();
   await expect(system).toBeFocused();
-  await expect(page.locator("body")).toHaveCSS(
-    "background-color",
-    "rgb(18, 27, 27)",
-  );
+  await expect(page.locator("body")).toHaveCSS("background-color", darkCanvas);
 });
 
 for (const storage of ["invalid", "blocked"] as const) {
@@ -131,12 +110,12 @@ for (const storage of ["invalid", "blocked"] as const) {
       .click();
     await expect(page.locator("body")).toHaveCSS(
       "background-color",
-      "rgb(18, 27, 27)",
+      darkCanvas,
     );
     await page.getByRole("menuitem", { name: "Light", exact: true }).click();
     await expect(page.locator("body")).toHaveCSS(
       "background-color",
-      "rgb(246, 247, 244)",
+      lightCanvas,
     );
   });
 }

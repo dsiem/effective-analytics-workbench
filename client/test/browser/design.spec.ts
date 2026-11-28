@@ -91,6 +91,17 @@ async function primaryIsDistinct(page: Page) {
     name: "Saved views",
     exact: true,
   });
+  const zip = page.getByRole("textbox", {
+    name: "Pickup ZIP code",
+    exact: true,
+  });
+  await expect(primary).toBeDisabled();
+  const disabledBackground = await primary.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await zip.fill("10019");
+  await expect(primary).toBeEnabled();
+  await expect(primary).not.toHaveCSS("background-color", disabledBackground);
   const primaryStyle = await primary.evaluate((element) => {
     const style = getComputedStyle(element);
     return {
@@ -106,6 +117,8 @@ async function primaryIsDistinct(page: Page) {
   );
   expect(primaryStyle.color).not.toBe(primaryStyle.background);
   expect(primaryStyle.height).toBeGreaterThanOrEqual(36);
+  await zip.clear();
+  await expect(primary).toBeDisabled();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -305,7 +318,10 @@ for (const colorScheme of ["light", "dark"] as const) {
         map.getByRole("button", { name: "Zoom in", exact: true }),
       ).toHaveCSS(
         "background-color",
-        colorScheme === "dark" ? "rgb(28, 40, 36)" : "rgb(255, 255, 255)",
+        await page
+          .locator(".card")
+          .filter({ has: map })
+          .evaluate((card) => getComputedStyle(card).backgroundColor),
       );
       await fitsViewport(page);
       await capture(page, info, "pickup-map");
