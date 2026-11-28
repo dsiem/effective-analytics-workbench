@@ -1,18 +1,12 @@
+import { readFramePreferences } from "@dsiem/workbench-ui/workspace-frame";
 import { Effect, Schema } from "effect";
 import { Calendar, Command, Dom } from "foldkit";
 import { request } from "../lib/api-client";
 import { result } from "../lib/command-result";
 import { Message as M } from "./message";
-import { readThemePreference } from "./theme";
 export const RestoreWorkspace = Command.define("RestoreWorkspace", {
   messages: [M.Booted],
-  execute: Effect.sync(() => {
-    return M.Booted({
-      sidebar: !document.cookie.split("; ").includes("sidebar_state=false"),
-      mobile: matchMedia("(max-width: 767px)").matches,
-      themePreference: readThemePreference(),
-    });
-  }),
+  execute: Effect.sync(() => M.Booted(readFramePreferences())),
 });
 export const Focus = Command.define("Focus", {
   args: { selector: Schema.String },

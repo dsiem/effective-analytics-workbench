@@ -1,4 +1,4 @@
-import { Effect, Queue, Stream } from "effect";
+import { frameEvents } from "@dsiem/workbench-ui/workspace-frame";
 import { Subscription } from "foldkit";
 import { subscriptions as analysisSubscriptions } from "../features/analysis-runs/subscription";
 import { subscriptions as genieSubscriptions } from "../features/genie/subscription";
@@ -8,10 +8,8 @@ import {
 } from "../features/overview/subscription";
 import { subscriptions as tripsSubscriptions } from "../features/trips/subscription";
 import * as Features from "./features";
-import { Message as LayoutMessage } from "./layout";
 import type { Message } from "./message";
 import type { Model } from "./model";
-import { Message as ThemeMessage, systemThemeQuery } from "./theme";
 
 const appSubscriptions = Subscription.make<Model, Message>()((entry) => ({
   browser: entry(
@@ -19,50 +17,9 @@ const appSubscriptions = Subscription.make<Model, Message>()((entry) => ({
     {
       modelToDependencies: () => ({}),
       dependenciesToStream: () =>
-        Stream.callback<Message>((queue) =>
-          Effect.acquireRelease(
-            Effect.sync(() => {
-              const keydown = (event: KeyboardEvent) => {
-                if (
-                  (event.metaKey || event.ctrlKey) &&
-                  event.key.toLowerCase() === "b"
-                ) {
-                  event.preventDefault();
-                  Queue.offerUnsafe(
-                    queue,
-                    Features.layout.toParentMessage(
-                      LayoutMessage.ToggleSidebar(),
-                    ),
-                  );
-                }
-              };
-              const media = matchMedia("(max-width: 767px)");
-              const resize = () =>
-                Queue.offerUnsafe(
-                  queue,
-                  Features.layout.toParentMessage(
-                    LayoutMessage.Resized({ mobile: media.matches }),
-                  ),
-                );
-              const themeMedia = matchMedia(systemThemeQuery);
-              const themeChanged = () =>
-                Queue.offerUnsafe(
-                  queue,
-                  Features.theme.toParentMessage(
-                    ThemeMessage.SystemThemeChanged(),
-                  ),
-                );
-              window.addEventListener("keydown", keydown);
-              media.addEventListener("change", resize);
-              themeMedia.addEventListener("change", themeChanged);
-              return () => {
-                window.removeEventListener("keydown", keydown);
-                media.removeEventListener("change", resize);
-                themeMedia.removeEventListener("change", themeChanged);
-              };
-            }),
-            (cleanup) => Effect.sync(cleanup),
-          ),
+        frameEvents(
+          Features.layout.toParentMessage,
+          Features.theme.toParentMessage,
         ),
     },
   ),

@@ -141,6 +141,9 @@ importers:
       '@dsiem/analytics':
         specifier: workspace:*
         version: link:../analytics
+      '@foldkit/ui':
+        specifier: ^0.171.0
+        version: 0.171.0(effect@4.1.5)(foldkit@0.171.0(@effect/platform-browser@4.1.5(effect@4.1.5))(effect@4.1.5))
       effect:
         specifier: ~4.1.4
         version: 4.1.5

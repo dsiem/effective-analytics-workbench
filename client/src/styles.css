@@ -1,7 +1,6 @@
 /* Application composition: shared visuals, shell, then feature presentation. */
 @import "tailwindcss";
 @import "./ui/styles.css";
-@import "./app/styles.css";
 @import "./features/overview/styles.css";
 @import "./features/trips/styles.css";
 @import "./features/gps/styles.css";

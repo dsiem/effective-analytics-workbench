@@ -1,10 +1,7 @@
 /* Reusable visual layer. Import after Tailwind; no application or feature styles. */
-@import "./theme.css";
-@import "./base.css";
-@import "./primitives.css";
 @import "@dsiem/workbench-ui/styles.css";
+@import "@dsiem/workbench-ui/workspace.css";
 @import "./field.css";
-@import "./dialog.css";
 @import "./date-field.css";
 @import "./filter-panel.css";
 @import "./view-picker.css";
