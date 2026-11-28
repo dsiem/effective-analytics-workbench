@@ -1,0 +1,38 @@
+{
+  "name": "@dsiem/analytics",
+  "version": "0.1.0",
+  "description": "Composable Effect SQL analytics, Databricks jobs, and PostgreSQL collaboration features",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "workbench-source": "./src/index.ts",
+      "import": "./dist/index.js"
+    },
+    "./record-preview": {
+      "types": "./dist/record-preview.d.ts",
+      "workbench-source": "./src/record-preview.ts",
+      "import": "./dist/record-preview.js"
+    },
+    "./spark": {
+      "types": "./dist/spark.d.ts",
+      "workbench-source": "./src/spark.ts",
+      "import": "./dist/spark.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "prepack": "pnpm run build"
+  },
+  "peerDependencies": {
+    "effect": "~4.1.4"
+  }
+}

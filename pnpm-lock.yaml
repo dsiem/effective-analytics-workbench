@@ -17,6 +17,9 @@ importers:
       '@deck.gl/maplibre':
         specifier: 9.4.2
         version: 9.4.2(@deck.gl/core@9.4.2(@luma.gl/webgpu@9.4.2(@luma.gl/core@9.4.2)(@luma.gl/shadertools@9.4.2(@luma.gl/core@9.4.2))))(@luma.gl/core@9.4.2)(maplibre-gl@6.19.0)
+      '@dsiem/analytics':
+        specifier: workspace:*
+        version: link:packages/analytics
       '@dsiem/analytics-shared':
         specifier: workspace:*
         version: link:packages/shared
@@ -96,6 +99,12 @@ importers:
       tsx:
         specifier: 4.23.15
         version: 4.23.15
+
+  packages/analytics:
+    dependencies:
+      effect:
+        specifier: ~4.1.4
+        version: 4.1.5
 
   packages/genie-client:
     dependencies:

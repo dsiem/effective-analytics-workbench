@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { PGlite } from "@electric-sql/pglite";
 import { ConfigProvider, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServer } from "effect/http";
 import { TestClock } from "effect/testing";
@@ -58,18 +59,56 @@ test("the overview API returns numeric aggregates and preserves ZIP strings from
     avg_distance: 2.5,
     avg_duration: 10,
   };
-  const daily = [{ day: "2016-01-01", trips: 4, revenue: 70 }];
-  const hourly = [{ hour: 9, trips: 4, avg_fare: 17.5 }];
+  const daily = [
+    { day: "2016-01-01", trips: 2, revenue: 30 },
+    { day: "2016-01-02", trips: 2, revenue: 40 },
+  ];
+  const hourly = [
+    { hour: 9, trips: 2, avg_fare: 12.5 },
+    { hour: 10, trips: 2, avg_fare: 22.5 },
+  ];
   const zones = [{ zip: "01234", trips: 4, revenue: 70, avg_fare: 17.5 }];
+  const db = await PGlite.create();
+  t.after(() => db.close());
+  await db.exec(`
+    CREATE DOMAIN STRING AS text;
+    CREATE DOMAIN DOUBLE AS float8;
+    CREATE TABLE trips AS SELECT pickup AS tpep_pickup_datetime,
+      pickup + INTERVAL '10 minutes' AS tpep_dropoff_datetime,
+      pickup_zip, fare_amount, trip_distance
+    FROM (VALUES
+      (timestamp '2016-01-01 09:00', '01234', 10, 1),
+      (timestamp '2016-01-01 10:00', '01234', 20, 2),
+      (timestamp '2016-01-02 09:00', '01234', 15, 3),
+      (timestamp '2016-01-02 10:00', '01234', 25, 4),
+      (timestamp '2015-12-31 23:59', '01234', 99, 5),
+      (timestamp '2016-01-03 00:00', '01234', 99, 5),
+      (timestamp '2016-01-01 09:00', '98765', 99, 5)
+    ) AS source(pickup, pickup_zip, fare_amount, trip_distance)
+  `);
   t.mock.method(
     globalThis,
     "fetch",
-    warehouseFetch(async (sql) => {
-      if (sql.includes(" AS avg_duration")) return [summary];
-      if (sql.includes(" AS day,")) return daily;
-      if (sql.includes(" AS hour,")) return hourly;
-      assert.match(sql, / AS zip,/);
-      return zones;
+    warehouseFetch(async (statement, _, bindings) => {
+      const query = statement
+        .replaceAll("`", '"')
+        .replace('"catalog"."schema"."trips"', "trips")
+        .replace(/:p(\d+)/g, (_marker, index: string) => "$" + index)
+        .replaceAll("INTERVAL 1 DAY", "INTERVAL '1 day'")
+        .replace(
+          "HOUR(tpep_pickup_datetime)",
+          "EXTRACT(HOUR FROM tpep_pickup_datetime)",
+        )
+        .replace(
+          "timestampdiff(SECOND, tpep_pickup_datetime, tpep_dropoff_datetime)",
+          "EXTRACT(EPOCH FROM tpep_dropoff_datetime - tpep_pickup_datetime)",
+        );
+      return (
+        await db.query<Record<string, number | string | null>>(
+          query,
+          bindings.map(({ value }) => value),
+        )
+      ).rows;
     }),
   );
   const app = analyticsApp();
@@ -79,7 +118,9 @@ test("the overview API returns numeric aggregates and preserves ZIP strings from
       const context = yield* Effect.context();
       const load = Effect.promise(async () => {
         const response = await app.handler(
-          new Request("http://localhost/api/overview"),
+          new Request(
+            "http://localhost/api/overview?from=2016-01-01&to=2016-01-02&zip=01234",
+          ),
           context,
         );
         assert.equal(response.status, 200);

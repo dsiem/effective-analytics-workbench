@@ -27,6 +27,7 @@
     "@deck.gl/core": "9.4.2",
     "@deck.gl/layers": "9.4.2",
     "@deck.gl/maplibre": "9.4.2",
+    "@dsiem/analytics": "workspace:*",
     "@dsiem/analytics-shared": "workspace:*",
     "@dsiem/genie-client": "workspace:*",
     "@dsiem/sql-warehouse": "workspace:*",
