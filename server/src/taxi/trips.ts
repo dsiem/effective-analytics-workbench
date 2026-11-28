@@ -73,8 +73,8 @@ const WarehouseTrip = Schema.Struct({
 
 const tripDetailsField = (sql: Sql) =>
   sql`to_json(named_struct(
-            'source_file', source_file, 'vendor_id', VendorID,
-            'passenger_count', passenger_count, 'rate_code_id', RatecodeID,
+            'source_file', source_file, 'vendor_id', vendor_id,
+            'passenger_count', passenger_count, 'rate_code_id', rate_code_id,
             'store_and_fwd_flag', store_and_fwd_flag, 'payment_type', payment_type,
             'pickup_location', CASE WHEN pickup_coordinates_valid THEN named_struct('longitude', pickup_longitude, 'latitude', pickup_latitude) END,
             'dropoff_location', CASE WHEN dropoff_coordinates_valid THEN named_struct('longitude', dropoff_longitude, 'latitude', dropoff_latitude) END,

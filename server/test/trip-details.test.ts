@@ -418,13 +418,13 @@ test("warehouse trip details return the requested trip and its enrichment", asyn
     CREATE DOMAIN STRING AS text;
     CREATE DOMAIN DOUBLE AS float8;
     CREATE TABLE trips AS
-      SELECT trip_id, vendor_id AS VendorID,
+      SELECT trip_id, vendor_id,
         timestamp '2016-01-01 10:00:00' AS tpep_pickup_datetime,
         timestamp '2016-01-01 10:10:00' AS tpep_dropoff_datetime,
         '10001'::text AS pickup_zip, NULL::text AS dropoff_zip,
         2::float8 AS trip_distance, NULL::float8 AS fare_amount,
         'yellow_tripdata_2016-01.csv.gz'::text AS source_file,
-        1 AS passenger_count, 1 AS RatecodeID, 'N'::text AS store_and_fwd_flag,
+        1 AS passenger_count, 1 AS rate_code_id, 'N'::text AS store_and_fwd_flag,
         2 AS payment_type, true AS pickup_coordinates_valid,
         -73.99 AS pickup_longitude, 40.75 AS pickup_latitude,
         false AS dropoff_coordinates_valid,
