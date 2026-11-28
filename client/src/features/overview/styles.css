@@ -36,21 +36,10 @@
     box-shadow: var(--shadow);
   }
   .daily-chart .panel-header {
-    --muted: #d5e5dc;
-    --foreground: #fff;
-    --subtle: #345649;
-    color: var(--foreground);
-    background: #234b3e;
-    border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+    border-bottom: 1px solid var(--border);
   }
-  .daily-chart .panel-actions .tabs {
-    background: #1c3d32;
-    border-color: #668878;
-  }
-  .daily-chart .tab[aria-selected="true"] {
-    border-color: #ffde94;
-    background: #ffda7d;
-    color: #263327;
+  .dashboard-grid .chart-bar {
+    fill: light-dark(#4d718a, #8cadd4);
   }
   .chart .chart-tick {
     font-size: 14px;
@@ -101,8 +90,7 @@
   }
   .insight-card {
     padding: 1.25rem;
-    background: var(--color-brand-50);
-    border-color: var(--color-brand-100);
+    background: var(--surface-soft);
   }
   .insight-card p {
     color: var(--secondary);
@@ -115,19 +103,18 @@
     font-weight: 600;
     letter-spacing: -0.055em;
     line-height: 1.2;
-    color: var(--color-brand-700);
   }
   .concentration-track {
     height: 0.375rem;
     margin-block: 0.875rem;
     overflow: hidden;
     border-radius: 1rem;
-    background: var(--color-brand-100);
+    background: var(--subtle);
   }
   .concentration-track > span {
     display: block;
     height: 100%;
-    background: var(--color-brand-600);
+    background: var(--chart-color);
   }
   .insight-card .btn {
     margin-top: 1.25rem;

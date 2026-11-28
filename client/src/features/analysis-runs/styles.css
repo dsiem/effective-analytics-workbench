@@ -85,8 +85,8 @@
     color: var(--color-brand-700);
   }
   .analysis-status[data-state="succeeded"] {
-    background: light-dark(#ecf7f0, #20352d);
-    color: light-dark(#20623d, #a5dab8);
+    background: light-dark(#e9eddd, #343b2b);
+    color: light-dark(#526d39, #b1bd86);
   }
   .analysis-status[data-state="failed"] {
     background: var(--danger-surface);

@@ -69,7 +69,11 @@ function answer(h: H, clipboard: string, reply: GenieReply): Child[] {
         [h.Class("query-result")],
         [
           h.p(
-            [h.Class("text-xs font-medium px-3 py-2 border-b bg-gray-100/50")],
+            [
+              h.Class(
+                "text-xs font-medium px-3 py-2 border-b bg-(--surface-soft)",
+              ),
+            ],
             [result.description],
           ),
           h.div(

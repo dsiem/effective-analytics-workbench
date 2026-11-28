@@ -59,7 +59,7 @@
     flex-shrink: 0;
     padding: 0.875rem 1.25rem;
     border-bottom: 1px solid var(--border);
-    background: var(--surface-hover);
+    background: var(--surface-soft);
   }
   .genie-messages {
     flex: 1;
