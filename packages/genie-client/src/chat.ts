@@ -152,16 +152,21 @@ export const makeGenieClient = <E, R>(options: {
       };
     }).pipe(Effect.withSpan("genie.submit"));
 
-  const poll = (operation: GenieOperation) =>
-    readMessage(operation).pipe(
-      Effect.map(({ progress }) => progress),
-      Effect.withSpan("genie.poll"),
-    );
+  const pollMessage = (operation: GenieOperation) =>
+    readMessage(operation).pipe(Effect.withSpan("genie.poll"));
 
-  const readAttachment = (
-    operation: GenieOperation,
-    attachment: WireAttachment,
-  ) =>
+  const poll = (operation: GenieOperation) =>
+    pollMessage(operation).pipe(Effect.map(({ progress }) => progress));
+
+  const readAttachment = ({
+    operation,
+    attachment,
+    waitForQueries,
+  }: {
+    readonly operation: GenieOperation;
+    readonly attachment: WireAttachment;
+    readonly waitForQueries: boolean;
+  }) =>
     Effect.gen(function* (): Effect.fn.Return<
       GenieAttachment,
       | E
@@ -193,17 +198,36 @@ export const makeGenieClient = <E, R>(options: {
         ...operation,
         attachmentId: attachment.attachment_id,
       };
-      const response = yield* request({
-        kind: "query-result",
-        method: "GET",
-        path: `${paths.attachment(reference)}/query-result`,
-      });
-      return yield* decodeQueryAttachment(attachment, response);
+      const readQuery = Effect.suspend(() =>
+        request({
+          kind: "query-result",
+          method: "GET",
+          path: `${paths.attachment(reference)}/query-result`,
+        }),
+      ).pipe(
+        Effect.flatMap((response) =>
+          decodeQueryAttachment(attachment, response),
+        ),
+      );
+      if (!waitForQueries) return yield* readQuery;
+      return yield* readQuery.pipe(
+        Effect.retry({
+          while: (error) =>
+            error instanceof GenieQueryUnavailable && error.state === "pending",
+          schedule: Schedule.spaced("1 second"),
+        }),
+      );
     });
 
-  const result = (
-    operation: GenieOperation,
-  ): Effect.Effect<
+  const assembleResult = ({
+    operation,
+    message: { data, progress },
+    waitForQueries,
+  }: {
+    readonly operation: GenieOperation;
+    readonly message: Effect.Success<ReturnType<typeof readMessage>>;
+    readonly waitForQueries: boolean;
+  }): Effect.Effect<
     GenieResult,
     | E
     | GenieResponseError
@@ -214,7 +238,6 @@ export const makeGenieClient = <E, R>(options: {
     R
   > =>
     Effect.gen(function* () {
-      const { data, progress } = yield* readMessage(operation);
       if (progress.state !== "completed") {
         return yield* new GenieMessageUnavailable({
           status: progress.status,
@@ -242,7 +265,8 @@ export const makeGenieClient = <E, R>(options: {
       }
       const attachments = yield* Effect.forEach(
         supported,
-        (attachment) => readAttachment(operation, attachment),
+        (attachment) =>
+          readAttachment({ operation, attachment, waitForQueries }),
         { concurrency: options.attachmentConcurrency ?? 2 },
       );
       return {
@@ -257,29 +281,31 @@ export const makeGenieClient = <E, R>(options: {
               },
             }),
       };
+    });
+
+  const result = (operation: GenieOperation) =>
+    Effect.gen(function* () {
+      const message = yield* readMessage(operation);
+      return yield* assembleResult({
+        operation,
+        message,
+        waitForQueries: false,
+      });
     }).pipe(Effect.withSpan("genie.result"));
 
   /** Wait for a submitted turn, including any query attachments still executing. */
   const complete = (operation: GenieOperation) =>
     Effect.gen(function* () {
-      let progress = yield* poll(operation);
-      while (progress.state === "pending") {
+      let message = yield* pollMessage(operation);
+      while (message.progress.state === "pending") {
         yield* Effect.sleep("1 second");
-        progress = yield* poll(operation);
+        message = yield* pollMessage(operation);
       }
-      if (progress.state === "failed") {
-        return yield* new GenieMessageUnavailable({
-          status: progress.status,
-          state: progress.state,
-        });
-      }
-      return yield* result(operation).pipe(
-        Effect.retry({
-          while: (error) =>
-            error instanceof GenieQueryUnavailable && error.state === "pending",
-          schedule: Schedule.spaced("1 second"),
-        }),
-      );
+      return yield* assembleResult({
+        operation,
+        message,
+        waitForQueries: true,
+      }).pipe(Effect.withSpan("genie.result"));
     }).pipe(Effect.timeout("2 minutes"));
 
   return { submit, poll, result, complete };

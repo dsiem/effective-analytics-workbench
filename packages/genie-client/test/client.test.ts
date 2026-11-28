@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+import * as TestClock from "effect/testing/TestClock";
 import { makeGenieClient, type GenieRequest } from "../src/index.js";
 
 test("Genie results keep attachment order, contents, and all returned inline rows", async () => {
@@ -156,6 +157,67 @@ test("Chat preserves SQL diagnostics for a failed attachment", async () => {
 
 const columns = [{ name: "one" }];
 const manifest = { schema: { columns } };
+
+test("Chat completion reuses the completed message and retries only pending queries", async () => {
+  const operation = { conversationId: "conversation", messageId: "message" };
+  let messageReads = 0;
+  const queryReads: Record<string, number> = {};
+  const client = makeGenieClient({
+    spaceId: "space",
+    request: ({ kind, path }) =>
+      Effect.sync(() => {
+        if (kind === "message") {
+          return {
+            conversation_id: operation.conversationId,
+            message_id: operation.messageId,
+            status: ++messageReads === 1 ? "PENDING" : "COMPLETED",
+            attachments: [
+              { attachment_id: "ready", query: { query: "SELECT 1" } },
+              { text: { content: "Results" } },
+              { attachment_id: "slow", query: { query: "SELECT 2" } },
+            ],
+          };
+        }
+        assert.equal(kind, "query-result");
+        const id = path.endsWith("/ready/query-result") ? "ready" : "slow";
+        const count = (queryReads[id] ?? 0) + 1;
+        queryReads[id] = count;
+        const status =
+          id === "slow" ? ["PENDING", "RUNNING"][count - 1] : undefined;
+        return {
+          statement_response: status
+            ? { status: { state: status } }
+            : {
+                manifest,
+                result: { data_array: [[id === "ready" ? "1" : "2"]] },
+              },
+        };
+      }),
+  });
+
+  const result = await Effect.runPromise(
+    Effect.gen(function* () {
+      const completion = yield* client
+        .complete(operation)
+        .pipe(Effect.forkChild);
+      yield* TestClock.adjust("3 seconds");
+      assert.ok(completion.pollUnsafe(), "Both queries should have finished");
+      return yield* Fiber.join(completion);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  assert.deepEqual(
+    { messageReads, queryReads },
+    {
+      messageReads: 2,
+      queryReads: { ready: 1, slow: 3 },
+    },
+  );
+  assert.deepEqual(
+    result.attachments.map(({ attachmentId }) => attachmentId),
+    ["ready", undefined, "slow"],
+  );
+});
 
 test("Chat rejects malformed statement status and missing SQL result data", async () => {
   for (const statement of [
