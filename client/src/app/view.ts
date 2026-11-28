@@ -19,7 +19,7 @@ import { inspectorView } from "../features/trips/inspector";
 import { tripsView } from "../features/trips/view";
 import { filterPanel } from "../ui/filter-panel";
 import { icon } from "../ui/icons";
-import { button, type Child, card } from "../ui/primitives";
+import { badge, button, type Child, card, title } from "../ui/primitives";
 import { pageContext } from "./analysis-context";
 import * as Features from "./features";
 import { type Model, navigation } from "./model";
@@ -40,6 +40,32 @@ import type { H } from "./view-types";
 
 function workspaceHref(path: string, query: string) {
   return href(path, withoutRun(query));
+}
+
+function exploreHeading(h: H, route: AppRoute): Child[] {
+  return AppRoute.match<Child[]>(route, {
+    Overview: () => [
+      title(h, "Trip overview", "Trip activity, fares, and pickup patterns."),
+    ],
+    Trips: () => [
+      title(
+        h,
+        "Trip records",
+        "Inspect individual journeys, fares, and trip comments.",
+      ),
+    ],
+    TripMap: () => [
+      title(
+        h,
+        "Trip hotspots",
+        "See where journeys begin and end, beyond ZIP boundaries.",
+        [badge(h, "NYC yellow taxis")],
+      ),
+    ],
+    AnalysisRuns: () => [],
+    Genie: () => [],
+    NotFound: () => [],
+  });
 }
 
 function filters(h: H, model: Model) {
@@ -226,7 +252,9 @@ export function view(model: Model, h: H): Document {
         onNone: () => ({}),
         onSome: (user) => ({ user }),
       }),
-      toolbar: explore ? [filters(h, model)] : [],
+      toolbar: explore
+        ? [...(applied ? exploreHeading(h, route) : []), filters(h, model)]
+        : [],
       content,
       headerActions: explore
         ? [

@@ -80,6 +80,7 @@ export const zonesChartContext = (overview: Overview) =>
     "Top pickup ZIP codes",
     overview,
     JSON.stringify({
+      totalTrips: overview.summary.trips,
       topPickupZIPs: overview.zones.slice(0, 5),
       queriedAt: overview.queriedAt,
     }),

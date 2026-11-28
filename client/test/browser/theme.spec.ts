@@ -19,7 +19,7 @@ test("theme menu supports keyboard selection, navigation, persistence and prepai
   await expect(system).toBeVisible();
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(247, 248, 251)",
+    "rgb(246, 247, 244)",
   );
   await system.focus();
   await page.keyboard.press("Enter");
@@ -39,7 +39,7 @@ test("theme menu supports keyboard selection, navigation, persistence and prepai
   await expect(dark).toBeFocused();
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(20, 24, 33)",
+    "rgb(18, 27, 27)",
   );
   await expect(page.getByLabel("Pickup start date", { exact: true })).toHaveCSS(
     "color-scheme",
@@ -47,7 +47,7 @@ test("theme menu supports keyboard selection, navigation, persistence and prepai
   );
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
     "content",
-    "#141821",
+    "#121b1b",
   );
   await page.getByRole("link", { name: "Trip overview", exact: true }).click();
   await expect(dark).toBeVisible();
@@ -55,7 +55,7 @@ test("theme menu supports keyboard selection, navigation, persistence and prepai
   await expect(dark).toBeVisible();
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(20, 24, 33)",
+    "rgb(18, 27, 27)",
   );
 
   // Stop the application bundle: the saved theme must already be set by the head script.
@@ -64,7 +64,7 @@ test("theme menu supports keyboard selection, navigation, persistence and prepai
   await expect(page.locator("#root")).toBeEmpty();
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(20, 24, 33)",
+    "rgb(18, 27, 27)",
   );
 });
 
@@ -80,12 +80,12 @@ test("System follows appearance changes while explicit choices override them", a
   await expect(system).toBeVisible();
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(20, 24, 33)",
+    "rgb(18, 27, 27)",
   );
   await page.emulateMedia({ colorScheme: "light" });
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(247, 248, 251)",
+    "rgb(246, 247, 244)",
   );
   await system.click();
   await page.getByRole("menuitem", { name: "Light", exact: true }).click();
@@ -95,7 +95,7 @@ test("System follows appearance changes while explicit choices override them", a
   ).toBeVisible();
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(247, 248, 251)",
+    "rgb(246, 247, 244)",
   );
   await page.reload();
   await page.getByRole("button", { name: "Theme: Light", exact: true }).click();
@@ -103,7 +103,7 @@ test("System follows appearance changes while explicit choices override them", a
   await expect(system).toBeFocused();
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(20, 24, 33)",
+    "rgb(18, 27, 27)",
   );
 });
 
@@ -131,12 +131,12 @@ for (const storage of ["invalid", "blocked"] as const) {
       .click();
     await expect(page.locator("body")).toHaveCSS(
       "background-color",
-      "rgb(20, 24, 33)",
+      "rgb(18, 27, 27)",
     );
     await page.getByRole("menuitem", { name: "Light", exact: true }).click();
     await expect(page.locator("body")).toHaveCSS(
       "background-color",
-      "rgb(247, 248, 251)",
+      "rgb(246, 247, 244)",
     );
   });
 }

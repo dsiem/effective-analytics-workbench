@@ -36,38 +36,39 @@
   }
   .workspace {
     --workspace-gutter: 0.75rem;
+    --workspace-radius: 1rem;
     --workspace-header-height: 3.75rem;
-    --workspace-content-padding: 1.5rem;
-    --workspace-content-top: 0.375rem;
-    --workspace-frame: #e9edf4;
-    --workspace-edge: #dce2ec;
-    --workspace-shadow:
-      0 1px 2px rgb(25 34 52 / 0.04), 0 5px 18px rgb(25 34 52 / 0.04);
+    --workspace-content-padding: clamp(1.5rem, 2.3vw, 3rem);
+    --workspace-content-top: 1.5rem;
+    --workspace-edge: var(--border);
+    --workspace-frame: color-mix(in srgb, var(--subtle) 75%, var(--border));
     display: flex;
     gap: 0.625rem;
     min-height: 100dvh;
-    padding: var(--workspace-gutter);
+    padding: var(--workspace-gutter) var(--workspace-gutter)
+      var(--workspace-gutter) 0;
     background: var(--workspace-frame);
   }
   .dark .workspace {
-    --workspace-frame: #0f131c;
-    --workspace-edge: #2c3445;
-    --workspace-shadow:
-      0 1px 2px rgb(0 0 0 / 0.15), 0 5px 18px rgb(0 0 0 / 0.12);
+    --workspace-frame: #0e1614;
   }
   .workspace-main {
     flex: 1;
     min-width: 0;
     border: 1px solid var(--workspace-edge);
-    border-radius: 1.125rem;
+    border-radius: var(--workspace-radius);
     background: var(--canvas);
-    box-shadow: var(--workspace-shadow);
+    box-shadow:
+      var(--shadow),
+      0 4px 14px rgb(20 46 37 / 0.04);
   }
   .workspace-header,
   .workspace-content {
-    max-width: 100rem;
     margin-inline: auto;
     padding-inline: var(--workspace-content-padding);
+  }
+  .workspace-content {
+    max-width: 100rem;
   }
   .workspace-header {
     display: flex;
@@ -75,6 +76,7 @@
     gap: 0.75rem;
     min-height: var(--workspace-header-height);
     padding-block: 0.5rem;
+    font-size: 0.8125rem;
   }
   .workspace-path {
     min-width: 0;
@@ -109,8 +111,8 @@
     padding-block: var(--workspace-content-top) var(--workspace-content-padding);
   }
   .sidebar {
-    flex: 0 0 13.5rem;
-    width: 13.5rem;
+    flex: 0 0 13rem;
+    width: 13rem;
     height: calc(100dvh - 2 * var(--workspace-gutter));
     position: sticky;
     top: var(--workspace-gutter);
@@ -126,9 +128,9 @@
     display: flex;
     align-items: center;
     gap: 0.625rem;
-    min-height: var(--workspace-header-height);
-    padding: 0.75rem;
-    border-radius: 0.75rem;
+    min-height: 5.125rem;
+    padding: 1rem;
+    letter-spacing: -0.02em;
     white-space: nowrap;
   }
   .sidebar-brand:focus-visible {
@@ -138,8 +140,8 @@
     width: 2.25rem;
     height: 2.25rem;
     border-color: transparent;
-    background: var(--color-brand-600);
-    color: var(--on-accent);
+    background: #ffd061;
+    color: #192c26;
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 0.16),
       0 2px 4px rgb(25 34 52 / 0.12);
@@ -147,14 +149,18 @@
   .sidebar-group {
     display: grid;
     gap: 0.25rem;
-    padding: 1.25rem 0.375rem;
+    padding: 1.375rem 0.75rem;
+  }
+  .sidebar-brand .sidebar-label > :first-child {
+    font-size: 1rem;
+    font-weight: 700;
   }
   .sidebar-section-label {
-    margin: 0 0 0.25rem 0.75rem;
+    margin: 0 0 0.625rem 0.75rem;
     color: var(--muted);
     font-size: 0.625rem;
     font-weight: 600;
-    letter-spacing: 0.09em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
   }
   .nav-link {
@@ -164,8 +170,8 @@
     min-height: 2.5rem;
     padding: 0.625rem 0.75rem;
     border: 1px solid transparent;
-    border-radius: 0.625rem;
-    color: var(--muted);
+    border-radius: 0.5rem;
+    color: var(--secondary);
     font-size: 0.8125rem;
     font-weight: 500;
     white-space: nowrap;
@@ -184,7 +190,8 @@
   .nav-link[aria-current="page"] {
     color: var(--color-brand-700);
     font-weight: 600;
-    border-color: color-mix(in srgb, var(--color-brand-500) 15%, transparent);
+    border-color: var(--color-brand-100);
+    box-shadow: inset 3px 0 var(--color-brand-500);
     background: var(--color-brand-50);
   }
   .nav-icon {
@@ -193,7 +200,7 @@
   }
   .sidebar-bottom {
     margin-top: auto;
-    padding: 0.375rem;
+    padding: 0.75rem;
   }
   .profile {
     display: flex;
@@ -212,7 +219,7 @@
     flex-shrink: 0;
     border: 1px solid var(--border);
     border-radius: 50%;
-    background: var(--subtle);
+    background: var(--color-brand-50);
     color: var(--secondary);
     font-size: 0.6875rem;
     font-weight: 600;
@@ -228,6 +235,9 @@
     justify-content: center;
     padding-inline: 0;
   }
+  .collapsed :is(.sidebar-group, .sidebar-bottom) {
+    padding-inline: 0.375rem;
+  }
   .collapsed .profile {
     justify-content: center;
     padding-inline: 0;
@@ -238,7 +248,7 @@
     width: min(18rem, calc(100vw - 2 * var(--workspace-gutter)));
     height: auto;
     border: 1px solid var(--workspace-edge);
-    border-radius: 1.125rem;
+    border-radius: var(--workspace-radius);
     background: var(--workspace-frame);
   }
   .sidebar-dialog .sidebar {
@@ -248,7 +258,6 @@
     min-height: 0;
     height: auto;
     padding: 0.375rem;
-    border-radius: inherit;
   }
   .sidebar-close {
     position: absolute;
@@ -257,20 +266,28 @@
   }
   @media (max-width: 1023px) {
     .workspace {
+      --workspace-gutter: 0.5rem;
       --workspace-content-padding: 1.125rem;
     }
   }
   @media (max-width: 767px) {
     .workspace {
-      --workspace-gutter: 0.5rem;
-      --workspace-content-padding: 0.75rem;
-      --workspace-content-top: 0.25rem;
+      --workspace-gutter: 0rem;
+      --workspace-content-padding: 1rem;
+      --workspace-content-top: 1.25rem;
     }
-    .workspace-main {
-      border-radius: 1rem;
-    }
+
     .workspace > .sidebar {
       display: none;
+    }
+    .workspace-main {
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    .sidebar-dialog {
+      --workspace-gutter: 0.375rem;
+      --workspace-radius: 0.875rem;
     }
     .workspace-header .btn,
     .sidebar-close {
@@ -279,6 +296,9 @@
     .workspace-navigation,
     .sidebar-close {
       width: 2.75rem;
+    }
+    .workspace-content {
+      max-width: 100rem;
     }
     .workspace-header {
       gap: 0.5rem;
@@ -292,6 +312,11 @@
   @media (prefers-reduced-motion: reduce) {
     .nav-link {
       transition: none;
+    }
+  }
+  @media (max-width: 359px) {
+    .workspace {
+      --workspace-content-padding: 0.625rem;
     }
   }
 }

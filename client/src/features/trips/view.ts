@@ -15,7 +15,6 @@ import {
   type Child,
   card,
   loading,
-  title,
 } from "../../ui/primitives";
 import { type Model, previewRows, Sort, SortMenu, tripWindow } from "./model";
 import type { H } from "./view-messages";
@@ -219,11 +218,6 @@ function trips(
         : null;
 
   return [
-    title(
-      h,
-      "Trip records",
-      "Narrow by pickup date or ZIP, then open a trip to inspect it and discuss it with your team.",
-    ),
     card(
       h,
       [
@@ -240,7 +234,20 @@ function trips(
             sortControl(h, model.sortMenu, sort, mobile),
           ],
         ),
-        ...(rows.length ? [tripTable(h, model, rows)] : []),
+        ...(rows.length
+          ? [
+              h.div(
+                [h.Class("trip-grid-wrap")],
+                [
+                  h.p(
+                    [h.Class("trip-scroll-help")],
+                    ["Scroll horizontally to see all columns."],
+                  ),
+                  tripTable(h, model, rows),
+                ],
+              ),
+            ]
+          : []),
         ...(previewFailed || countError
           ? [
               h.div(

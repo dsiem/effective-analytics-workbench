@@ -24,19 +24,6 @@ export function filterPanel<Message>(
     ],
     [
       h.div(
-        [h.Class("filter-toolbar")],
-        [
-          h.div(
-            [h.Class("filter-view")],
-            [
-              h.span([h.Class("filter-view-label")], ["View"]),
-              options.viewPicker,
-            ],
-          ),
-          options.saveAction,
-        ],
-      ),
-      h.div(
         [h.Class("filter-controls")],
         [
           h.div([h.Class("filter-fields")], [...options.fields]),
@@ -60,6 +47,19 @@ export function filterPanel<Message>(
                   ]),
             ],
           ),
+        ],
+      ),
+      h.div(
+        [h.Class("filter-toolbar")],
+        [
+          h.div(
+            [h.Class("filter-view")],
+            [
+              h.span([h.Class("filter-view-label")], ["View"]),
+              options.viewPicker,
+            ],
+          ),
+          options.saveAction,
         ],
       ),
       ...(options.error
