@@ -293,5 +293,7 @@ live under `model.inspector`. Per-row drafts live in `model.commentDrafts`.
 run links and a selected report. Supply the draft, history row and report
 schemas, plus functions for loading the list, opening the selected run and
 submitting a draft. A submission returns the URL of its report. Retrying an
-unchanged draft after a failed response uses the same request ID. Field labels
-and report contents belong to the consuming application.
+unchanged draft after a failed response uses the same request ID. On success,
+the form clears that ID before opening the report URL. A fragment URL keeps
+the form on screen, ready to submit another run. Field labels and report
+contents belong to the consuming application.

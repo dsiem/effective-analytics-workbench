@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { AsyncData, Command, Runtime } from "foldkit";
+import { AsyncData, Command, Navigation, Runtime } from "foldkit";
 import { defineMessageUnion } from "foldkit/message";
 import type { Html } from "foldkit/html";
 import { card, panelHeader, type H } from "./primitives.js";
@@ -44,14 +44,21 @@ export function mountRunPage<Draft, Run, Report>(options: {
     ReportFailed: { message: Schema.String },
     Changed: { draft: options.draft },
     Submit: {},
-    Redirected: {},
+    Submitted: { href: Schema.String },
+    CompletedOpenReport: {},
     SubmitFailed: { id: Schema.String, message: Schema.String },
   });
+  const Submission = Schema.Union([
+    Schema.TaggedStruct("Idle", {}),
+    Schema.TaggedStruct("Submitting", {}),
+    Schema.TaggedStruct("Failed", {
+      id: Schema.String,
+      message: Schema.String,
+    }),
+  ]);
   const Model = Schema.Struct({
     draft: options.draft,
-    pending: Schema.Boolean,
-    retryId: Schema.NullOr(Schema.String),
-    error: Schema.String,
+    submission: Submission,
     history: AsyncData.Schema(runs, Schema.String).schema,
     report: AsyncData.Schema(report, Schema.String).schema,
   });
@@ -77,21 +84,26 @@ export function mountRunPage<Draft, Run, Report>(options: {
     });
   const submit = Command.define("SubmitAnalysis", {
     args: { draft: options.draft, retryId: Schema.NullOr(Schema.String) },
-    messages: [M.SubmitFailed, M.Redirected],
+    messages: [M.SubmitFailed, M.Submitted],
     execute: ({ draft, retryId }) =>
       Effect.gen(function* () {
         const id = retryId ?? crypto.randomUUID();
         return yield* options.submit(draft, id).pipe(
           Effect.match({
-            onSuccess: (href) => {
-              location.assign(href);
-              return M.Redirected();
-            },
+            onSuccess: (href) => M.Submitted({ href }),
             onFailure: (message) => M.SubmitFailed({ id, message }),
           }),
         );
       }),
   });
+
+  const openReport = Command.define("OpenReport", {
+    args: { href: Schema.String },
+    messages: [M.CompletedOpenReport],
+    execute: ({ href }) =>
+      Navigation.load(href).pipe(Effect.as(M.CompletedOpenReport())),
+  });
+  const sameDraft = Schema.toEquivalence(options.draft);
 
   return Runtime.run(
     Runtime.makeElement<typeof Model.Type, typeof M.Type>({
@@ -100,9 +112,7 @@ export function mountRunPage<Draft, Run, Report>(options: {
       init: () => ({
         model: {
           draft: options.initial,
-          pending: false,
-          retryId: null,
-          error: "",
+          submission: { _tag: "Idle" },
           history: AsyncData.Loading(),
           report: read ? AsyncData.Loading() : AsyncData.Idle(),
         },
@@ -149,29 +159,40 @@ export function mountRunPage<Draft, Run, Report>(options: {
             };
           case "Changed":
             return {
-              model: model.pending
-                ? model
-                : { ...model, draft: m.draft, retryId: null, error: "" },
+              model:
+                model.submission._tag === "Submitting" ||
+                sameDraft(model.draft, m.draft)
+                  ? model
+                  : { ...model, draft: m.draft, submission: { _tag: "Idle" } },
             };
           case "Submit":
-            return model.pending
+            return model.submission._tag === "Submitting"
               ? { model }
               : {
-                  model: { ...model, pending: true, error: "" },
+                  model: { ...model, submission: { _tag: "Submitting" } },
                   commands: [
-                    submit({ draft: model.draft, retryId: model.retryId }),
+                    submit({
+                      draft: model.draft,
+                      retryId:
+                        model.submission._tag === "Failed"
+                          ? model.submission.id
+                          : null,
+                    }),
                   ],
                 };
           case "SubmitFailed":
             return {
               model: {
                 ...model,
-                pending: false,
-                error: m.message,
-                retryId: m.id,
+                submission: { _tag: "Failed", id: m.id, message: m.message },
               },
             };
-          case "Redirected":
+          case "Submitted":
+            return {
+              model: { ...model, submission: { _tag: "Idle" } },
+              commands: [openReport({ href: m.href })],
+            };
+          case "CompletedOpenReport":
             return { model };
         }
       },
@@ -189,14 +210,21 @@ export function mountRunPage<Draft, Run, Report>(options: {
                     h,
                     model.draft,
                     (draft) => M.Changed({ draft }),
-                    model.pending,
+                    model.submission._tag === "Submitting",
                   ),
                   h.button(
-                    [h.Type("submit"), h.Disabled(model.pending)],
-                    [model.pending ? "Running…" : "Run analysis"],
+                    [
+                      h.Type("submit"),
+                      h.Disabled(model.submission._tag === "Submitting"),
+                    ],
+                    [
+                      model.submission._tag === "Submitting"
+                        ? "Running…"
+                        : "Run analysis",
+                    ],
                   ),
-                  ...(model.error
-                    ? [h.p([h.Role("alert")], [model.error])]
+                  ...(model.submission._tag === "Failed"
+                    ? [h.p([h.Role("alert")], [model.submission.message])]
                     : []),
                 ],
               ),

@@ -143,10 +143,13 @@ state transitions, Scene for rendered interactions, and Playwright for actual
 visibility, focus, browser history, and requests from the running app.
 
 ```sh
-pnpm run check
 pnpm exec playwright install chromium webkit
+pnpm run check
 pnpm run test:browser
 ```
+
+The package check compiles a separate TypeScript app against the packed
+libraries and runs it in Chromium. The taxi browser suite also uses WebKit.
 
 To save screenshots for visual review, run the design tests with capture
 enabled. Playwright saves the images in `test-results/`.
