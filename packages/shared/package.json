@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@dsiem/analytics": "workspace:*",
     "@dsiem/genie-client": "workspace:*"
   },
   "peerDependencies": {

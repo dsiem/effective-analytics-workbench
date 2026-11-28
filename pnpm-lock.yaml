@@ -114,6 +114,9 @@ importers:
 
   packages/shared:
     dependencies:
+      '@dsiem/analytics':
+        specifier: workspace:*
+        version: link:../analytics
       '@dsiem/genie-client':
         specifier: workspace:*
         version: link:../genie-client

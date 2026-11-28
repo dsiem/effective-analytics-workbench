@@ -15,10 +15,10 @@
     "lint": "pnpm -r run build && oxlint --deny-warnings .",
     "format": "oxfmt --write .",
     "test": "pnpm -r run test && node --conditions=development --conditions=workbench-source --import tsx --test server/test/*.test.ts test/*.test.ts client/test/*.test.ts",
-    "test:scene": "pnpm --filter @dsiem/genie-client run build && node --conditions=development --import tsx --test client/test/*.scene.test.ts",
+    "test:scene": "node --conditions=development --conditions=workbench-source --import tsx --test client/test/*.scene.test.ts",
     "test:dist": "node --test server/test/built/*.test.mjs test/built/*.test.mjs",
     "check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm test && pnpm run build && pnpm run test:dist",
-    "db:setup": "pnpm --filter @dsiem/sql-warehouse run build && node --env-file-if-exists=.env --import tsx scripts/setup-lakebase.ts",
+    "db:setup": "node --env-file-if-exists=.env --import tsx --conditions=workbench-source scripts/setup-lakebase.ts",
     "test:browser": "playwright test",
     "test:browser:deployed": "playwright test --config client/test/deployed/playwright.config.ts",
     "format:check": "oxfmt --check ."

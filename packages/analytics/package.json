@@ -24,6 +24,26 @@
       "types": "./dist/spark.d.ts",
       "workbench-source": "./src/spark.ts",
       "import": "./dist/spark.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "workbench-source": "./src/contracts.ts",
+      "import": "./dist/contracts.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "workbench-source": "./src/errors.ts",
+      "import": "./dist/errors.js"
+    },
+    "./jobs": {
+      "types": "./dist/jobs.d.ts",
+      "workbench-source": "./src/jobs.ts",
+      "import": "./dist/jobs.js"
+    },
+    "./local-runs": {
+      "types": "./dist/local-runs.d.ts",
+      "workbench-source": "./src/local-runs.ts",
+      "import": "./dist/local-runs.js"
     }
   },
   "scripts": {
