@@ -35,14 +35,14 @@ DECLARE OR REPLACE VARIABLE trip_source_files ARRAY<STRING> DEFAULT transform(
 CREATE TABLE IF NOT EXISTS IDENTIFIER('`' || :catalog || '`.`' || :schema || '`.`trips_raw`') (
   trip_id STRING NOT NULL,
   source_file STRING NOT NULL,
-  VendorID INT,
+  vendor_id INT,
   tpep_pickup_datetime TIMESTAMP_NTZ,
   tpep_dropoff_datetime TIMESTAMP_NTZ,
   passenger_count INT,
   trip_distance DOUBLE,
   pickup_longitude DOUBLE,
   pickup_latitude DOUBLE,
-  RatecodeID INT,
+  rate_code_id INT,
   store_and_fwd_flag STRING,
   dropoff_longitude DOUBLE,
   dropoff_latitude DOUBLE,
@@ -67,7 +67,8 @@ BEGIN
       WHERE table_schema = lower(:schema) AND table_name = 'trips_2016_raw'
     ) THEN
     INSERT INTO IDENTIFIER('`' || :catalog || '`.`' || :schema || '`.`trips_raw`') BY NAME
-    SELECT * EXCEPT (analytics_valid, pickup_coordinates_valid, dropoff_coordinates_valid)
+    SELECT * EXCEPT (VendorID, RatecodeID, analytics_valid, pickup_coordinates_valid, dropoff_coordinates_valid),
+      VendorID AS vendor_id, RatecodeID AS rate_code_id
     FROM IDENTIFIER('`' || :catalog || '`.`' || :schema || '`.`trips_2016_raw`');
   END IF;
 END;
@@ -92,7 +93,9 @@ BEGIN
     -- Each source file is immutable. Keep its UUIDs when later ranges reuse it.
     EXECUTE IMMEDIATE '
     INSERT INTO IDENTIFIER(:raw_table) BY NAME
-    SELECT uuid() AS trip_id, _metadata.file_name AS source_file, source.*
+    SELECT uuid() AS trip_id, _metadata.file_name AS source_file,
+      source.* EXCEPT (VendorID, RatecodeID),
+      source.VendorID AS vendor_id, source.RatecodeID AS rate_code_id
     FROM read_files(
       :source_path,
       format => \'csv\', header => true, enforceSchema => false, mode => \'FAILFAST\',
