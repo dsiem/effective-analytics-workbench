@@ -9,36 +9,17 @@ import {
   type Scope,
 } from "effect";
 import * as Reactivity from "effect/reactivity/Reactivity";
-import type * as SqlClient from "effect/sql/SqlClient";
-import { isSqlError } from "effect/sql/SqlError";
+import type { SqlClient } from "effect/sql/SqlClient";
+import { postgresFailure } from "@dsiem/analytics/errors";
 import {
-  PermissionDenied,
+  type PermissionDenied,
+  unavailable,
   type ServiceError,
   type ServiceUnavailable,
-  isWorkspacePermissionDenied,
-  permissionDenied,
-  unavailable,
 } from "./errors.js";
 import { pgPassword, restoreCredentialFailure } from "./pg-credentials.js";
 import { Settings } from "./settings.js";
 import { Workspace } from "./workspace.js";
-
-export type LakebaseSql = SqlClient.SqlClient & Pick<PgClient.PgClient, "json">;
-
-export const lakebaseFailure =
-  (
-    deniedMessage: string,
-    unavailableMessage = "Lakebase is unavailable. Check its connection settings. For database initialization, see DEPLOYMENT.md.",
-  ) =>
-  (cause: unknown) => {
-    if (cause instanceof PermissionDenied) return cause;
-    if (
-      (isSqlError(cause) && cause.reason._tag === "AuthorizationError") ||
-      isWorkspacePermissionDenied(cause)
-    )
-      return permissionDenied(deniedMessage);
-    return unavailable("lakebase", unavailableMessage, cause);
-  };
 
 const Credential = Schema.Struct({ token: Schema.NonEmptyString });
 const Endpoint = Schema.Struct({
@@ -68,7 +49,7 @@ export const makeLakebaseClient = Effect.gen(function* () {
             Effect.flatMap(Schema.decodeUnknownEffect(Credential)),
             Effect.map((credential) => Redacted.make(credential.token)),
             Effect.mapError(
-              lakebaseFailure(
+              postgresFailure(
                 "You need permission to access saved views and comments.",
                 "Lakebase credentials could not be refreshed. Check workspace authentication and endpoint permissions.",
               ),
@@ -98,7 +79,7 @@ export class Lakebase extends Context.Service<
   {
     /** Run a feature operation on the shared client. */
     readonly use: <A, E extends ServiceError, R>(
-      run: (sql: LakebaseSql) => Effect.Effect<A, E, R>,
+      run: (sql: SqlClient) => Effect.Effect<A, E, R>,
     ) => Effect.Effect<
       A,
       E | ServiceUnavailable<"lakebase"> | PermissionDenied,
@@ -124,7 +105,7 @@ export class Lakebase extends Context.Service<
       // initialization stays lazy so an outage cannot block application startup.
       const client = yield* makeLakebaseClient.pipe(
         Effect.mapError(
-          lakebaseFailure(
+          postgresFailure(
             "You need permission to access saved views and comments.",
           ),
         ),
@@ -133,7 +114,7 @@ export class Lakebase extends Context.Service<
       );
       return {
         use: <A, E extends ServiceError, R>(
-          run: (sql: LakebaseSql) => Effect.Effect<A, E, R>,
+          run: (sql: SqlClient) => Effect.Effect<A, E, R>,
         ) => client.pipe(Effect.flatMap(run), restoreCredentialFailure),
       };
     }).pipe(Effect.provide(Reactivity.layer)),

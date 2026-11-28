@@ -1,5 +1,9 @@
 import { Schema } from "effect";
 import {
+  recordCommentsGroup,
+  savedViewsGroup,
+} from "@dsiem/analytics/collaboration-http";
+import {
   HttpApi,
   HttpApiEndpoint,
   HttpApiGroup,
@@ -28,21 +32,7 @@ import {
 } from "./genie.js";
 import { GpsSearch, TripMap } from "./map-dataset.js";
 import { Overview } from "./overview.js";
-import {
-  SavedView,
-  SavedViewInput,
-  SavedViewPin,
-  SavedViewSearch,
-  SavedViewsPage,
-} from "./saved-views.js";
-import {
-  TripComment,
-  TripCommentCountSearch,
-  TripCommentCounts,
-  TripCommentInput,
-  TripCommentSearch,
-  TripComments,
-} from "./trip-comments.js";
+import { TripCommentCountSearch, TripCommentSearch } from "./trip-comments.js";
 import { Filters } from "./filters.js";
 import { DatasetMetadata } from "./dataset.js";
 import {
@@ -51,6 +41,7 @@ import {
   TripPageCursor,
   TripSearch,
   TripSummary,
+  TripSnapshot,
 } from "./trips.js";
 
 export const apiErrorCodes = {
@@ -233,16 +224,6 @@ const genieErrors = [
   upstreamBody("genie", "workspace"),
 ] as const;
 const genieTimeouts = timeoutBody("genie", "workspace");
-const lakebaseErrors = [
-  PermissionDeniedBody,
-  unavailableBody("lakebase"),
-] as const;
-const savedViewWriteErrors = [
-  ...lakebaseErrors,
-  NotFoundBody,
-  SavedViewConflictBody,
-] as const;
-
 const GenieAccessHeaders = Schema.Struct({
   "x-genie-access": Schema.optionalKey(Schema.String),
 });
@@ -320,7 +301,7 @@ export const AppApi = HttpApi.make("taxi")
       HttpApiEndpoint.post("submit", "/api/analysis-runs", {
         payload: AnalysisSubmission,
         success: AnalysisRunReference.pipe(HttpApiSchema.status(202)),
-        error: [...analysisErrors, workspaceTimeout],
+        error: [InvalidRequestBody, ...analysisErrors, workspaceTimeout],
       }).middleware(RequestValidationErrors),
       HttpApiEndpoint.get("list", "/api/analysis-runs", {
         success: Schema.Array(AnalysisRunSummary),
@@ -399,55 +380,15 @@ export const AppApi = HttpApi.make("taxi")
       )
       .middleware(RequestValidationErrors)
       .annotate(HttpApi.RedactedNames, { headers: ["x-genie-access"] }),
-    HttpApiGroup.make("savedViews")
-      .add(
-        HttpApiEndpoint.get("list", "/api/saved-views", {
-          query: SavedViewSearch,
-          success: SavedViewsPage,
-          error: lakebaseErrors,
-        }),
-        HttpApiEndpoint.put("save", "/api/saved-views", {
-          payload: SavedViewInput,
-          success: SavedView,
-          error: savedViewWriteErrors,
-        }),
-        HttpApiEndpoint.patch("pin", "/api/saved-views/:id/pin", {
-          params: { id: SavedViewInput.fields.id },
-          payload: SavedViewPin,
-          success: SavedView,
-          error: savedViewWriteErrors,
-        }),
-        HttpApiEndpoint.delete("remove", "/api/saved-views/:id", {
-          params: { id: SavedViewInput.fields.id },
-          query: {
-            version: Schema.NumberFromString.check(
-              Schema.isInt(),
-              Schema.isGreaterThan(0),
-            ),
-          },
-          success: Schema.Struct({ deleted: Schema.Literal(true) }),
-          error: savedViewWriteErrors,
-        }),
-      )
-      .middleware(RequestValidationErrors),
-    HttpApiGroup.make("tripComments")
-      .add(
-        HttpApiEndpoint.get("list", "/api/trip-comments", {
-          query: TripCommentSearch,
-          success: TripComments,
-          error: lakebaseErrors,
-        }).annotate(HttpApi.QueryParseOptions, { onExcessProperty: "error" }),
-        HttpApiEndpoint.get("counts", "/api/trip-comment-counts", {
-          query: TripCommentCountSearch,
-          success: TripCommentCounts,
-          error: lakebaseErrors,
-        }),
-        HttpApiEndpoint.post("add", "/api/trip-comments", {
-          payload: TripCommentInput,
-          success: TripComment,
-          error: lakebaseErrors,
-        }),
-      )
-      .middleware(RequestValidationErrors),
+    savedViewsGroup("savedViews", "/api/saved-views", Filters).middleware(
+      RequestValidationErrors,
+    ),
+    recordCommentsGroup("tripComments", {
+      path: "/api/trip-comments",
+      countsPath: "/api/trip-comment-counts",
+      fields: { trip: TripSnapshot },
+      search: TripCommentSearch,
+      counts: TripCommentCountSearch,
+    }).middleware(RequestValidationErrors),
   )
   .middleware(ApiNoStore);

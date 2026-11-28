@@ -40,6 +40,26 @@
       "workbench-source": "./src/jobs.ts",
       "import": "./dist/jobs.js"
     },
+    "./saved-views": {
+      "types": "./dist/saved-views.d.ts",
+      "workbench-source": "./src/saved-views.ts",
+      "import": "./dist/saved-views.js"
+    },
+    "./record-comments": {
+      "types": "./dist/record-comments.d.ts",
+      "workbench-source": "./src/record-comments.ts",
+      "import": "./dist/record-comments.js"
+    },
+    "./static-pages": {
+      "types": "./dist/static-pages.d.ts",
+      "workbench-source": "./src/static-pages.ts",
+      "import": "./dist/static-pages.js"
+    },
+    "./collaboration-http": {
+      "types": "./dist/collaboration-http.d.ts",
+      "workbench-source": "./src/collaboration-http.ts",
+      "import": "./dist/collaboration-http.js"
+    },
     "./local-runs": {
       "types": "./dist/local-runs.d.ts",
       "workbench-source": "./src/local-runs.ts",

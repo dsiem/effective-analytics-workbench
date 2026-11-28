@@ -1,6 +1,7 @@
 import { Effect, Layer } from "effect";
 import { HttpMiddleware, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
+import { savedViewHandlers } from "@dsiem/analytics/collaboration-http";
 import { AppApi } from "@dsiem/analytics-shared/api";
 import { AnalysisRuns } from "./analysis-runs.js";
 import {
@@ -75,16 +76,7 @@ const AnalysisRunRoutes = HttpApiBuilder.group(
 const SavedViewRoutes = HttpApiBuilder.group(AppApi, "savedViews", (handlers) =>
   Effect.gen(function* () {
     const views = yield* SavedViews;
-    return handlers.handleAll({
-      list: ({ query }) => withApiErrors(views.list(query)),
-      save: ({ payload }) => withApiErrors(views.save(payload)),
-      pin: ({ params, payload }) =>
-        withApiErrors(views.pin(params.id, payload)),
-      remove: ({ params, query }) =>
-        withApiErrors(views.remove(params.id, query.version)).pipe(
-          Effect.as({ deleted: true as const }),
-        ),
-    });
+    return handlers.handleAll(savedViewHandlers(views));
   }),
 );
 
