@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Schedule, Schema } from "effect";
 import type { GenieAnswer, GenieAttachment } from "./answer.js";
 import {
   chatPaths,
@@ -14,7 +14,7 @@ import {
   ChatQueryAttachment,
   decodeQueryAttachment,
   type GenieQueryFailed,
-  type GenieQueryUnavailable,
+  GenieQueryUnavailable,
 } from "./query-result.js";
 
 export type GenieRequest =
@@ -259,5 +259,28 @@ export const makeGenieClient = <E, R>(options: {
       };
     }).pipe(Effect.withSpan("genie.result"));
 
-  return { submit, poll, result };
+  /** Wait for a submitted turn, including any query attachments still executing. */
+  const complete = (operation: GenieOperation) =>
+    Effect.gen(function* () {
+      let progress = yield* poll(operation);
+      while (progress.state === "pending") {
+        yield* Effect.sleep("1 second");
+        progress = yield* poll(operation);
+      }
+      if (progress.state === "failed") {
+        return yield* new GenieMessageUnavailable({
+          status: progress.status,
+          state: progress.state,
+        });
+      }
+      return yield* result(operation).pipe(
+        Effect.retry({
+          while: (error) =>
+            error instanceof GenieQueryUnavailable && error.state === "pending",
+          schedule: Schedule.spaced("1 second"),
+        }),
+      );
+    }).pipe(Effect.timeout("2 minutes"));
+
+  return { submit, poll, result, complete };
 };

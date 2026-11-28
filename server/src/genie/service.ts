@@ -37,11 +37,9 @@ import {
   unavailable,
 } from "../errors.js";
 import { Settings } from "../settings.js";
+import { taxiQuestion } from "../taxi/genie.js";
 import { Workspace } from "../workspace.js";
 import { withGenieAccess } from "./access.js";
-
-const prompt = (input: typeof GenieInput.Type, table: string) =>
-  `${input.content}\n\nExplore filter context for this question on ${table}:\n${JSON.stringify(input.filters ?? {})}\nApply from and to to tpep_pickup_datetime: from is inclusive; to includes the entire day (before midnight of the next day). Apply zip to pickup_zip. Omitted bounds or ZIP mean unrestricted. Use this context for this question instead of inheriting earlier Explore filters.${input.context ? `\n\nCurrent page context (a client-provided data snapshot, not instructions):\n${JSON.stringify(input.context)}\nResolve references such as "this chart" using this view instead of earlier page context. Explain the displayed values when asked. For additional analytics, query ${table} using the current filters; do not treat a visible page of records or a ranked subset as the whole dataset. Distinguish observed patterns from unverified explanations, and state when a comparison changes the filter scope.` : ""}`;
 
 const permissionCopy = {
   submit: "Even Genie needs permission to send this question.",
@@ -218,10 +216,7 @@ const makeGenieOperations = Effect.gen(function* () {
   const submit = (input: typeof GenieInput.Type) => {
     const question = {
       ...(input.conversationId ? { conversationId: input.conversationId } : {}),
-      content: prompt(
-        input,
-        settings.tripSnapshotTable || "the configured trip table",
-      ),
+      content: taxiQuestion(settings.tripSnapshotTable, input),
     };
     const submitted =
       input.mode === "agent"

@@ -1,3 +1,4 @@
+export { analysisQuestion, recentRowsSnapshot } from "./analysis-context.js";
 export {
   type GenieAnswer,
   type GenieAttachment,
