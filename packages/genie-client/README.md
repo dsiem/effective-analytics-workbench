@@ -83,7 +83,7 @@ Filter values and snapshots come from the current view.
 
 ## Serve a report conversation
 
-For a local single-user server, `makeReportAssistant` from `@dsiem/genie-client/report-assistant` accepts HTTPS workspace settings and dataset instructions. Call the returned function with the question, filters, report snapshot and previous continuation. It submits once, polls for completion, and returns text plus up to 100 rows per inline table. A signed continuation identifies the next turn within that server process. For custom authentication or operation tracking, use the lower-level chat client.
+For a local single-user server, `makeReportAssistant` from `@dsiem/genie-client/report-assistant` accepts HTTPS workspace settings and dataset instructions. Call the returned function with the question, filters, report snapshot and previous continuation. It submits once, polls for completion, and returns text plus up to 100 rows per inline table. A signed continuation identifies the next turn within that server process. For a recoverable workflow, call `assistant.submit(input)` and store the returned signed receipt before waiting. Call `assistant.resume(receipt)` to fetch the answer, including after a page reload. Resuming only reads the accepted operation. The receipt is valid for the lifetime of the assistant instance. Treat it as a bearer credential. The existing callable interface still submits and waits in one step. Its `AnswerUnavailable` error includes the receipt in `accepted`. An invalid follow-up token returns `ExpiredContinuation`, and an unconfirmed submission has no receipt. The taxi workspace uses the same underlying operation IDs with its own viewer-bound authorization.
 
 ## Agent mode
 
